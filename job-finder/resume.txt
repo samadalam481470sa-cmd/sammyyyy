@@ -1,0 +1,46 @@
+Samad Alam
+Carrollton, TX | [PHONE - set locally, see note below] | [EMAIL - set locally, see note below] | linkedin.com/in/samadaalam
+US Citizen
+
+NOTE: This repository is public, so the phone number and email are redacted
+here on purpose. Your real contact details belong in two places instead:
+  1. The Chrome extension's Resume tab (stored only in your browser).
+  2. Either job-finder/resume.local.txt (git-ignored) or the RESUME_TEXT CI
+     variable, if you want the pipeline to see the full version.
+Contact details are not used for job matching, only for autofill, so leaving
+them out here changes nothing about your match scores.
+
+EDUCATION
+The University of Texas at Dallas - Richardson, TX
+Graduation: August 2026
+Bachelor of Science in Information Technology Systems
+• Academic Excellence Scholarship Recipient
+
+TECHNICAL SKILLS
+Programming Languages: Python, Java, SQL, JavaScript, Ruby, Swift, C++
+Cloud Platforms: Amazon Web Services (AWS), Microsoft Azure
+Tools & Technologies: Microsoft 365, Tableau, Power BI, Alteryx, Visio, Excel
+Operating Systems: Windows, macOS, Defender for Cloud, Defender for Endpoint
+Core Competencies: Data analysis, client communication, problem-solving, project coordination, team collaboration
+
+WORK EXPERIENCE
+Software Engineer Intern - Surge Plus Technologies (surgepulse.org) | Jan 2025 - Present
+• Contributed to the company's web platform, implementing code that supported user-facing features and back-end functionality.
+• Helped build out AI infrastructure components, integrating data flows into existing systems to enable new product capabilities.
+
+Sales Manager - Avis Budget Group, Dallas, TX | August 2021 - 2023
+• Collaborated with a multidisciplinary team of logistics professionals, contributing to a 20% improvement in team efficiency and customer satisfaction outcomes.
+
+Medical Billing & Coding Specialist - N.T.M.S., Plano, TX | February 2020 - July 2021
+• Handled medical billing and coding while educating patients and families on disease prevention, health promotion, and medication management.
+• Empowered patients to actively participate in care decisions, supporting stronger treatment adherence and outcomes.
+
+PROJECTS
+AI-Driven Estimating Prototype - Marking Systems, Inc. (Client Project) | Nov 2025
+• Partnered with MSI, a manufacturer of durable labeling and precision die-cut components for the aerospace, military, industrial, and medical-device industries, to address inefficiencies in their manual quoting and estimating workflow.
+• Extracted and consolidated historical quoting data using SQL, designing a centralized application that organizes hundreds of thousands of records and files into a single searchable interface.
+• Delivered a working prototype alongside an implementation roadmap to support MSI's transition toward an AI-driven estimating process.
+
+Customer Engagement Platform - Food Trucks of Canada (Marketing / Python Project) | Mar 2025
+• Built back-end Python features for the company's website to support customer engagement and retention across multiple restaurant partners.
+• Focused on improving the digital experience for end users browsing the platform, contributing to the broader marketing strategy.

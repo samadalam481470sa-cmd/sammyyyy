@@ -1,0 +1,12 @@
+# Personal resume copies with real contact details — keep these out of a
+# public repo. Point RESUME_FILE at one of these locally if you want the
+# pipeline to use the full version.
+job-finder/resume.local.txt
+job-finder/*.local.txt
+
+# Pipeline run outputs and dedupe cache (published as CI artifacts instead)
+job-finder/output/
+job-finder/.cache/
+
+node_modules/
+.DS_Store
