@@ -138,7 +138,7 @@ els.fillBtn.addEventListener("click", async () => {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["lib/matcher.js", "lib/autofillEngine.js", "content.js"],
+      files: ["lib/matcher.js", "lib/tailor.js", "lib/autofillEngine.js", "content.js"],
     });
     // Result arrives asynchronously via the RESUME_FIT_RESULT message above.
   } catch (err) {
@@ -156,7 +156,7 @@ function renderFillResult(outcome) {
     return;
   }
 
-  const { filledCount, draftedCount, flaggedCount, match } = outcome;
+  const { filledCount, draftedCount, flaggedCount, match, tailor } = outcome;
   let html = `<p>✅ Filled <strong>${filledCount}</strong> field(s) with your real info / saved answers.</p>`;
   if (draftedCount) {
     html += `<p>📝 Drafted <strong>${draftedCount}</strong> open-ended answer(s) from your resume — <em>review &amp; personalize before submitting</em> (highlighted in blue).</p>`;
@@ -165,14 +165,28 @@ function renderFillResult(outcome) {
 
   if (match) {
     html += `<p>Job fit score: <span class="score">${match.score}%</span></p>`;
-    if (match.matched.length) {
-      html += `<p class="hint">Matched keywords:</p><div class="chip-list">${match.matched
-        .map((m) => `<span class="chip matched">${m}</span>`)
+  }
+
+  if (tailor) {
+    html += `<hr /><p><strong>Tweak your resume for this role</strong></p>`;
+    html += `<p class="hint">Your own skills/bullets, re-ordered for this posting. Nothing here is invented — it's all already on your resume.</p>`;
+
+    if (tailor.leadSkills.length) {
+      html += `<p class="hint">Lead with these skills:</p><div class="chip-list">${tailor.leadSkills
+        .slice(0, 10)
+        .map((s) => `<span class="chip matched">${escapeHtml(s)}</span>`)
         .join("")}</div>`;
     }
-    if (match.missing.length) {
-      html += `<p class="hint">Keywords in the posting not found in your resume:</p><div class="chip-list">${match.missing
-        .map((m) => `<span class="chip missing">${m}</span>`)
+
+    if (tailor.leadBullets.length) {
+      html += `<p class="hint">Lead with these bullets:</p><ul class="bullet-list">${tailor.leadBullets
+        .map((b) => `<li>${escapeHtml(b)}</li>`)
+        .join("")}</ul>`;
+    }
+
+    if (tailor.gaps.length) {
+      html += `<p class="hint">In the posting, not on your resume — add only if genuinely true of you:</p><div class="chip-list">${tailor.gaps
+        .map((g) => `<span class="chip missing">${escapeHtml(g)}</span>`)
         .join("")}</div>`;
     }
   }

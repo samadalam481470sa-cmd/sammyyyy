@@ -66,4 +66,10 @@
   }
 
   global.JobMatcher = { tokenize, computeMatchScore };
+
+  // Also exported for Node (used by the GitLab CI job-finder pipeline) so the
+  // browser extension and the pipeline score jobs with identical logic.
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = global.JobMatcher;
+  }
 })(typeof window !== "undefined" ? window : globalThis);

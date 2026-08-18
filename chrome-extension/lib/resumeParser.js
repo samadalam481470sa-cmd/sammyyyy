@@ -13,10 +13,12 @@
   const WEBSITE_RE = /(https?:\/\/)?(www\.)?[a-zA-Z0-9-]+\.(dev|io|me|co)\/[a-zA-Z0-9\-_./%]*/i;
 
   const SECTION_HEADERS = {
-    skills: ["skills", "technical skills", "core competencies", "technologies"],
-    experience: ["experience", "work experience", "employment history", "professional experience"],
+    skills: ["skills", "technical skills", "core competencies", "technologies", "skills & tools"],
+    experience: ["experience", "work experience", "employment history", "professional experience", "relevant experience"],
     education: ["education", "academic background"],
-    summary: ["summary", "professional summary", "objective", "about me"],
+    summary: ["summary", "professional summary", "objective", "about me", "profile"],
+    projects: ["projects", "personal projects", "academic projects", "selected projects"],
+    certifications: ["certifications", "certificates", "licenses", "awards", "honors"],
   };
 
   function extractFirstMatch(text, regex) {
@@ -39,6 +41,16 @@
     const wordCount = first.split(/\s+/).length;
     if (!looksLikeContactInfo && isReasonableLength && wordCount <= 5) {
       return first;
+    }
+    return "";
+  }
+
+  function extractLocation(text) {
+    // Resumes almost always put "City, ST" in the header block.
+    const headerLines = text.split("\n").slice(0, 6);
+    for (const line of headerLines) {
+      const match = line.match(/\b([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+)*),\s*([A-Z]{2})\b/);
+      if (match) return `${match[1]}, ${match[2]}`;
     }
     return "";
   }
@@ -75,10 +87,34 @@
   function extractSkillsList(text) {
     const raw = extractSection(text, "skills");
     if (!raw) return [];
-    return raw
+    // Skill sections are commonly written as "Category: item, item, item".
+    // Drop the category label so it doesn't get stored as a skill.
+    const withoutLabels = raw
+      .split("\n")
+      .map((line) => {
+        const colonIdx = line.indexOf(":");
+        return colonIdx > -1 && colonIdx < 40 ? line.slice(colonIdx + 1) : line;
+      })
+      .join("\n");
+
+    return withoutLabels
       .split(/[\n,•|;]/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && s.length < 40);
+      .map((s) => s.replace(/^[-*\s]+/, "").trim())
+      .filter((s) => s.length > 1 && s.length < 40);
+  }
+
+  /**
+   * Pulls individual bullet lines out of a section, so callers can rank and
+   * re-order a candidate's real accomplishments per role.
+   */
+  function extractBullets(sectionText) {
+    if (!sectionText) return [];
+    return sectionText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[•\-*\u2022\u25cf]/.test(line))
+      .map((line) => line.replace(/^[•\-*\u2022\u25cf]+\s*/, "").trim())
+      .filter((line) => line.length > 10);
   }
 
   function splitFullName(fullName) {
@@ -108,14 +144,23 @@
       phone: extractFirstMatch(cleanText, PHONE_RE),
       linkedin: extractFirstMatch(cleanText, LINKEDIN_RE),
       website: extractFirstMatch(cleanText, GITHUB_RE) || extractFirstMatch(cleanText, WEBSITE_RE),
-      location: "",
+      location: extractLocation(cleanText),
       skills: extractSkillsList(cleanText),
       summary: extractSection(cleanText, "summary"),
       experience: extractSection(cleanText, "experience"),
       education: extractSection(cleanText, "education"),
+      projects: extractSection(cleanText, "projects"),
+      bullets: extractBullets(
+        [extractSection(cleanText, "experience"), extractSection(cleanText, "projects")].filter(Boolean).join("\n")
+      ),
       rawText: cleanText,
     };
   }
 
-  global.ResumeParser = { parseResume };
+  global.ResumeParser = { parseResume, extractBullets, extractSection };
+
+  // Also exported for Node (used by the GitLab CI job-finder pipeline).
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = global.ResumeParser;
+  }
 })(typeof window !== "undefined" ? window : globalThis);

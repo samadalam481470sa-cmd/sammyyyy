@@ -10,7 +10,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "resume-fit-fill" && tab && tab.id) {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["lib/matcher.js", "lib/autofillEngine.js", "content.js"],
+      files: ["lib/matcher.js", "lib/tailor.js", "lib/autofillEngine.js", "content.js"],
     });
   }
 });

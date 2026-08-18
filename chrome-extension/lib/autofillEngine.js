@@ -343,7 +343,14 @@
       match = global.JobMatcher.computeMatchScore(profile.rawText || "", profile.skills || [], jobText);
     }
 
-    return { filledCount, draftedCount, flaggedCount, match };
+    // Per-role tailoring advice: which of the candidate's real skills and
+    // bullets to lead with for this specific posting.
+    let tailor = null;
+    if (typeof global.ResumeFitTailor !== "undefined") {
+      tailor = global.ResumeFitTailor.tailorForRole(profile, jobText, { bulletLimit: 4, gapLimit: 8 });
+    }
+
+    return { filledCount, draftedCount, flaggedCount, match, tailor };
   }
 
   /**
@@ -383,59 +390,8 @@
     return count;
   }
 
-  /**
-   * Generates a strong random password using the Web Crypto API (never
-   * Math.random) and guarantees at least one character from each class.
-   */
-  function generatePassword(length) {
-    const len = Math.max(12, length || 16);
-    const lowers = "abcdefghijkmnopqrstuvwxyz";
-    const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-    const digits = "23456789";
-    const symbols = "!@#$%^&*()-_=+";
-    const all = lowers + uppers + digits + symbols;
-
-    const randomChar = (charset) => {
-      const bytes = new Uint32Array(1);
-      crypto.getRandomValues(bytes);
-      return charset[bytes[0] % charset.length];
-    };
-
-    const required = [randomChar(lowers), randomChar(uppers), randomChar(digits), randomChar(symbols)];
-    const rest = Array.from({ length: len - required.length }, () => randomChar(all));
-    const combined = required.concat(rest);
-
-    // Shuffle (Fisher-Yates) using crypto-backed randomness.
-    for (let i = combined.length - 1; i > 0; i--) {
-      const bytes = new Uint32Array(1);
-      crypto.getRandomValues(bytes);
-      const j = bytes[0] % (i + 1);
-      [combined[i], combined[j]] = [combined[j], combined[i]];
-    }
-    return combined.join("");
-  }
-
-  /**
-   * Finds password-type inputs on the page and fills them all with the same
-   * generated password (covers "password" + "confirm password" pairs).
-   * Returns { password, count } — the caller is responsible for showing the
-   * password to the user so they can save it.
-   */
-  function fillPasswords() {
-    const passwordFields = getVisibleFields().filter((el) => el.type === "password");
-    if (passwordFields.length === 0) return { password: null, count: 0 };
-    const password = generatePassword(16);
-    passwordFields.forEach((el) => {
-      setNativeValue(el, password);
-      markFilled(el, "Generated password — make sure to save it!");
-    });
-    return { password, count: passwordFields.length };
-  }
-
   global.ResumeFitEngine = {
     runFullAutofill,
     fillFieldType,
-    generatePassword,
-    fillPasswords,
   };
 })(typeof window !== "undefined" ? window : globalThis);
