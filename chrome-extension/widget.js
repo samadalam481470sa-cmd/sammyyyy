@@ -3,7 +3,6 @@
  * the user disables it from the popup). Shows a small draggable bubble;
  * clicking it opens a panel with one-click actions:
  *   - Fill Name / Email / Phone (from the saved resume)
- *   - Generate & fill a strong password (for account-creation forms)
  *   - Full Autofill + Job Fit Score (runs the same engine as the popup)
  *
  * Nothing here submits forms or simulates mouse movement — it only fills
@@ -58,8 +57,6 @@
       button.primary { background: #4338ca; }
       button.primary:hover { background: #3730a3; }
       .status { margin-top: 8px; opacity: 0.85; font-size: 11px; white-space: pre-line; }
-      .pw-box { margin-top: 6px; background: #0f0f1e; border-radius: 6px; padding: 6px; word-break: break-all; font-family: monospace; }
-      .copy-btn { margin-top: 4px; width: 100%; }
     `;
     shadow.appendChild(style);
 
@@ -80,9 +77,6 @@
         <button class="action" id="fillNameBtn">Fill Name</button>
         <button class="action" id="fillEmailBtn">Fill Email</button>
         <button class="action" id="fillPhoneBtn">Fill Phone</button>
-      </div>
-      <div class="row">
-        <button class="action" id="genPasswordBtn" style="flex:2;">Generate &amp; Fill Password</button>
       </div>
       <div class="row">
         <button class="action primary" id="fullAutofillBtn" style="flex:2;">Full Autofill + Job Score</button>
@@ -143,20 +137,6 @@
       setStatus(count > 0 ? `Filled ${count} phone field(s).` : "No matching phone field found on this page.");
     });
 
-    panel.querySelector("#genPasswordBtn").addEventListener("click", () => {
-      const { password, count } = window.ResumeFitEngine.fillPasswords();
-      if (count === 0) {
-        setStatus("No password field found on this page.");
-        return;
-      }
-      navigator.clipboard.writeText(password).catch(() => {});
-      setStatus(
-        `Filled ${count} password field(s) and copied it to your clipboard. Save it somewhere safe (e.g. your password manager):<div class="pw-box">${escapeHtml(
-          password
-        )}</div>`
-      );
-    });
-
     panel.querySelector("#fullAutofillBtn").addEventListener("click", async () => {
       const { profile, qaItems } = await getProfileAndQa();
       if (!profile || (!profile.email && !profile.name)) {
@@ -169,12 +149,6 @@
       text += "\nNothing was submitted — review highlighted fields first.";
       setStatus(text);
     });
-
-    function escapeHtml(str) {
-      const div = document.createElement("div");
-      div.textContent = str || "";
-      return div.innerHTML;
-    }
 
     function makeDraggable(handle, onDragStart) {
       let startX, startY, startRight, startBottom, moved;

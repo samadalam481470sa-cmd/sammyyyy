@@ -28,9 +28,8 @@ fraud or platform-abuse territory. It:
   other bot-detection evasion.
 - Includes a small **floating helper bubble** ("RF") that appears in the
   corner of every page (draggable, and can be turned off from the popup).
-  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, Generate
-  &amp; Fill Password, and Full Autofill + Job Score — all using the engine
-  described above.
+  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, and Full
+  Autofill + Job Score — all using the engine described above.
 
 ## What this deliberately does NOT do
 
@@ -92,7 +91,7 @@ chrome-extension/
 └── lib/
     ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
     ├── matcher.js         # Resume vs. job-description keyword overlap scoring
-    └── autofillEngine.js  # Shared field-matching/autofill/password-generation logic
+    └── autofillEngine.js  # Shared field-matching/autofill logic
 ```
 
 ## The floating widget
@@ -103,11 +102,6 @@ it). Clicking it opens a panel with:
 
 - **Fill Name / Fill Email / Fill Phone** — fills every matching field on the
   page with that piece of your saved resume data.
-- **Generate & Fill Password** — creates a strong random password (via the
-  Web Crypto API, guaranteed upper/lower/digit/symbol mix), fills any
-  password field(s) on the page (including a "confirm password" field with
-  the same value), copies it to your clipboard, and shows it to you so you
-  can save it in your password manager.
 - **Full Autofill + Job Score** — runs the same engine as the popup's
   "Analyze & Fill This Page" button.
 
