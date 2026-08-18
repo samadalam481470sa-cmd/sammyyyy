@@ -13,7 +13,8 @@
 
   <nav class="tabs">
     <button class="tab-btn active" data-tab="resume">1. Resume</button>
-    <button class="tab-btn" data-tab="fill">2. Fill &amp; Score</button>
+    <button class="tab-btn" data-tab="qa">2. Q&amp;A</button>
+    <button class="tab-btn" data-tab="fill">3. Fill &amp; Score</button>
   </nav>
 
   <section id="tab-resume" class="tab-panel active">
@@ -80,10 +81,35 @@
     <p id="saveStatus" class="status"></p>
   </section>
 
+  <section id="tab-qa" class="tab-panel">
+    <p class="hint">Tell us your own answers to questions that come up often. We'll reuse your exact wording whenever a matching question appears on a page — never guessed, never invented.</p>
+
+    <div id="qaList"></div>
+    <button id="addQaBtn" class="btn secondary">+ Add a question</button>
+
+    <p class="hint" style="margin-top:12px;">Quick add common questions:</p>
+    <div id="qaQuickAdd" class="chip-list"></div>
+
+    <hr />
+    <p class="hint">For open-ended prompts you haven't answered above (like "Why do you want to work here?"), we'll draft a short suggestion from your real resume content — always shown for you to review and personalize, never submitted automatically.</p>
+
+    <button id="saveQaBtn" class="btn primary">Save Q&amp;A</button>
+    <p id="qaSaveStatus" class="status"></p>
+  </section>
+
   <section id="tab-fill" class="tab-panel">
-    <p class="hint">Open a job application or job posting tab, then click below. Matched fields are filled with your real info; anything uncertain is highlighted in yellow for you to complete yourself.</p>
+    <p class="hint">Open a job application or job posting tab, then click below. Matched fields are filled with your real info or saved Q&amp;A answers; open-ended prompts get a draft to review; anything uncertain is flagged for you to complete yourself.</p>
     <button id="fillBtn" class="btn primary">Analyze &amp; Fill This Page</button>
     <div id="fillResult" class="fill-result"></div>
+
+    <hr />
+    <div class="field-group toggle-row">
+      <label for="widgetToggle" class="toggle-label">
+        <input type="checkbox" id="widgetToggle" />
+        Show floating helper bubble on web pages
+      </label>
+      <p class="hint">A small draggable "RF" button in the corner of every page with quick actions (fill name/email/phone, generate a password, full autofill). Reload open tabs after changing this.</p>
+    </div>
   </section>
 
   <script src="lib/resumeParser.js"></script>

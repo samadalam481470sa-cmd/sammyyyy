@@ -169,3 +169,64 @@ hr {
   background: #fee2e2;
   color: #991b1b;
 }
+
+.chip.quick-add {
+  background: #ede9fe;
+  color: #4338ca;
+  cursor: pointer;
+  border: none;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.chip.quick-add:hover {
+  background: #ddd6fe;
+}
+
+.qa-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.qa-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.qa-remove-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+
+.qa-row input,
+.qa-row textarea {
+  margin-bottom: 4px;
+}
+
+.toggle-row {
+  margin-top: 8px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a2e;
+  cursor: pointer;
+}
+
+.toggle-label input {
+  width: auto;
+  margin: 0;
+}

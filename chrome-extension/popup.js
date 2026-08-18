@@ -1,4 +1,17 @@
 const STORAGE_KEY = "resumeProfile";
+const QA_STORAGE_KEY = "customAnswers";
+
+const QUICK_ADD_QUESTIONS = [
+  "Are you legally authorized to work in this country?",
+  "Will you now or in the future require visa sponsorship?",
+  "What are your salary expectations?",
+  "What is your notice period / earliest start date?",
+  "How did you hear about this position?",
+  "Are you willing to relocate?",
+  "Are you comfortable with on-site / hybrid / remote work?",
+  "Do you have a disability?",
+  "Veteran status",
+];
 
 const els = {
   tabs: document.querySelectorAll(".tab-btn"),
@@ -10,6 +23,12 @@ const els = {
   saveStatus: document.getElementById("saveStatus"),
   fillBtn: document.getElementById("fillBtn"),
   fillResult: document.getElementById("fillResult"),
+  widgetToggle: document.getElementById("widgetToggle"),
+  qaList: document.getElementById("qaList"),
+  addQaBtn: document.getElementById("addQaBtn"),
+  qaQuickAdd: document.getElementById("qaQuickAdd"),
+  saveQaBtn: document.getElementById("saveQaBtn"),
+  qaSaveStatus: document.getElementById("qaSaveStatus"),
   name: document.getElementById("fName"),
   firstName: document.getElementById("fFirstName"),
   lastName: document.getElementById("fLastName"),
@@ -119,7 +138,7 @@ els.fillBtn.addEventListener("click", async () => {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["lib/matcher.js", "content.js"],
+      files: ["lib/matcher.js", "lib/autofillEngine.js", "content.js"],
     });
     // Result arrives asynchronously via the RESUME_FIT_RESULT message above.
   } catch (err) {
@@ -137,8 +156,12 @@ function renderFillResult(outcome) {
     return;
   }
 
-  const { filledCount, flaggedCount, match } = outcome;
-  let html = `<p>Filled <strong>${filledCount}</strong> field(s) with your real info. Flagged <strong>${flaggedCount}</strong> field(s) for you to complete manually (highlighted in yellow on the page).</p>`;
+  const { filledCount, draftedCount, flaggedCount, match } = outcome;
+  let html = `<p>✅ Filled <strong>${filledCount}</strong> field(s) with your real info / saved answers.</p>`;
+  if (draftedCount) {
+    html += `<p>📝 Drafted <strong>${draftedCount}</strong> open-ended answer(s) from your resume — <em>review &amp; personalize before submitting</em> (highlighted in blue).</p>`;
+  }
+  html += `<p>⚠️ Flagged <strong>${flaggedCount}</strong> field(s) for you to complete manually (highlighted in yellow).</p>`;
 
   if (match) {
     html += `<p>Job fit score: <span class="score">${match.score}%</span></p>`;
@@ -157,4 +180,99 @@ function renderFillResult(outcome) {
   els.fillResult.innerHTML = html;
 }
 
+// --- Q&A (user-provided answers reused verbatim, never invented) --------
+
+let qaItems = [];
+
+function renderQaList() {
+  els.qaList.innerHTML = "";
+  qaItems.forEach((qa, idx) => {
+    const row = document.createElement("div");
+    row.className = "qa-row";
+    row.innerHTML = `
+      <div class="qa-row-header">
+        <label>Question</label>
+        <button class="qa-remove-btn" data-idx="${idx}">Remove</button>
+      </div>
+      <input type="text" class="qa-question" data-idx="${idx}" placeholder="e.g. Are you authorized to work in the US?" value="${escapeHtml(qa.question)}" />
+      <label>Your answer</label>
+      <textarea class="qa-answer" data-idx="${idx}" rows="2" placeholder="Your exact answer — this is reused as-is, never changed">${escapeHtml(qa.answer)}</textarea>
+    `;
+    els.qaList.appendChild(row);
+  });
+
+  els.qaList.querySelectorAll(".qa-question").forEach((input) => {
+    input.addEventListener("input", (e) => {
+      qaItems[Number(e.target.dataset.idx)].question = e.target.value;
+    });
+  });
+  els.qaList.querySelectorAll(".qa-answer").forEach((textarea) => {
+    textarea.addEventListener("input", (e) => {
+      qaItems[Number(e.target.dataset.idx)].answer = e.target.value;
+    });
+  });
+  els.qaList.querySelectorAll(".qa-remove-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      qaItems.splice(Number(e.target.dataset.idx), 1);
+      renderQaList();
+    });
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str || "";
+  return div.innerHTML;
+}
+
+function addQaRow(question) {
+  qaItems.push({ question: question || "", answer: "" });
+  renderQaList();
+  const textareas = els.qaList.querySelectorAll(".qa-answer");
+  const last = textareas[textareas.length - 1];
+  if (last) last.focus();
+}
+
+function renderQuickAddChips() {
+  els.qaQuickAdd.innerHTML = "";
+  QUICK_ADD_QUESTIONS.forEach((q) => {
+    const chip = document.createElement("button");
+    chip.className = "chip quick-add";
+    chip.textContent = q;
+    chip.addEventListener("click", () => addQaRow(q));
+    els.qaQuickAdd.appendChild(chip);
+  });
+}
+
+function loadQaItems() {
+  chrome.storage.local.get([QA_STORAGE_KEY], (result) => {
+    qaItems = result[QA_STORAGE_KEY] || [];
+    renderQaList();
+  });
+}
+
+els.addQaBtn.addEventListener("click", () => addQaRow());
+
+els.saveQaBtn.addEventListener("click", () => {
+  const cleaned = qaItems.filter((qa) => qa.question.trim() && qa.answer.trim());
+  chrome.storage.local.set({ [QA_STORAGE_KEY]: cleaned }, () => {
+    qaItems = cleaned;
+    renderQaList();
+    els.qaSaveStatus.textContent = "Saved.";
+    setTimeout(() => (els.qaSaveStatus.textContent = ""), 3000);
+  });
+});
+
+// --- Floating widget toggle ------------------------------------------
+
+chrome.storage.local.get(["widgetEnabled"], (result) => {
+  els.widgetToggle.checked = result.widgetEnabled !== false;
+});
+
+els.widgetToggle.addEventListener("change", () => {
+  chrome.storage.local.set({ widgetEnabled: els.widgetToggle.checked });
+});
+
+renderQuickAddChips();
+loadQaItems();
 loadSavedProfile();

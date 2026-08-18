@@ -10,5 +10,13 @@
   },
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["lib/matcher.js", "lib/autofillEngine.js", "widget.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
 }
