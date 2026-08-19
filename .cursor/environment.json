@@ -1,4 +1,4 @@
 {
   "name": "Job search toolkit",
-  "install": "cd job-finder && npm install"
+  "install": "cd job-finder && npm install --no-package-lock"
 }
