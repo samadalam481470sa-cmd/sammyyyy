@@ -1,0 +1,4 @@
+{
+  "name": "Job search toolkit",
+  "install": "cd job-finder && npm install"
+}
