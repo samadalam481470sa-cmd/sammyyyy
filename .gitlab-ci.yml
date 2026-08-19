@@ -1,0 +1,103 @@
+# Scheduled job-discovery pipeline.
+#
+# What this does: on a schedule, pulls postings from public job APIs, scores
+# each against your resume, and publishes a ranked shortlist plus per-role
+# resume-tailoring plans and cover-letter drafts as downloadable artifacts.
+#
+# What this deliberately does NOT do: submit applications, create accounts,
+# or log into job boards. Those actions stay with you — the browser extension
+# in chrome-extension/ makes doing them fast.
+#
+# Setup:
+#   1. Add a CI variable RESUME_TEXT (type: Variable, masked off) containing
+#      your resume text — this keeps contact details out of the repository.
+#      Alternatively commit job-finder/resume.txt (contact details redacted).
+#   2. Optional: JOB_ALERT_WEBHOOK (Slack/Discord incoming webhook URL) to get
+#      a summary pushed to you each run.
+#   3. Optional API keys: ADZUNA_APP_ID, ADZUNA_APP_KEY, USAJOBS_API_KEY,
+#      USAJOBS_EMAIL.
+#   4. Create the schedule: CI/CD > Schedules > New schedule. A cron of
+#      "0 */6 * * *" runs it every 6 hours. This runs on GitLab's runners, so
+#      it keeps working while your laptop is closed.
+
+stages:
+  - test
+  - package
+  - discover
+
+default:
+  image: node:20-alpine
+  interruptible: true
+
+variables:
+  GIT_DEPTH: "10"
+
+# Validates the parsing/scoring/tailoring logic. Runs on pushes and MRs so a
+# broken change is caught before the scheduled run depends on it.
+test:
+  stage: test
+  script:
+    - node --version
+    - cd job-finder && npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Validates the extension package (manifest keys, every referenced file
+# exists, JS syntax) and publishes the installable zip as an artifact, so a
+# broken package can't reach the download link unnoticed.
+package-extension:
+  stage: package
+  before_script:
+    - apk add --no-cache zip
+  script:
+    - node scripts/build-extension.js
+    - unzip -l resume-fit-assistant.zip
+  artifacts:
+    name: "resume-fit-assistant-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - resume-fit-assistant.zip
+    expire_in: 90 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Loads the extension in a real Chromium and asserts it fills a form. Manual
+# because it downloads a ~120 MB browser; run it before shipping a change to
+# the extension.
+extension-smoke-test:
+  stage: package
+  image: mcr.microsoft.com/playwright:v1.62.1-noble
+  script:
+    - npm install --no-save playwright
+    - node chrome-extension/test/smoke-test.js
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
+
+# The scheduled run. Also triggerable manually from the GitLab UI
+# (CI/CD > Pipelines > Run pipeline).
+discover-jobs:
+  stage: discover
+  script:
+    - node job-finder/src/index.js
+  artifacts:
+    name: "job-matches-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - job-finder/output/
+    expire_in: 30 days
+    when: always
+  # Remembers which postings were already reported so each run can highlight
+  # what's new.
+  cache:
+    key: job-finder-seen-cache
+    paths:
+      - job-finder/.cache/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "trigger"
