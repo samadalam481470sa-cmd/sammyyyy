@@ -22,6 +22,7 @@
 
 stages:
   - test
+  - package
   - discover
 
 default:
@@ -41,6 +42,42 @@ test:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Validates the extension package (manifest keys, every referenced file
+# exists, JS syntax) and publishes the installable zip as an artifact, so a
+# broken package can't reach the download link unnoticed.
+package-extension:
+  stage: package
+  before_script:
+    - apk add --no-cache zip
+  script:
+    - node scripts/build-extension.js
+    - unzip -l resume-fit-assistant.zip
+  artifacts:
+    name: "resume-fit-assistant-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - resume-fit-assistant.zip
+    expire_in: 90 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# Loads the extension in a real Chromium and asserts it fills a form. Manual
+# because it downloads a ~120 MB browser; run it before shipping a change to
+# the extension.
+extension-smoke-test:
+  stage: package
+  image: mcr.microsoft.com/playwright:v1.62.1-noble
+  script:
+    - npm install --no-save playwright
+    - node chrome-extension/test/smoke-test.js
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
 
 # The scheduled run. Also triggerable manually from the GitLab UI
 # (CI/CD > Pipelines > Run pipeline).
