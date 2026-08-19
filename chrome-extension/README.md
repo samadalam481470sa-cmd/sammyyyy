@@ -4,7 +4,15 @@ A Chrome extension that helps with job applications **without** crossing into
 fraud or platform-abuse territory. It:
 
 - Lets you save your **real** resume (paste text or upload a `.txt` file), parsed
-  into structured fields you can review and correct.
+  into structured fields you can review and correct — including name, contact
+  info, city/state/ZIP, LinkedIn/GitHub, current title & employer, school,
+  degree, graduation year, and years of experience.
+- **Saves everything automatically as you type.** All data lives in
+  `chrome.storage.local` — on your device, no account or cloud — and persists
+  across page navigations and browser restarts. The popup window itself closes
+  whenever you click away (that's how Chrome popups work), but your data is
+  never lost, and the floating bubble keeps the assistant available on every
+  page.
 - Lets you pre-write your **own answers** to recurring questions (work
   authorization, visa sponsorship, salary expectations, notice period, etc.)
   once, in the **Q&A** tab. Whenever a matching question shows up on a page —
@@ -28,8 +36,13 @@ fraud or platform-abuse territory. It:
   other bot-detection evasion.
 - Includes a small **floating helper bubble** ("RF") that appears in the
   corner of every page (draggable, and can be turned off from the popup).
-  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, and Full
-  Autofill + Job Score — all using the engine described above.
+  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, **Fill
+  Contact Info** (all contact fields at once), and Full Autofill + Job Score —
+  all using the engine described above. Its position and open/closed state are
+  remembered, so it stays where you put it as you move page to page.
+- Fills fast with a **keyboard shortcut**: press **Alt+Shift+F** on any page to
+  run a full autofill instantly — no need to open the popup or the bubble. You
+  can change the shortcut at `chrome://extensions/shortcuts`.
 
 ## What this deliberately does NOT do
 
@@ -62,9 +75,11 @@ review-and-autofill assistant, not an autonomous applicant.
    Autofill Assistant").
 6. Click its icon, go to the **Resume** tab, and paste or upload your resume.
 7. Optionally add answers to common questions in the **Q&A** tab.
-8. On any page, either open the popup's **Fill & Score** tab and click
-   **Analyze & Fill This Page**, or click the small floating **"RF"** bubble
-   in the corner of the page for quick one-click actions.
+8. On any page, fill the form in any of these ways:
+   - press **Alt+Shift+F** (fastest — works without opening anything);
+   - click the small floating **"RF"** bubble for one-click actions; or
+   - open the popup's **Fill & Score** tab and click **Analyze & Fill This
+     Page**.
 
 No build step, no external dependencies — it's plain HTML/CSS/JS (Manifest
 V3), so you can also just copy individual files straight into your own
@@ -85,12 +100,13 @@ zip -r ../resume-fit-assistant.zip . -x "*.DS_Store"
 chrome-extension/
 ├── manifest.json          # Manifest V3 config
 ├── popup.html/.css/.js    # Resume + Q&A input UI, "Analyze & Fill This Page" trigger
-├── content.js             # Injected on demand (popup button / context menu)
+├── content.js             # Injected on demand (popup button / shortcut / context menu)
 ├── widget.js              # Always-on floating "RF" bubble injected on every page
-├── background.js          # Service worker; adds a right-click "Fill this page" shortcut
+├── background.js          # Service worker; right-click menu + Alt+Shift+F shortcut
 └── lib/
     ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
     ├── matcher.js         # Resume vs. job-description keyword overlap scoring
+    ├── tailor.js          # Per-role resume-tailoring suggestions (real content only)
     └── autofillEngine.js  # Shared field-matching/autofill logic
 ```
 
@@ -102,8 +118,13 @@ it). Clicking it opens a panel with:
 
 - **Fill Name / Fill Email / Fill Phone** — fills every matching field on the
   page with that piece of your saved resume data.
+- **Fill Contact Info** — fills all your contact fields (name, email, phone,
+  city/state/ZIP, address, LinkedIn/GitHub, website) in one click.
 - **Full Autofill + Job Score** — runs the same engine as the popup's
   "Analyze & Fill This Page" button.
+
+The bubble remembers where you drag it and whether its panel was open, so it
+stays consistent as you navigate between pages.
 
 The widget only fills fields when you click a button — it never runs
 automatically in the background, never submits anything, and never moves
@@ -117,6 +138,7 @@ your mouse or clicks other page elements.
   review a page after auto-fill before applying.
 - The job-fit score is a simple keyword-overlap heuristic, not a semantic or
   ML-based match — treat it as a quick signal, not ground truth.
-- Content scripts only run when you explicitly click "Analyze & Fill This
-  Page" (or the right-click menu item) — nothing runs in the background or on
-  page load.
+- Autofill only runs when you explicitly trigger it — the popup button, the
+  **Alt+Shift+F** shortcut, the floating bubble, or the right-click menu item.
+  The floating bubble is injected on page load but only reads/writes fields
+  when you click one of its buttons; nothing fills or submits on its own.

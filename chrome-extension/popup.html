@@ -60,14 +60,69 @@
       <label for="fLocation">Location (city, state)</label>
       <input type="text" id="fLocation" />
     </div>
+    <div class="field-row">
+      <div class="field-group">
+        <label for="fCity">City</label>
+        <input type="text" id="fCity" />
+      </div>
+      <div class="field-group">
+        <label for="fState">State / Province</label>
+        <input type="text" id="fState" />
+      </div>
+      <div class="field-group">
+        <label for="fZip">ZIP / Postal</label>
+        <input type="text" id="fZip" />
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="fAddress">Street address</label>
+      <input type="text" id="fAddress" />
+    </div>
     <div class="field-group">
       <label for="fLinkedin">LinkedIn URL</label>
       <input type="text" id="fLinkedin" />
     </div>
     <div class="field-group">
-      <label for="fWebsite">Website / GitHub / Portfolio</label>
+      <label for="fGithub">GitHub URL</label>
+      <input type="text" id="fGithub" />
+    </div>
+    <div class="field-group">
+      <label for="fWebsite">Website / Portfolio</label>
       <input type="text" id="fWebsite" />
     </div>
+
+    <hr />
+    <p class="hint">Work & education — fill these once and they'll autofill too. Left blank = flagged for you, never guessed.</p>
+    <div class="field-row">
+      <div class="field-group">
+        <label for="fCurrentTitle">Current job title</label>
+        <input type="text" id="fCurrentTitle" />
+      </div>
+      <div class="field-group">
+        <label for="fCurrentCompany">Current employer</label>
+        <input type="text" id="fCurrentCompany" />
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="fSchool">School / University</label>
+      <input type="text" id="fSchool" />
+    </div>
+    <div class="field-row">
+      <div class="field-group">
+        <label for="fDegree">Degree / Major</label>
+        <input type="text" id="fDegree" />
+      </div>
+      <div class="field-group">
+        <label for="fGradYear">Graduation year</label>
+        <input type="text" id="fGradYear" />
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="fYears">Years of experience</label>
+      <input type="text" id="fYears" />
+    </div>
+
+    <hr />
     <div class="field-group">
       <label for="fSkills">Skills (comma-separated)</label>
       <textarea id="fSkills" rows="2"></textarea>
@@ -78,6 +133,7 @@
     </div>
 
     <button id="saveBtn" class="btn primary">Save Resume Profile</button>
+    <p class="hint">Saved automatically as you type — stored on your device only, and it stays put across pages and browser restarts (no account or cloud needed).</p>
     <p id="saveStatus" class="status"></p>
   </section>
 
@@ -100,6 +156,7 @@
   <section id="tab-fill" class="tab-panel">
     <p class="hint">Open a job application or job posting tab, then click below. Matched fields are filled with your real info or saved Q&amp;A answers; open-ended prompts get a draft to review; anything uncertain is flagged for you to complete yourself.</p>
     <button id="fillBtn" class="btn primary">Analyze &amp; Fill This Page</button>
+    <p class="hint">Faster: press <strong>Alt+Shift+F</strong> on any page, or use the floating <strong>RF</strong> bubble — no need to open this popup. Set the shortcut at <code>chrome://extensions/shortcuts</code>.</p>
     <div id="fillResult" class="fill-result"></div>
 
     <hr />

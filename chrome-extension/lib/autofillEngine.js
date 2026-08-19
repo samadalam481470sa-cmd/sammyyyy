@@ -17,17 +17,35 @@
  *     other bot-detection evasion.
  */
 (function (global) {
+  // Order matters: the first pattern whose regex matches the field's descriptor
+  // wins, so more specific keys must come before more general ones. Word
+  // boundaries (\b) keep short keys like "state"/"city" from matching inside
+  // unrelated words (e.g. "united states", "statement").
   const FIELD_PATTERNS = [
     { key: "email", tests: [/e-?mail/] },
-    { key: "phone", tests: [/phone|mobile|cell/] },
-    { key: "firstName", tests: [/first\s*name|given\s*name/] },
+    { key: "phone", tests: [/phone|mobile|\bcell\b|contact\s*number/] },
+    { key: "firstName", tests: [/first\s*name|given\s*name|forename/] },
     { key: "lastName", tests: [/last\s*name|sur\s*name|family\s*name/] },
-    { key: "name", tests: [/full\s*name|applicant\s*name|^name$|your\s*name/] },
+    { key: "name", tests: [/full\s*name|applicant\s*name|^name$|your\s*name|legal\s*name|preferred\s*name/] },
     { key: "linkedin", tests: [/linkedin/] },
-    { key: "website", tests: [/portfolio|github|personal\s*site|website/] },
-    { key: "location", tests: [/^city$|location(?!.*(state|zip|code))/] },
-    { key: "summary", tests: [/summary|about\s*you(?!.*why)/] },
+    { key: "github", tests: [/git\s*hub/] },
+    { key: "website", tests: [/portfolio|personal\s*(web)?\s*site|\bwebsite\b|personal\s*url/] },
+    { key: "zip", tests: [/\bzip\b|zipcode|postal\s*code|post\s*code/] },
+    { key: "state", tests: [/\bstate\b|\bprovince\b|state\s*\/\s*province/] },
+    { key: "city", tests: [/\bcity\b|\btown\b|city\s*\/\s*town|municipality/] },
+    { key: "address", tests: [/street\s*address|address\s*line|\bstreet\b|mailing\s*address|home\s*address|residential\s*address|\baddress\b/] },
+    { key: "location", tests: [/\blocation\b(?!.*(state|zip|code))|current\s*location/] },
+    { key: "currentTitle", tests: [/current\s*(job\s*)?(title|role|position)|present\s*(title|role|position)|most\s*recent\s*(title|role|position)|current\s*job/] },
+    { key: "currentCompany", tests: [/current\s*(employer|company|organization|organisation|workplace)|present\s*(employer|company)|most\s*recent\s*(employer|company)/] },
+    { key: "school", tests: [/\bschool\b|university|college|institution|alma\s*mater/] },
+    { key: "degree", tests: [/\bdegree\b|qualification|\bmajor\b|field\s*of\s*study|area\s*of\s*study/] },
+    { key: "gradYear", tests: [/graduation|grad\s*year|year\s*of\s*graduation|expected\s*graduation|completion\s*(year|date)/] },
+    { key: "yearsExperience", tests: [/years\s*of\s*experience|years'?\s*experience|total\s*(years\s*)?experience|experience\s*in\s*years/] },
+    { key: "summary", tests: [/summary|about\s*you(?!.*why)|professional\s*summary|profile\s*summary/] },
   ];
+
+  // Profile keys the "Fill contact info" quick action populates in one click.
+  const CONTACT_KEYS = ["name", "firstName", "lastName", "email", "phone", "location", "city", "state", "zip", "address", "linkedin", "github", "website"];
 
   const SENSITIVE_HINTS = [
     /sponsorship/,
@@ -390,8 +408,22 @@
     return count;
   }
 
+  /**
+   * Fills every common contact field in one pass (name, email, phone, city,
+   * state, zip, address, linkedin, etc.). Returns the number of fields filled.
+   */
+  function fillContact(profile) {
+    if (!profile) return 0;
+    let count = 0;
+    for (const key of CONTACT_KEYS) {
+      count += fillFieldType(profile, key);
+    }
+    return count;
+  }
+
   global.ResumeFitEngine = {
     runFullAutofill,
     fillFieldType,
+    fillContact,
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -11,6 +11,27 @@ const QUICK_ADD_QUESTIONS = [
   "Are you comfortable with on-site / hybrid / remote work?",
   "Do you have a disability?",
   "Veteran status",
+  "What is your preferred work location?",
+  "Gender",
+  "Race / ethnicity",
+  "Pronouns",
+  "Are you at least 18 years of age?",
+  "Have you previously worked for this company?",
+  "Are you currently employed?",
+  "Why do you want to work here?",
+  "Why are you a good fit for this role?",
+  "Tell us about yourself",
+  "What are your greatest strengths?",
+  "Expected graduation date",
+  "GPA",
+  "Are you willing to travel?",
+  "Do you have reliable transportation?",
+  "Have you ever been convicted of a crime?",
+  "Were you referred by a current employee? If so, who?",
+  "What is your desired job title?",
+  "When are you available to start?",
+  "Do you have any scheduling restrictions?",
+  "Preferred name",
 ];
 
 const els = {
@@ -35,8 +56,19 @@ const els = {
   email: document.getElementById("fEmail"),
   phone: document.getElementById("fPhone"),
   location: document.getElementById("fLocation"),
+  city: document.getElementById("fCity"),
+  state: document.getElementById("fState"),
+  zip: document.getElementById("fZip"),
+  address: document.getElementById("fAddress"),
   linkedin: document.getElementById("fLinkedin"),
+  github: document.getElementById("fGithub"),
   website: document.getElementById("fWebsite"),
+  currentTitle: document.getElementById("fCurrentTitle"),
+  currentCompany: document.getElementById("fCurrentCompany"),
+  school: document.getElementById("fSchool"),
+  degree: document.getElementById("fDegree"),
+  gradYear: document.getElementById("fGradYear"),
+  yearsExperience: document.getElementById("fYears"),
   skills: document.getElementById("fSkills"),
   summary: document.getElementById("fSummary"),
 };
@@ -57,8 +89,19 @@ function populateFieldsFromProfile(profile) {
   els.email.value = profile.email || "";
   els.phone.value = profile.phone || "";
   els.location.value = profile.location || "";
+  els.city.value = profile.city || "";
+  els.state.value = profile.state || "";
+  els.zip.value = profile.zip || "";
+  els.address.value = profile.address || "";
   els.linkedin.value = profile.linkedin || "";
+  els.github.value = profile.github || "";
   els.website.value = profile.website || "";
+  els.currentTitle.value = profile.currentTitle || "";
+  els.currentCompany.value = profile.currentCompany || "";
+  els.school.value = profile.school || "";
+  els.degree.value = profile.degree || "";
+  els.gradYear.value = profile.gradYear || "";
+  els.yearsExperience.value = profile.yearsExperience || "";
   els.skills.value = (profile.skills || []).join(", ");
   els.summary.value = profile.summary || "";
   rawResumeText = profile.rawText || "";
@@ -72,8 +115,19 @@ function readProfileFromFields() {
     email: els.email.value.trim(),
     phone: els.phone.value.trim(),
     location: els.location.value.trim(),
+    city: els.city.value.trim(),
+    state: els.state.value.trim(),
+    zip: els.zip.value.trim(),
+    address: els.address.value.trim(),
     linkedin: els.linkedin.value.trim(),
+    github: els.github.value.trim(),
     website: els.website.value.trim(),
+    currentTitle: els.currentTitle.value.trim(),
+    currentCompany: els.currentCompany.value.trim(),
+    school: els.school.value.trim(),
+    degree: els.degree.value.trim(),
+    gradYear: els.gradYear.value.trim(),
+    yearsExperience: els.yearsExperience.value.trim(),
     skills: els.skills.value
       .split(",")
       .map((s) => s.trim())
@@ -113,12 +167,45 @@ els.parseBtn.addEventListener("click", () => {
   populateFieldsFromProfile(profile);
 });
 
-els.saveBtn.addEventListener("click", () => {
+function saveProfile(statusText) {
   const profile = readProfileFromFields();
   chrome.storage.local.set({ [STORAGE_KEY]: profile }, () => {
-    els.saveStatus.textContent = "Saved. Go to \"Fill & Score\" on any job page.";
-    setTimeout(() => (els.saveStatus.textContent = ""), 3000);
+    if (statusText) {
+      els.saveStatus.textContent = statusText;
+      setTimeout(() => (els.saveStatus.textContent = ""), 3000);
+    }
   });
+}
+
+els.saveBtn.addEventListener("click", () => {
+  saveProfile("Saved. Go to \"Fill & Score\" on any job page.");
+});
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+// Auto-save every profile field as the user types, so nothing is lost when the
+// popup closes (Chrome popups close whenever you click away or change tabs).
+// Everything lives in chrome.storage.local — on your device, no cloud/account,
+// and it persists across page navigations and browser restarts.
+const PROFILE_FIELD_KEYS = [
+  "name", "firstName", "lastName", "email", "phone", "location", "city", "state",
+  "zip", "address", "linkedin", "github", "website", "currentTitle",
+  "currentCompany", "school", "degree", "gradYear", "yearsExperience", "skills", "summary",
+];
+
+const autoSaveProfile = debounce(() => {
+  saveProfile("Saved automatically ✓");
+}, 500);
+
+PROFILE_FIELD_KEYS.forEach((key) => {
+  const el = els[key];
+  if (el) el.addEventListener("input", autoSaveProfile);
 });
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -198,6 +285,13 @@ function renderFillResult(outcome) {
 
 let qaItems = [];
 
+// Persist Q&A edits as they happen (raw, including half-typed rows) so nothing
+// is lost when the popup closes. The Save button additionally cleans out empty
+// rows.
+const autoSaveQa = debounce(() => {
+  chrome.storage.local.set({ [QA_STORAGE_KEY]: qaItems });
+}, 500);
+
 function renderQaList() {
   els.qaList.innerHTML = "";
   qaItems.forEach((qa, idx) => {
@@ -218,17 +312,20 @@ function renderQaList() {
   els.qaList.querySelectorAll(".qa-question").forEach((input) => {
     input.addEventListener("input", (e) => {
       qaItems[Number(e.target.dataset.idx)].question = e.target.value;
+      autoSaveQa();
     });
   });
   els.qaList.querySelectorAll(".qa-answer").forEach((textarea) => {
     textarea.addEventListener("input", (e) => {
       qaItems[Number(e.target.dataset.idx)].answer = e.target.value;
+      autoSaveQa();
     });
   });
   els.qaList.querySelectorAll(".qa-remove-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       qaItems.splice(Number(e.target.dataset.idx), 1);
       renderQaList();
+      autoSaveQa();
     });
   });
 }
@@ -242,6 +339,7 @@ function escapeHtml(str) {
 function addQaRow(question) {
   qaItems.push({ question: question || "", answer: "" });
   renderQaList();
+  autoSaveQa();
   const textareas = els.qaList.querySelectorAll(".qa-answer");
   const last = textareas[textareas.length - 1];
   if (last) last.focus();
