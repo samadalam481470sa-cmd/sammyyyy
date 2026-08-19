@@ -12,9 +12,10 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="resume">1. Resume</button>
-    <button class="tab-btn" data-tab="qa">2. Q&amp;A</button>
-    <button class="tab-btn" data-tab="fill">3. Fill &amp; Score</button>
+    <button class="tab-btn active" data-tab="resume">Resume</button>
+    <button class="tab-btn" data-tab="qa">Q&amp;A</button>
+    <button class="tab-btn" data-tab="fill">Fill</button>
+    <button class="tab-btn" data-tab="jobs">Jobs</button>
   </nav>
 
   <section id="tab-resume" class="tab-panel active">
@@ -138,6 +139,27 @@
   </section>
 
   <section id="tab-qa" class="tab-panel">
+    <p class="hint"><strong>Standard self-ID answers.</strong> These get filled automatically on EEO questions so you don't have to. Edit or clear any you'd rather answer yourself.</p>
+    <div class="field-group">
+      <label for="defVeteran">Veteran status</label>
+      <input type="text" id="defVeteran" placeholder="I am not a protected veteran" />
+    </div>
+    <div class="field-group">
+      <label for="defDisability">Disability status</label>
+      <input type="text" id="defDisability" placeholder="No, I do not have a disability" />
+    </div>
+    <div class="field-row">
+      <div class="field-group">
+        <label for="defGender">Gender (optional)</label>
+        <input type="text" id="defGender" placeholder="leave blank to answer yourself" />
+      </div>
+      <div class="field-group">
+        <label for="defRace">Race / ethnicity (optional)</label>
+        <input type="text" id="defRace" placeholder="leave blank to answer yourself" />
+      </div>
+    </div>
+    <p id="defStatus" class="status"></p>
+    <hr />
     <p class="hint">Tell us your own answers to questions that come up often. We'll reuse your exact wording whenever a matching question appears on a page — never guessed, never invented.</p>
 
     <div id="qaList"></div>
@@ -167,6 +189,21 @@
       </label>
       <p class="hint">A small draggable "RF" button in the corner of every page with quick actions (fill name/email/phone, full autofill). Reload open tabs after changing this.</p>
     </div>
+  </section>
+
+  <section id="tab-jobs" class="tab-panel">
+    <p class="hint">Fresh, real openings pulled from public job APIs and ranked against your resume. A new batch is prepared automatically a couple of times a day (whenever Chrome is open), biased to your area plus remote roles. Click one to open it, then fill it in seconds with the AI assistant.</p>
+    <div class="field-row">
+      <div class="field-group" style="flex:2;">
+        <label for="jobZip">Your ZIP code</label>
+        <input type="text" id="jobZip" inputmode="numeric" maxlength="10" placeholder="e.g. 75007" />
+      </div>
+      <div class="field-group" style="flex:1; display:flex; align-items:flex-end;">
+        <button id="refreshJobsBtn" class="btn primary" style="margin:0;">Refresh</button>
+      </div>
+    </div>
+    <p id="jobsStatus" class="status"></p>
+    <div id="jobsList" class="jobs-list"></div>
   </section>
 
   <script src="lib/resumeParser.js"></script>

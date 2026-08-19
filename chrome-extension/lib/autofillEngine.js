@@ -62,7 +62,59 @@
     /relocat/,
   ];
 
-  const NARRATIVE_HINTS = [/cover\s*letter/, /why\s+(do\s+you|are\s+you)/, /tell\s+us\s+about\s+yourself/, /additional\s+information/];
+  // Legally sensitive self-identification questions the user can pre-answer once
+  // (in the popup's Settings) so they're filled automatically instead of flagged.
+  // Only ever filled from the user's own chosen default — never guessed.
+  const EEO_RULES = [
+    { key: "veteran", tests: [/veteran|protected\s*veteran|military\s*status/] },
+    { key: "disability", tests: [/disab/] },
+    { key: "gender", tests: [/\bgender\b|\bsex\b(?!ual\s*orientation)/] },
+    { key: "race", tests: [/race|ethnic|hispanic|latino/] },
+  ];
+
+  // Built-in defaults for the two the user asked to standardize. The popup lets
+  // the user review/change/disable these; callers pass whatever is stored.
+  const DEFAULT_EEO = {
+    veteran: "I am not a protected veteran",
+    disability: "No, I do not have a disability",
+    gender: "",
+    race: "",
+  };
+
+  const NARRATIVE_HINTS = [
+    /cover\s*letter/,
+    /why\s+(do|are|should)\s+you/,
+    /why\s+(this|our|the)\s+(company|role|team|position|job)/,
+    /tell\s+us\s+about\s+yourself/,
+    /about\s*you(?!.*(email|address))/,
+    /additional\s+(information|comments|details)/,
+    /greatest\s+(strength|weakness|accomplishment|achievement)/,
+    /(describe|tell\s+me\s+about)\s+a\s+time/,
+    /what\s+(makes|motivates|drives|excites)\s+you/,
+    /career\s+(goal|aspiration|objective)/,
+    /interest(ed)?\s+in\s+(this|the|our)\s+(role|position|company|team)/,
+    /why\s+should\s+we\s+hire/,
+    /biggest\s+challenge/,
+    /proud(est)?\s+of/,
+    /describe\s+yourself/,
+    /anything\s+else|note\s+to\s+the\s+hiring|message\s+to\s+the\s+hiring/,
+    /qualif(ies|y|ied)\s+you|good\s+fit/,
+  ];
+
+  // Technical / experience prompts: drafted from the candidate's real skills and
+  // resume bullets, with a generic professional fallback the user personalizes.
+  const TECHNICAL_HINTS = [
+    /experience\s+(with|in|using)/,
+    /describe\s+your\s+(experience|background)/,
+    /what\s+(technolog|tools|languages|frameworks|stack|skills)/,
+    /proficien(t|cy)\s+(in|with)/,
+    /familiar(ity)?\s+with/,
+    /technical\s+(skills|background|experience|expertise)/,
+    /relevant\s+(experience|skills|projects)/,
+    /how\s+(have|do)\s+you\s+use/,
+    /walk\s+us\s+through\s+a\s+project/,
+    /projects?\s+(you'?ve|have\s+you)\s+(worked|built)/,
+  ];
 
   function normalizeText(text) {
     return (text || "").toLowerCase().trim();
@@ -95,21 +147,106 @@
     return bestScore >= 0.6 ? best : null;
   }
 
+  function joinList(items) {
+    const a = items.filter(Boolean);
+    if (a.length === 0) return "";
+    if (a.length === 1) return a[0];
+    if (a.length === 2) return `${a[0]} and ${a[1]}`;
+    return `${a.slice(0, -1).join(", ")}, and ${a[a.length - 1]}`;
+  }
+
+  function firstResumeLine(profile) {
+    const bullet = (profile.bullets || []).find((b) => b && b.trim().length > 0);
+    if (bullet) return bullet.trim().replace(/^[-•*\u2022\u25cf]+\s*/, "");
+    if (profile.experience) {
+      const line = profile.experience.split("\n").find((l) => l.trim().length > 0);
+      if (line) return line.trim().replace(/^[-•*\u2022\u25cf]+\s*/, "");
+    }
+    return "";
+  }
+
+  // Behavioral / "filler" prompts (why this role, tell us about yourself, greatest
+  // strength, etc.). Built from the user's real resume; falls back to generic
+  // professional phrasing the user then personalizes. Always returned as a DRAFT.
   function draftNarrativeAnswer(profile) {
     const parts = [];
-    const topSkills = (profile.skills || []).slice(0, 4).join(", ");
+    const topSkills = (profile.skills || []).slice(0, 5);
+    const role = profile.currentTitle || "professional";
+
     if (profile.summary) {
       parts.push(profile.summary);
-    } else if (topSkills) {
-      parts.push(`I'm a professional with hands-on experience in ${topSkills}.`);
+    } else if (topSkills.length) {
+      parts.push(`I'm a ${role} with hands-on experience in ${joinList(topSkills.slice(0, 4))}.`);
+    } else {
+      parts.push(`I'm a motivated ${role} who takes ownership, communicates clearly, and learns quickly.`);
     }
-    if (profile.experience) {
-      const firstLine = profile.experience.split("\n").find((l) => l.trim().length > 0);
-      if (firstLine) parts.push(`Most recently: ${firstLine.trim()}.`);
+
+    const recent = firstResumeLine(profile);
+    if (recent) {
+      const lead = recent.charAt(0).toLowerCase() + recent.slice(1);
+      parts.push(`For example, I ${lead}`.replace(/\.?$/, "."));
     }
-    if (parts.length === 0) return "";
-    parts.push("I'd welcome the opportunity to bring this experience to your team.");
+
+    if (profile.school || profile.degree) {
+      parts.push(`My background${profile.degree ? ` in ${profile.degree}` : ""}${profile.school ? ` at ${profile.school}` : ""} gives me a solid foundation for this role.`);
+    }
+
+    parts.push("I'm excited about this opportunity and would bring strong work ethic, reliability, and a collaborative attitude to your team.");
     return parts.join(" ");
+  }
+
+  // Technical / experience prompts. Highlights the candidate's real skills that
+  // appear in the page's job description, with a generic fallback.
+  function draftTechnicalAnswer(profile, jobText) {
+    const skills = profile.skills || [];
+    const jt = (jobText || "").toLowerCase();
+    const relevant = skills.filter((s) => s && jt.includes(s.toLowerCase())).slice(0, 6);
+    const parts = [];
+
+    if (relevant.length) {
+      parts.push(`I have hands-on experience with ${joinList(relevant)}.`);
+    } else if (skills.length) {
+      parts.push(`I have hands-on experience with ${joinList(skills.slice(0, 5))}.`);
+    } else {
+      parts.push("I have practical, hands-on experience with the core tools and technologies this role uses.");
+    }
+
+    const recent = firstResumeLine(profile);
+    if (recent) {
+      const lead = recent.charAt(0).toLowerCase() + recent.slice(1);
+      parts.push(`Most recently, I ${lead}`.replace(/\.?$/, "."));
+    }
+
+    parts.push("I'm comfortable picking up new technologies quickly and applying them to real problems.");
+    return parts.join(" ");
+  }
+
+  function isNegativeAnswer(answer) {
+    return /^\s*(no\b|not\b|none\b|n\/a\b)/i.test(answer) || /\bdo(n'?t| not)\b|not a\b|no,\s/i.test(answer);
+  }
+
+  function isAffirmativeAnswer(answer) {
+    return /^\s*(yes\b|i (am|do|identify)|agree)/i.test(answer);
+  }
+
+  // Chooses the option (radio label or <option>) that best represents `answer`,
+  // with sensible yes/no fallbacks for self-identification questions.
+  function pickOptionForAnswer(options, answer) {
+    const lower = (answer || "").toLowerCase().trim();
+    if (!lower) return null;
+    let best = options.find((o) => o.text === lower);
+    if (best) return best;
+    best = options.find((o) => o.text && (o.text.includes(lower) || lower.includes(o.text)));
+    if (best) return best;
+    if (isNegativeAnswer(answer)) {
+      best = options.find((o) => /^no\b|^no,|\bnot\b|do\s*n'?t|decline\s+to/.test(o.text));
+      if (best) return best;
+    }
+    if (isAffirmativeAnswer(answer)) {
+      best = options.find((o) => /^yes\b|\bi\s+(am|do|identify)\b/.test(o.text));
+      if (best) return best;
+    }
+    return null;
   }
 
   function labelForElement(el) {
@@ -210,13 +347,49 @@
     });
   }
 
+  function extractJobText() {
+    const candidates = [
+      document.querySelector('[class*="job-description" i]'),
+      document.querySelector('[class*="jobdescription" i]'),
+      document.querySelector('[id*="job-description" i]'),
+      document.querySelector("article"),
+      document.querySelector("main"),
+    ].filter(Boolean);
+    return candidates.length > 0 ? candidates[0].innerText : document.body.innerText.slice(0, 8000);
+  }
+
+  // Fills a single sensitive/EEO field (text, select, or checkbox) from a saved
+  // default answer. Returns true if it filled the field.
+  function fillFromDefault(el, answer) {
+    if (!answer) return false;
+    if (el.type === "checkbox") {
+      el.checked = isAffirmativeAnswer(answer);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+    if (el.tagName === "SELECT") {
+      const options = Array.from(el.options).map((o) => ({ el: o, text: o.textContent.trim().toLowerCase() }));
+      const picked = pickOptionForAnswer(options, answer);
+      if (!picked) return false;
+      el.value = picked.el.value;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+    setNativeValue(el, answer);
+    return true;
+  }
+
   /**
-   * Runs the full page autofill pass. Returns { filledCount, draftedCount, flaggedCount, match }.
+   * Runs the full page autofill pass. Returns { filledCount, draftedCount, flaggedCount, match, tailor }.
+   * `defaults` holds the user's pre-answered self-identification answers
+   * (veteran/disability/etc.); pass DEFAULT_EEO to use the built-ins.
    */
-  function runFullAutofill(profile, qaItems) {
+  function runFullAutofill(profile, qaItems, defaults) {
     let filledCount = 0;
     let draftedCount = 0;
     let flaggedCount = 0;
+    const eeoDefaults = defaults || DEFAULT_EEO;
+    const jobText = extractJobText();
 
     const allFields = getVisibleFields();
 
@@ -244,6 +417,20 @@
           continue;
         }
       }
+      // Pre-answered self-identification (veteran/disability/etc.) from settings.
+      const eeoRule = EEO_RULES.find((r) => r.tests.some((re) => re.test(groupDescriptor)));
+      if (eeoRule && eeoDefaults[eeoRule.key]) {
+        const options = group.map((el) => ({ el, text: labelForElement(el) }));
+        const picked = pickOptionForAnswer(options, eeoDefaults[eeoRule.key]);
+        if (picked) {
+          picked.el.checked = true;
+          picked.el.dispatchEvent(new Event("change", { bubbles: true }));
+          group.forEach((r) => markFilled(r, `Set from your saved default: ${eeoDefaults[eeoRule.key]}`));
+          filledCount++;
+          continue;
+        }
+      }
+
       group.forEach((r) => markFlagged(r, "Please answer this yourself, or save an answer for it in the Q&A tab"));
       flaggedCount++;
     }
@@ -253,6 +440,7 @@
     for (const el of fields) {
       const descriptor = labelForElement(el);
       const isCheckbox = el.type === "checkbox";
+      const isTextArea = el.tagName === "TEXTAREA";
 
       const customAnswer = findCustomAnswer(descriptor, qaItems);
       if (customAnswer) {
@@ -281,27 +469,41 @@
         }
       }
 
+      // Pre-answered self-identification defaults (veteran / disability / etc.).
+      const eeoRule = EEO_RULES.find((r) => r.tests.some((re) => re.test(descriptor)));
+      if (eeoRule && eeoDefaults[eeoRule.key]) {
+        if (fillFromDefault(el, eeoDefaults[eeoRule.key])) {
+          markFilled(el, `Set from your saved default: ${eeoDefaults[eeoRule.key]}`);
+          filledCount++;
+          continue;
+        }
+      }
+
       if (isCheckbox) {
         markFlagged(el, "Please answer this yourself, or save an answer for it in the Q&A tab");
         flaggedCount++;
         continue;
       }
 
-      if (NARRATIVE_HINTS.some((re) => re.test(descriptor))) {
-        const draft = draftNarrativeAnswer(profile);
-        if (draft && (!el.value || !el.value.trim())) {
-          setNativeValue(el, draft);
+      // Long-form drafting (behavioral + technical) — only for textareas so we
+      // never dump a paragraph into a short single-line input.
+      if (isTextArea && (!el.value || !el.value.trim())) {
+        if (NARRATIVE_HINTS.some((re) => re.test(descriptor))) {
+          setNativeValue(el, draftNarrativeAnswer(profile));
           markDraft(el);
           draftedCount++;
-        } else if (!el.value || !el.value.trim()) {
-          markFlagged(el, "Add a summary/skills in the Resume tab so we can draft this, or write your own");
-          flaggedCount++;
+          continue;
         }
-        continue;
+        if (TECHNICAL_HINTS.some((re) => re.test(descriptor))) {
+          setNativeValue(el, draftTechnicalAnswer(profile, jobText));
+          markDraft(el);
+          draftedCount++;
+          continue;
+        }
       }
 
       if (SENSITIVE_HINTS.some((re) => re.test(descriptor))) {
-        markFlagged(el, "Save an answer for this in the Q&A tab, or fill it in yourself");
+        markFlagged(el, "Set a default in Settings, save a Q&A answer, or fill it in yourself");
         flaggedCount++;
         continue;
       }
@@ -345,16 +547,6 @@
       markFilled(el);
       filledCount++;
     }
-
-    const jobTextCandidates = [
-      document.querySelector('[class*="job-description" i]'),
-      document.querySelector('[class*="jobdescription" i]'),
-      document.querySelector('[id*="job-description" i]'),
-      document.querySelector("article"),
-      document.querySelector("main"),
-    ].filter(Boolean);
-
-    const jobText = jobTextCandidates.length > 0 ? jobTextCandidates[0].innerText : document.body.innerText.slice(0, 8000);
 
     let match = null;
     if (typeof global.JobMatcher !== "undefined") {
@@ -425,5 +617,6 @@
     runFullAutofill,
     fillFieldType,
     fillContact,
+    DEFAULT_EEO,
   };
 })(typeof window !== "undefined" ? window : globalThis);

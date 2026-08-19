@@ -50,6 +50,15 @@ const els = {
   qaQuickAdd: document.getElementById("qaQuickAdd"),
   saveQaBtn: document.getElementById("saveQaBtn"),
   qaSaveStatus: document.getElementById("qaSaveStatus"),
+  defVeteran: document.getElementById("defVeteran"),
+  defDisability: document.getElementById("defDisability"),
+  defGender: document.getElementById("defGender"),
+  defRace: document.getElementById("defRace"),
+  defStatus: document.getElementById("defStatus"),
+  jobZip: document.getElementById("jobZip"),
+  refreshJobsBtn: document.getElementById("refreshJobsBtn"),
+  jobsStatus: document.getElementById("jobsStatus"),
+  jobsList: document.getElementById("jobsList"),
   name: document.getElementById("fName"),
   firstName: document.getElementById("fFirstName"),
   lastName: document.getElementById("fLastName"),
@@ -385,6 +394,130 @@ els.widgetToggle.addEventListener("change", () => {
   chrome.storage.local.set({ widgetEnabled: els.widgetToggle.checked });
 });
 
+// --- Standard self-ID (EEO) default answers --------------------------------
+
+const DEFAULT_EEO = {
+  veteran: "I am not a protected veteran",
+  disability: "No, I do not have a disability",
+  gender: "",
+  race: "",
+};
+
+function loadDefaults() {
+  chrome.storage.local.get(["sensitiveDefaults"], (res) => {
+    const d = res.sensitiveDefaults || DEFAULT_EEO;
+    els.defVeteran.value = d.veteran || "";
+    els.defDisability.value = d.disability || "";
+    els.defGender.value = d.gender || "";
+    els.defRace.value = d.race || "";
+    if (!res.sensitiveDefaults) chrome.storage.local.set({ sensitiveDefaults: DEFAULT_EEO });
+  });
+}
+
+const autoSaveDefaults = debounce(() => {
+  chrome.storage.local.set(
+    {
+      sensitiveDefaults: {
+        veteran: els.defVeteran.value.trim(),
+        disability: els.defDisability.value.trim(),
+        gender: els.defGender.value.trim(),
+        race: els.defRace.value.trim(),
+      },
+    },
+    () => {
+      els.defStatus.textContent = "Saved automatically ✓";
+      setTimeout(() => (els.defStatus.textContent = ""), 2000);
+    }
+  );
+}, 500);
+
+[els.defVeteran, els.defDisability, els.defGender, els.defRace].forEach((el) =>
+  el.addEventListener("input", autoSaveDefaults)
+);
+
+// --- Jobs tab: fresh listings ranked against your resume -------------------
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const days = Math.floor((Date.now() - t) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
+}
+
+function renderJobs(listings) {
+  els.jobsList.innerHTML = "";
+  if (!listings || !listings.jobs || listings.jobs.length === 0) {
+    els.jobsList.innerHTML = `<p class="hint">No listings yet. Enter your ZIP and click Refresh to pull a fresh batch.</p>`;
+    return;
+  }
+  const when = new Date(listings.generatedAt);
+  const areaLabel = listings.state ? ` · near ${listings.state}` : "";
+  els.jobsStatus.textContent = `${listings.jobs.length} openings${areaLabel} · updated ${when.toLocaleString()}`;
+
+  listings.jobs.forEach((job) => {
+    const card = document.createElement("div");
+    card.className = "job-card";
+    const scoreClass = job.score >= 30 ? "good" : job.score >= 18 ? "ok" : "low";
+    card.innerHTML = `
+      <div class="job-top">
+        <span class="job-score ${scoreClass}">${job.score || 0}%</span>
+        <a class="job-title" href="${escapeHtml(job.url)}" data-url="${escapeHtml(job.url)}">${escapeHtml(job.title)}</a>
+      </div>
+      <div class="job-meta">${escapeHtml(job.company)} · ${escapeHtml(job.location || "—")} · ${escapeHtml(job.source)}${
+      job.area === "in-area" ? ' · <span class="job-area">in your area / remote</span>' : ""
+    } · ${timeAgo(job.postedAt)}</div>
+    `;
+    els.jobsList.appendChild(card);
+  });
+
+  els.jobsList.querySelectorAll(".job-title").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: a.dataset.url });
+    });
+  });
+}
+
+function loadJobs() {
+  chrome.runtime.sendMessage({ type: "GET_JOBS" }, (listings) => {
+    renderJobs(listings);
+  });
+}
+
+els.refreshJobsBtn.addEventListener("click", () => {
+  const zip = els.jobZip.value.trim();
+  els.jobsStatus.textContent = "Fetching fresh listings…";
+  els.refreshJobsBtn.disabled = true;
+  chrome.storage.local.set({ jobZip: zip }, () => {
+    chrome.runtime.sendMessage({ type: "REFRESH_JOBS" }, (r) => {
+      els.refreshJobsBtn.disabled = false;
+      if (!r || r.error) {
+        els.jobsStatus.textContent = `Couldn't refresh (${(r && r.error) || "unknown error"}). Try again.`;
+        return;
+      }
+      renderJobs(r.result);
+    });
+  });
+});
+
+const autoSaveZip = debounce(() => {
+  chrome.storage.local.set({ jobZip: els.jobZip.value.trim() });
+}, 500);
+
+function loadJobZip() {
+  chrome.storage.local.get(["jobZip"], (res) => {
+    els.jobZip.value = res.jobZip || "";
+  });
+}
+
+els.jobZip.addEventListener("input", autoSaveZip);
+
 renderQuickAddChips();
 loadQaItems();
 loadSavedProfile();
+loadDefaults();
+loadJobZip();
+loadJobs();

@@ -15,16 +15,16 @@
   // Don't bother rendering inside iframes, on non-html documents, etc.
   if (window.top !== window.self) return;
 
-  chrome.storage.local.get(["widgetEnabled", "widgetPos", "widgetPanelOpen"], (res) => {
+  chrome.storage.local.get(["widgetEnabled", "widgetPos", "widgetPanelOpen", "widgetLastStatus"], (res) => {
     if (res.widgetEnabled === false) return;
-    initWidget(res.widgetPos, res.widgetPanelOpen === true);
+    initWidget(res.widgetPos, res.widgetPanelOpen === true, res.widgetLastStatus || "");
   });
 
   function saveWidgetState(patch) {
     chrome.storage.local.set(patch);
   }
 
-  function initWidget(savedPos, startOpen) {
+  function initWidget(savedPos, startOpen, lastStatus) {
     const root = document.createElement("div");
     root.id = "resume-fit-widget-root";
     root.style.cssText = "all:initial;";
@@ -126,16 +126,23 @@
     });
 
     async function getProfileAndQa() {
-      const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers"]);
+      const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers", "sensitiveDefaults"]);
       return {
         profile: stored.resumeProfile,
         qaItems: (stored.customAnswers || []).filter((qa) => qa && qa.question && qa.answer),
+        defaults: stored.sensitiveDefaults || window.ResumeFitEngine.DEFAULT_EEO,
       };
     }
 
-    function setStatus(text) {
+    function setStatus(text, persist) {
       panel.querySelector("#widgetStatus").innerHTML = text;
+      // Keep the last result on screen across page/tab changes.
+      if (persist !== false) saveWidgetState({ widgetLastStatus: text });
     }
+
+    // Restore the last fill summary so the info stays visible when you come back
+    // to a page or switch tabs.
+    if (lastStatus) panel.querySelector("#widgetStatus").innerHTML = lastStatus;
 
     panel.querySelector("#fillNameBtn").addEventListener("click", async () => {
       const { profile } = await getProfileAndQa();

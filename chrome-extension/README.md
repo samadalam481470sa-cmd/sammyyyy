@@ -21,12 +21,23 @@ fraud or platform-abuse territory. It:
 - On any job page, autofills form fields it can confidently match (name, email,
   phone, links, skills, your saved Q&A answers, etc.) using **only** your real
   data — never invented facts.
-- For open-ended prompts with no saved Q&A answer (like "Why do you want to
-  work here?" or a cover-letter box), **drafts a short suggestion** built only
-  from your real resume content (summary/skills/experience). Drafts are
-  highlighted in blue and clearly marked "review & personalize before
-  submitting" — they're a starting point, not a final answer, and nothing is
-  ever submitted automatically.
+- For open-ended prompts with no saved Q&A answer, **drafts a suggestion** built
+  from your real resume content. This now covers both **behavioral / "filler"
+  questions** (why this role, tell us about yourself, greatest strength, why
+  should we hire you, etc.) and **technical questions** (experience with X,
+  describe your background, what technologies you use), highlighting the skills
+  from your resume that match the posting. Drafts are highlighted in blue and
+  clearly marked "review & personalize before submitting" — a starting point,
+  not a final answer, and nothing is ever submitted automatically.
+- **Standard self-ID (EEO) answers**: set once in the Q&A tab and they fill
+  automatically — pre-seeded with **"I am not a protected veteran"** and **"No,
+  I do not have a disability."** Edit or clear any of them (including gender /
+  race, left blank by default) to answer yourself instead.
+- **Jobs tab**: pulls **real, currently-open** listings from public job APIs,
+  ranks them against your resume, and biases toward your **ZIP code area** plus
+  US-remote roles. A fresh batch (up to 40) is prepared automatically a couple
+  of times a day whenever Chrome is open, so there are openings waiting each
+  morning. Click one to open it, then fill it in seconds with the assistant.
 - Highlights anything it still can't confidently handle — like legally
   sensitive checkboxes/radios you haven't pre-answered — in yellow, so **you**
   answer them yourself.
@@ -102,13 +113,32 @@ chrome-extension/
 ├── popup.html/.css/.js    # Resume + Q&A input UI, "Analyze & Fill This Page" trigger
 ├── content.js             # Injected on demand (popup button / shortcut / context menu)
 ├── widget.js              # Always-on floating "RF" bubble injected on every page
-├── background.js          # Service worker; right-click menu + Alt+Shift+F shortcut
+├── background.js          # Service worker; menu + shortcut + scheduled job refresh
 └── lib/
     ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
     ├── matcher.js         # Resume vs. job-description keyword overlap scoring
     ├── tailor.js          # Per-role resume-tailoring suggestions (real content only)
+    ├── jobFetcher.js      # Public job-API fetch + ZIP-aware ranking (Jobs tab)
     └── autofillEngine.js  # Shared field-matching/autofill logic
 ```
+
+## The Jobs tab (fresh listings near you)
+
+Enter your ZIP code and the extension pulls **real, open** postings from public
+job APIs (Remote OK, plus Greenhouse / Lever / Ashby company boards — the same
+public endpoints those companies link from their own careers pages), scores each
+against your saved resume with the same matcher used on-page, and ranks them —
+your state and US-remote roles first. Up to 40 are shown.
+
+A background schedule (via `chrome.alarms`) refreshes the batch about twice a day
+and again when you start Chrome, so there are fresh listings each morning
+**while Chrome is running**. A browser extension can't run with the browser fully
+closed — for true laptop-closed 24/7 discovery, the repo's `job-finder/` GitLab
+CI pipeline runs on a server schedule and emails/publishes the same kind of
+shortlist.
+
+Nothing here submits anything or logs into any site; it only reads public
+listing APIs and opens the links you click.
 
 ## The floating widget
 
