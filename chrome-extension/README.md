@@ -127,8 +127,13 @@ chrome-extension/
 Enter your ZIP code and the extension pulls **real, open** postings from public
 job APIs (Remote OK, plus Greenhouse / Lever / Ashby company boards — the same
 public endpoints those companies link from their own careers pages), scores each
-against your saved resume with the same matcher used on-page, and ranks them —
-your state and US-remote roles first. Up to 40 are shown.
+against your saved resume with the same matcher used on-page, and ranks them.
+
+Set **Target areas** (comma-separated states or cities) to focus the search;
+the default is `FL, CA, DC, Chicago, IL, CO, Phoenix, AZ` plus your ZIP's state.
+Listings are balanced across those areas (round-robin, best-scored first) and
+combined with US-remote roles, so every area you list is represented rather than
+one metro filling the whole list. Up to 40 are shown.
 
 A background schedule (via `chrome.alarms`) refreshes the batch about twice a day
 and again when you start Chrome, so there are fresh listings each morning

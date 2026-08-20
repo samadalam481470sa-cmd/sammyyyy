@@ -15,8 +15,16 @@ function runAutofillOnTab(tabId) {
 
 // --- Scheduled job discovery -------------------------------------------------
 
+function parseAreas(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) {
+    return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return self.JobFetcher.DEFAULT_AREAS;
+}
+
 async function refreshJobs(force) {
-  const stored = await chrome.storage.local.get(["resumeProfile", "jobZip", "lastJobRefresh"]);
+  const stored = await chrome.storage.local.get(["resumeProfile", "jobZip", "jobAreas", "lastJobRefresh"]);
   const last = stored.lastJobRefresh || 0;
   if (!force && Date.now() - last < REFRESH_MIN_INTERVAL_MS) {
     return { skipped: true };
@@ -24,6 +32,7 @@ async function refreshJobs(force) {
   const profile = stored.resumeProfile || {};
   const result = await self.JobFetcher.fetchAndRankJobs({
     zip: stored.jobZip || "",
+    areas: parseAreas(stored.jobAreas),
     resumeText: profile.rawText || "",
     resumeSkills: profile.skills || [],
     max: 40,
@@ -42,17 +51,18 @@ function ensureJobsAlarm() {
 }
 
 function seedDefaults() {
-  chrome.storage.local.get(["sensitiveDefaults"], (res) => {
+  chrome.storage.local.get(["sensitiveDefaults", "jobAreas"], (res) => {
+    const patch = {};
     if (!res.sensitiveDefaults) {
-      chrome.storage.local.set({
-        sensitiveDefaults: {
-          veteran: "I am not a protected veteran",
-          disability: "No, I do not have a disability",
-          gender: "",
-          race: "",
-        },
-      });
+      patch.sensitiveDefaults = {
+        veteran: "I am not a protected veteran",
+        disability: "No, I do not have a disability",
+        gender: "",
+        race: "",
+      };
     }
+    if (!res.jobAreas) patch.jobAreas = self.JobFetcher.DEFAULT_AREAS.join(", ");
+    if (Object.keys(patch).length) chrome.storage.local.set(patch);
   });
 }
 

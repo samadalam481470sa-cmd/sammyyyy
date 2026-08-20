@@ -56,6 +56,7 @@ const els = {
   defRace: document.getElementById("defRace"),
   defStatus: document.getElementById("defStatus"),
   jobZip: document.getElementById("jobZip"),
+  jobAreas: document.getElementById("jobAreas"),
   refreshJobsBtn: document.getElementById("refreshJobsBtn"),
   jobsStatus: document.getElementById("jobsStatus"),
   jobsList: document.getElementById("jobsList"),
@@ -454,7 +455,7 @@ function renderJobs(listings) {
     return;
   }
   const when = new Date(listings.generatedAt);
-  const areaLabel = listings.state ? ` · near ${listings.state}` : "";
+  const areaLabel = listings.areas && listings.areas.length ? ` · ${listings.areas.join(", ")}` : "";
   els.jobsStatus.textContent = `${listings.jobs.length} openings${areaLabel} · updated ${when.toLocaleString()}`;
 
   listings.jobs.forEach((job) => {
@@ -487,11 +488,14 @@ function loadJobs() {
   });
 }
 
+const DEFAULT_AREAS = "FL, CA, DC, Chicago, IL, CO, Phoenix, AZ";
+
 els.refreshJobsBtn.addEventListener("click", () => {
   const zip = els.jobZip.value.trim();
+  const areas = els.jobAreas.value.trim() || DEFAULT_AREAS;
   els.jobsStatus.textContent = "Fetching fresh listings…";
   els.refreshJobsBtn.disabled = true;
-  chrome.storage.local.set({ jobZip: zip }, () => {
+  chrome.storage.local.set({ jobZip: zip, jobAreas: areas }, () => {
     chrome.runtime.sendMessage({ type: "REFRESH_JOBS" }, (r) => {
       els.refreshJobsBtn.disabled = false;
       if (!r || r.error) {
@@ -503,21 +507,23 @@ els.refreshJobsBtn.addEventListener("click", () => {
   });
 });
 
-const autoSaveZip = debounce(() => {
-  chrome.storage.local.set({ jobZip: els.jobZip.value.trim() });
+const autoSaveJobPrefs = debounce(() => {
+  chrome.storage.local.set({ jobZip: els.jobZip.value.trim(), jobAreas: els.jobAreas.value.trim() });
 }, 500);
 
-function loadJobZip() {
-  chrome.storage.local.get(["jobZip"], (res) => {
+function loadJobPrefs() {
+  chrome.storage.local.get(["jobZip", "jobAreas"], (res) => {
     els.jobZip.value = res.jobZip || "";
+    els.jobAreas.value = res.jobAreas || DEFAULT_AREAS;
   });
 }
 
-els.jobZip.addEventListener("input", autoSaveZip);
+els.jobZip.addEventListener("input", autoSaveJobPrefs);
+els.jobAreas.addEventListener("input", autoSaveJobPrefs);
 
 renderQuickAddChips();
 loadQaItems();
 loadSavedProfile();
 loadDefaults();
-loadJobZip();
+loadJobPrefs();
 loadJobs();

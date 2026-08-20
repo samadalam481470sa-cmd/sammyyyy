@@ -15,7 +15,10 @@
   // of these are the same public endpoints each company links from its careers
   // page. Invalid/expired slugs are skipped gracefully.
   const DEFAULT_SOURCES = {
-    greenhouse: ["stripe", "figma", "databricks", "cloudflare", "samsara", "gitlab", "duolingo", "robinhood"],
+    greenhouse: [
+      "stripe", "figma", "databricks", "cloudflare", "samsara", "gitlab", "duolingo", "robinhood",
+      "doordash", "opendoor", "gusto", "affirm", "instacart", "coinbase", "dropbox", "twilio",
+    ],
     lever: ["plaid", "voleon", "matchgroup"],
     ashby: ["linear", "vanta", "ramp"],
     remoteok: true,
@@ -56,6 +59,35 @@
       if (prefix >= lo && prefix <= hi) return st;
     }
     return "";
+  }
+
+  // Default target areas to surface listings from (states, metros, or DC).
+  const DEFAULT_AREAS = ["FL", "CA", "DC", "Chicago", "IL", "CO", "Phoenix", "AZ"];
+
+  // True if a location string matches any of the given area tokens. Two-letter
+  // tokens are treated as state abbreviations (word-boundary) and also match the
+  // full state name; longer tokens (cities) are matched as substrings.
+  function matchesArea(location, tokens) {
+    return areaOf(location, tokens) !== null;
+  }
+
+  // Returns the first target token a location matches (canonical: 2-letter tokens
+  // upper-cased, city tokens lower-cased), or null.
+  function areaOf(location, tokens) {
+    if (!tokens || !tokens.length) return null;
+    const loc = (location || "").toLowerCase();
+    if (!loc) return null;
+    for (const raw of tokens) {
+      const t = String(raw || "").trim().toLowerCase();
+      if (!t) continue;
+      const abbr = t.toUpperCase();
+      if (t.length === 2 && STATE_NAMES[abbr]) {
+        if (new RegExp(`\\b${t}\\b`).test(loc) || loc.includes(STATE_NAMES[abbr].toLowerCase())) return abbr;
+      } else if (loc.includes(t)) {
+        return t;
+      }
+    }
+    return null;
   }
 
   function decodeEntities(s) {
@@ -207,6 +239,9 @@
     const postedWithinDays = opts.postedWithinDays || 45;
     const state = zipToState(opts.zip);
     const stateName = state ? (STATE_NAMES[state] || "") : "";
+    // Target areas: user-provided list, plus the ZIP's own state.
+    const areaTokens = (opts.areas && opts.areas.length ? opts.areas.slice() : DEFAULT_AREAS.slice());
+    if (state && !areaTokens.map((t) => String(t).toUpperCase()).includes(state)) areaTokens.push(state);
 
     const tasks = [];
     if (sources.remoteok) tasks.push(fetchRemoteOk());
@@ -235,12 +270,10 @@
       const foreign = looksForeign(loc);
       const isRemote = (j.isRemote === true || looksRemote(`${loc} ${j.title}`)) && !foreign;
       j.isRemote = isRemote;
-      // Area: 0 = in your state or US-remote (best), 1 = elsewhere/international.
-      const inState =
-        !!state &&
-        (new RegExp(`\\b${state}\\b`).test(loc) || (stateName && loc.toLowerCase().includes(stateName.toLowerCase())));
-      j.area = !foreign && (isRemote || inState) ? "in-area" : "elsewhere";
-      const areaRank = j.area === "in-area" ? 0 : 1;
+      // In-area = a target area (FL/CA/DC/Chicago/CO/Phoenix/AZ/your ZIP state) or US-remote.
+      const matchedArea = foreign ? null : areaOf(loc, areaTokens);
+      j.matchedArea = matchedArea || (isRemote ? "Remote" : null);
+      j.area = !foreign && (isRemote || matchedArea) ? "in-area" : "elsewhere";
 
       if (matcher && opts.resumeText) {
         const m = matcher.computeMatchScore(opts.resumeText, opts.resumeSkills || [], `${j.title} ${j.location} ${j.description}`);
@@ -250,17 +283,62 @@
         j.score = 0;
         j.matched = [];
       }
-      j._sortKey = [areaRank, -j.score, -(Date.parse(j.postedAt) || 0)];
+      j._sortKey = [-j.score, -(Date.parse(j.postedAt) || 0)];
     }
 
-    jobs.sort((a, b) => {
+    const byScore = (a, b) => {
       for (let i = 0; i < a._sortKey.length; i++) {
         if (a._sortKey[i] !== b._sortKey[i]) return a._sortKey[i] - b._sortKey[i];
       }
       return 0;
-    });
+    };
 
-    jobs = jobs.slice(0, max).map((j) => {
+    const inArea = jobs.filter((j) => j.area === "in-area");
+    const elsewhere = jobs.filter((j) => j.area !== "in-area").sort(byScore);
+
+    // Balance across the requested areas so each one is represented (round-robin
+    // by area, best-scored first), instead of a few metros filling every slot.
+    const groups = new Map();
+    for (const j of inArea) {
+      const key = j.matchedArea || "Remote";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(j);
+    }
+    for (const arr of groups.values()) arr.sort(byScore);
+
+    // Ordered keys: requested areas (in the user's order), then Remote, then any others.
+    const orderedKeys = [];
+    for (const raw of areaTokens) {
+      const t = String(raw || "").trim();
+      const key = t.length === 2 ? t.toUpperCase() : t.toLowerCase();
+      if (groups.has(key) && !orderedKeys.includes(key)) orderedKeys.push(key);
+    }
+    if (groups.has("Remote") && !orderedKeys.includes("Remote")) orderedKeys.push("Remote");
+    for (const key of groups.keys()) if (!orderedKeys.includes(key)) orderedKeys.push(key);
+
+    const selectedSet = new Set();
+    let selected = [];
+    let added = true;
+    while (selected.length < max && added) {
+      added = false;
+      for (const key of orderedKeys) {
+        const arr = groups.get(key) || [];
+        const next = arr.find((j) => !selectedSet.has(j));
+        if (next) {
+          selectedSet.add(next);
+          selected.push(next);
+          added = true;
+          if (selected.length >= max) break;
+        }
+      }
+    }
+
+    // Backfill with out-of-area postings only if we couldn't fill the list.
+    if (selected.length < Math.min(15, max)) {
+      selected = selected.concat(elsewhere.slice(0, max - selected.length));
+    }
+
+    selected = selected.map((j) => {
       const { _sortKey, description, ...rest } = j;
       return rest; // drop the heavy description before storing
     });
@@ -269,12 +347,13 @@
       generatedAt: new Date().toISOString(),
       zip: opts.zip || "",
       state,
-      stats: { sourcesOk, sourcesFailed, total: jobs.length },
-      jobs,
+      areas: areaTokens,
+      stats: { sourcesOk, sourcesFailed, total: selected.length, inArea: inArea.length },
+      jobs: selected,
     };
   }
 
-  global.JobFetcher = { fetchAndRankJobs, zipToState, DEFAULT_SOURCES };
+  global.JobFetcher = { fetchAndRankJobs, zipToState, matchesArea, DEFAULT_SOURCES, DEFAULT_AREAS };
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = global.JobFetcher;
