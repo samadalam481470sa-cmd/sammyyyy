@@ -13,16 +13,17 @@
     chrome.runtime.sendMessage({ type: "RESUME_FIT_RESULT", payload });
   }
 
-  const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers"]);
+  const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers", "sensitiveDefaults"]);
   const profile = stored.resumeProfile;
   const qaItems = (stored.customAnswers || []).filter((qa) => qa && qa.question && qa.answer);
+  const defaults = stored.sensitiveDefaults || window.ResumeFitEngine.DEFAULT_EEO;
 
   if (!profile || (!profile.email && !profile.name)) {
     sendResult({ error: "No resume profile saved yet. Go to the Resume tab in the extension popup first." });
     return;
   }
 
-  const outcome = window.ResumeFitEngine.runFullAutofill(profile, qaItems);
+  const outcome = window.ResumeFitEngine.runFullAutofill(profile, qaItems, defaults);
 
   const panel = document.createElement("div");
   panel.id = "resume-fit-panel";

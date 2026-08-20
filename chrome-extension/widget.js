@@ -15,12 +15,16 @@
   // Don't bother rendering inside iframes, on non-html documents, etc.
   if (window.top !== window.self) return;
 
-  chrome.storage.local.get(["widgetEnabled"], (res) => {
+  chrome.storage.local.get(["widgetEnabled", "widgetPos", "widgetPanelOpen", "widgetLastStatus"], (res) => {
     if (res.widgetEnabled === false) return;
-    initWidget();
+    initWidget(res.widgetPos, res.widgetPanelOpen === true, res.widgetLastStatus || "");
   });
 
-  function initWidget() {
+  function saveWidgetState(patch) {
+    chrome.storage.local.set(patch);
+  }
+
+  function initWidget(savedPos, startOpen, lastStatus) {
     const root = document.createElement("div");
     root.id = "resume-fit-widget-root";
     root.style.cssText = "all:initial;";
@@ -79,11 +83,27 @@
         <button class="action" id="fillPhoneBtn">Fill Phone</button>
       </div>
       <div class="row">
+        <button class="action" id="fillContactBtn" style="flex:2;">Fill Contact Info</button>
+      </div>
+      <div class="row">
         <button class="action primary" id="fullAutofillBtn" style="flex:2;">Full Autofill + Job Score</button>
       </div>
       <div class="status" id="widgetStatus"></div>
     `;
     shadow.appendChild(panel);
+
+    // Restore the position the user last dragged the bubble to, so it "stays
+    // put" as they move from page to page.
+    if (savedPos && typeof savedPos.right === "number" && typeof savedPos.bottom === "number") {
+      bubble.style.right = `${savedPos.right}px`;
+      bubble.style.bottom = `${savedPos.bottom}px`;
+      panel.style.right = `${savedPos.right}px`;
+      panel.style.bottom = `${savedPos.bottom + 58}px`;
+    }
+
+    // Restore whether the panel was open, so it reopens automatically on the
+    // next page instead of collapsing every navigation.
+    if (startOpen) panel.classList.add("open");
 
     let dragged = false;
 
@@ -93,25 +113,36 @@
         return;
       }
       panel.classList.toggle("open");
+      saveWidgetState({ widgetPanelOpen: panel.classList.contains("open") });
     });
 
-    panel.querySelector("#closeBtn").addEventListener("click", () => panel.classList.remove("open"));
+    panel.querySelector("#closeBtn").addEventListener("click", () => {
+      panel.classList.remove("open");
+      saveWidgetState({ widgetPanelOpen: false });
+    });
 
     makeDraggable(bubble, () => {
       dragged = true;
     });
 
     async function getProfileAndQa() {
-      const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers"]);
+      const stored = await chrome.storage.local.get(["resumeProfile", "customAnswers", "sensitiveDefaults"]);
       return {
         profile: stored.resumeProfile,
         qaItems: (stored.customAnswers || []).filter((qa) => qa && qa.question && qa.answer),
+        defaults: stored.sensitiveDefaults || window.ResumeFitEngine.DEFAULT_EEO,
       };
     }
 
-    function setStatus(text) {
+    function setStatus(text, persist) {
       panel.querySelector("#widgetStatus").innerHTML = text;
+      // Keep the last result on screen across page/tab changes.
+      if (persist !== false) saveWidgetState({ widgetLastStatus: text });
     }
+
+    // Restore the last fill summary so the info stays visible when you come back
+    // to a page or switch tabs.
+    if (lastStatus) panel.querySelector("#widgetStatus").innerHTML = lastStatus;
 
     panel.querySelector("#fillNameBtn").addEventListener("click", async () => {
       const { profile } = await getProfileAndQa();
@@ -135,6 +166,13 @@
       if (!profile) return setStatus("Set up your resume in the extension popup first.");
       const count = window.ResumeFitEngine.fillFieldType(profile, "phone");
       setStatus(count > 0 ? `Filled ${count} phone field(s).` : "No matching phone field found on this page.");
+    });
+
+    panel.querySelector("#fillContactBtn").addEventListener("click", async () => {
+      const { profile } = await getProfileAndQa();
+      if (!profile) return setStatus("Set up your resume in the extension popup first.");
+      const count = window.ResumeFitEngine.fillContact(profile);
+      setStatus(count > 0 ? `Filled ${count} contact field(s).` : "No matching contact fields found on this page.");
     });
 
     panel.querySelector("#fullAutofillBtn").addEventListener("click", async () => {
@@ -179,6 +217,15 @@
         function onMouseUp() {
           document.removeEventListener("mousemove", onMouseMove);
           document.removeEventListener("mouseup", onMouseUp);
+          if (moved) {
+            const rect = handle.getBoundingClientRect();
+            saveWidgetState({
+              widgetPos: {
+                right: Math.max(4, window.innerWidth - rect.right),
+                bottom: Math.max(4, window.innerHeight - rect.bottom),
+              },
+            });
+          }
         }
 
         document.addEventListener("mousemove", onMouseMove);

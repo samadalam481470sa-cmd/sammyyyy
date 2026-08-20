@@ -4,7 +4,15 @@ A Chrome extension that helps with job applications **without** crossing into
 fraud or platform-abuse territory. It:
 
 - Lets you save your **real** resume (paste text or upload a `.txt` file), parsed
-  into structured fields you can review and correct.
+  into structured fields you can review and correct — including name, contact
+  info, city/state/ZIP, LinkedIn/GitHub, current title & employer, school,
+  degree, graduation year, and years of experience.
+- **Saves everything automatically as you type.** All data lives in
+  `chrome.storage.local` — on your device, no account or cloud — and persists
+  across page navigations and browser restarts. The popup window itself closes
+  whenever you click away (that's how Chrome popups work), but your data is
+  never lost, and the floating bubble keeps the assistant available on every
+  page.
 - Lets you pre-write your **own answers** to recurring questions (work
   authorization, visa sponsorship, salary expectations, notice period, etc.)
   once, in the **Q&A** tab. Whenever a matching question shows up on a page —
@@ -13,12 +21,23 @@ fraud or platform-abuse territory. It:
 - On any job page, autofills form fields it can confidently match (name, email,
   phone, links, skills, your saved Q&A answers, etc.) using **only** your real
   data — never invented facts.
-- For open-ended prompts with no saved Q&A answer (like "Why do you want to
-  work here?" or a cover-letter box), **drafts a short suggestion** built only
-  from your real resume content (summary/skills/experience). Drafts are
-  highlighted in blue and clearly marked "review & personalize before
-  submitting" — they're a starting point, not a final answer, and nothing is
-  ever submitted automatically.
+- For open-ended prompts with no saved Q&A answer, **drafts a suggestion** built
+  from your real resume content. This now covers both **behavioral / "filler"
+  questions** (why this role, tell us about yourself, greatest strength, why
+  should we hire you, etc.) and **technical questions** (experience with X,
+  describe your background, what technologies you use), highlighting the skills
+  from your resume that match the posting. Drafts are highlighted in blue and
+  clearly marked "review & personalize before submitting" — a starting point,
+  not a final answer, and nothing is ever submitted automatically.
+- **Standard self-ID (EEO) answers**: set once in the Q&A tab and they fill
+  automatically — pre-seeded with **"I am not a protected veteran"** and **"No,
+  I do not have a disability."** Edit or clear any of them (including gender /
+  race, left blank by default) to answer yourself instead.
+- **Jobs tab**: pulls **real, currently-open** listings from public job APIs,
+  ranks them against your resume, and biases toward your **ZIP code area** plus
+  US-remote roles. A fresh batch (up to 40) is prepared automatically a couple
+  of times a day whenever Chrome is open, so there are openings waiting each
+  morning. Click one to open it, then fill it in seconds with the assistant.
 - Highlights anything it still can't confidently handle — like legally
   sensitive checkboxes/radios you haven't pre-answered — in yellow, so **you**
   answer them yourself.
@@ -28,8 +47,13 @@ fraud or platform-abuse territory. It:
   other bot-detection evasion.
 - Includes a small **floating helper bubble** ("RF") that appears in the
   corner of every page (draggable, and can be turned off from the popup).
-  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, and Full
-  Autofill + Job Score — all using the engine described above.
+  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, **Fill
+  Contact Info** (all contact fields at once), and Full Autofill + Job Score —
+  all using the engine described above. Its position and open/closed state are
+  remembered, so it stays where you put it as you move page to page.
+- Fills fast with a **keyboard shortcut**: press **Alt+Shift+F** on any page to
+  run a full autofill instantly — no need to open the popup or the bubble. You
+  can change the shortcut at `chrome://extensions/shortcuts`.
 
 ## What this deliberately does NOT do
 
@@ -136,16 +160,40 @@ node chrome-extension/test/smoke-test.js ~/Downloads/resume-fit-assistant
 chrome-extension/
 ├── manifest.json          # Manifest V3 config
 ├── popup.html/.css/.js    # Resume + Q&A input UI, "Analyze & Fill This Page" trigger
-├── content.js             # Injected on demand (popup button / context menu)
+├── content.js             # Injected on demand (popup button / shortcut / context menu)
 ├── widget.js              # Always-on floating "RF" bubble injected on every page
-├── background.js          # Service worker; adds a right-click "Fill this page" shortcut
+├── background.js          # Service worker; menu + shortcut + scheduled job refresh
 ├── lib/
 │   ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
 │   ├── matcher.js         # Resume vs. job-description keyword overlap scoring
-│   ├── tailor.js          # Per-role skill/bullet prioritization + gap detection
+│   ├── tailor.js          # Per-role resume-tailoring suggestions (real content only)
+│   ├── jobFetcher.js      # Public job-API fetch + ZIP-aware ranking (Jobs tab)
 │   └── autofillEngine.js  # Shared field-matching/autofill logic
 └── test/smoke-test.js     # Loads the extension in real Chromium and fills a form
 ```
+
+## The Jobs tab (fresh listings near you)
+
+Enter your ZIP code and the extension pulls **real, open** postings from public
+job APIs (Remote OK, plus Greenhouse / Lever / Ashby company boards — the same
+public endpoints those companies link from their own careers pages), scores each
+against your saved resume with the same matcher used on-page, and ranks them.
+
+Set **Target areas** (comma-separated states or cities) to focus the search;
+the default is `FL, CA, DC, Chicago, IL, CO, Phoenix, AZ` plus your ZIP's state.
+Listings are balanced across those areas (round-robin, best-scored first) and
+combined with US-remote roles, so every area you list is represented rather than
+one metro filling the whole list. Up to 40 are shown.
+
+A background schedule (via `chrome.alarms`) refreshes the batch about twice a day
+and again when you start Chrome, so there are fresh listings each morning
+**while Chrome is running**. A browser extension can't run with the browser fully
+closed — for true laptop-closed 24/7 discovery, the repo's `job-finder/` GitLab
+CI pipeline runs on a server schedule and emails/publishes the same kind of
+shortlist.
+
+Nothing here submits anything or logs into any site; it only reads public
+listing APIs and opens the links you click.
 
 ## The floating widget
 
@@ -155,8 +203,13 @@ it). Clicking it opens a panel with:
 
 - **Fill Name / Fill Email / Fill Phone** — fills every matching field on the
   page with that piece of your saved resume data.
+- **Fill Contact Info** — fills all your contact fields (name, email, phone,
+  city/state/ZIP, address, LinkedIn/GitHub, website) in one click.
 - **Full Autofill + Job Score** — runs the same engine as the popup's
   "Analyze & Fill This Page" button.
+
+The bubble remembers where you drag it and whether its panel was open, so it
+stays consistent as you navigate between pages.
 
 The widget only fills fields when you click a button — it never runs
 automatically in the background, never submits anything, and never moves
@@ -170,6 +223,7 @@ your mouse or clicks other page elements.
   review a page after auto-fill before applying.
 - The job-fit score is a simple keyword-overlap heuristic, not a semantic or
   ML-based match — treat it as a quick signal, not ground truth.
-- Content scripts only run when you explicitly click "Analyze & Fill This
-  Page" (or the right-click menu item) — nothing runs in the background or on
-  page load.
+- Autofill only runs when you explicitly trigger it — the popup button, the
+  **Alt+Shift+F** shortcut, the floating bubble, or the right-click menu item.
+  The floating bubble is injected on page load but only reads/writes fields
+  when you click one of its buttons; nothing fills or submits on its own.
