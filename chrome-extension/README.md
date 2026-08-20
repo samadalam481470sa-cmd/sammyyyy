@@ -75,34 +75,83 @@ review-and-autofill assistant, not an autonomous applicant.
 
 ## Download & install on macOS
 
-1. Download `resume-fit-assistant.zip` (built from this folder — see below if
-   you need to rebuild it) and unzip it. On macOS, double-click the `.zip` in
-   Finder (or run `unzip resume-fit-assistant.zip`) — you'll get a
-   `chrome-extension/` folder.
-2. Open Chrome and go to `chrome://extensions`.
-3. Toggle on **Developer mode** (top-right switch).
-4. Click **Load unpacked** and select the unzipped `chrome-extension/` folder.
-5. Pin the extension (puzzle-piece icon in the toolbar → pin "Resume-Fit
-   Autofill Assistant").
-6. Click its icon, go to the **Resume** tab, and paste or upload your resume.
-7. Optionally add answers to common questions in the **Q&A** tab.
-8. On any page, fill the form in any of these ways:
-   - press **Alt+Shift+F** (fastest — works without opening anything);
-   - click the small floating **"RF"** bubble for one-click actions; or
-   - open the popup's **Fill & Score** tab and click **Analyze & Fill This
-     Page**.
+### Step 1 — get the zip
 
-No build step, no external dependencies — it's plain HTML/CSS/JS (Manifest
-V3), so you can also just copy individual files straight into your own
-extension project.
+Download it directly (right-click → Save Link As, or just click):
+
+**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/job-application-assistant-extension-0208/resume-fit-assistant.zip**
+
+The `raw/` URL matters. If you open the file's normal GitHub *page* and use
+"Save As", you'll save the HTML page instead of the zip, and Chrome will
+reject it. Also note the file lives on the
+`cursor/job-application-assistant-extension-0208` branch — it isn't on `main`
+until that branch is merged.
+
+Verify you got a real archive (should print `Zip archive data`):
+
+```bash
+file ~/Downloads/resume-fit-assistant.zip
+```
+
+### Step 2 — unzip it
+
+Double-click the `.zip` in Finder. You get **one folder named
+`resume-fit-assistant`**, containing `manifest.json` at its top level. That
+folder is what Chrome needs.
+
+### Step 3 — load it in Chrome
+
+1. Go to `chrome://extensions`.
+2. Toggle on **Developer mode** (top-right switch). Without this, the
+   **Load unpacked** button doesn't appear at all.
+3. Click **Load unpacked**.
+4. Select the **`resume-fit-assistant` folder itself** — not its parent
+   folder, and not a file inside it. If Chrome says *"Manifest file is
+   missing or unreadable"*, you selected the wrong level; open the folder and
+   confirm you can see `manifest.json` directly inside it.
+5. Pin the extension: puzzle-piece icon in the toolbar → pin "Resume-Fit
+   Autofill Assistant".
+
+### Step 4 — set it up
+
+1. Click the extension icon → **Resume** tab → paste or upload your resume →
+   **Save Resume Profile**.
+2. Optional but worth it: **Q&A** tab → add your answers to recurring
+   questions (work authorization, salary expectations…) → **Save Q&A**.
+3. On any application page, either use the popup's **Fill & Score** tab, or
+   click the floating **"RF"** bubble in the page corner.
+
+Already have the repo cloned? Skip the zip entirely and point **Load
+unpacked** at the `chrome-extension/` folder directly.
 
 ### Rebuilding the zip
 
 From the repository root:
 
 ```bash
-cd chrome-extension
-zip -r ../resume-fit-assistant.zip . -x "*.DS_Store"
+node scripts/build-extension.js
+```
+
+This validates the package before zipping — it checks the manifest, confirms
+every file referenced by the manifest, by `popup.html`, and by
+`chrome.scripting.executeScript` actually exists, and syntax-checks all JS.
+It then produces a zip containing a single top-level `resume-fit-assistant/`
+folder, so there's no ambiguity about what to select in Chrome.
+
+### Verifying it actually works
+
+```bash
+npm install --no-save playwright && npx playwright install chromium
+node chrome-extension/test/smoke-test.js
+```
+
+This loads the extension in a real Chromium, serves a fake application form,
+and asserts the widget injects and fills first/last name, email, phone,
+LinkedIn, a drafted cover letter, and a saved Q&A radio answer. Pass a path
+to test a built package instead of the source folder:
+
+```bash
+node chrome-extension/test/smoke-test.js ~/Downloads/resume-fit-assistant
 ```
 
 ## File structure
@@ -114,12 +163,13 @@ chrome-extension/
 ├── content.js             # Injected on demand (popup button / shortcut / context menu)
 ├── widget.js              # Always-on floating "RF" bubble injected on every page
 ├── background.js          # Service worker; menu + shortcut + scheduled job refresh
-└── lib/
-    ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
-    ├── matcher.js         # Resume vs. job-description keyword overlap scoring
-    ├── tailor.js          # Per-role resume-tailoring suggestions (real content only)
-    ├── jobFetcher.js      # Public job-API fetch + ZIP-aware ranking (Jobs tab)
-    └── autofillEngine.js  # Shared field-matching/autofill logic
+├── lib/
+│   ├── resumeParser.js    # Heuristic resume-text -> structured profile parser
+│   ├── matcher.js         # Resume vs. job-description keyword overlap scoring
+│   ├── tailor.js          # Per-role resume-tailoring suggestions (real content only)
+│   ├── jobFetcher.js      # Public job-API fetch + ZIP-aware ranking (Jobs tab)
+│   └── autofillEngine.js  # Shared field-matching/autofill logic
+└── test/smoke-test.js     # Loads the extension in real Chromium and fills a form
 ```
 
 ## The Jobs tab (fresh listings near you)

@@ -19,9 +19,16 @@ page it:
   skills and bullets to lead with for this specific posting;
 - gives you a small draggable floating widget for one-click fills.
 
-Install: download `resume-fit-assistant.zip`, unzip, then `chrome://extensions`
-→ Developer mode → **Load unpacked** → select the `chrome-extension/` folder.
-See [`chrome-extension/README.md`](chrome-extension/README.md).
+**Install:** download the zip with the
+[**raw download link**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/job-application-assistant-extension-0208/resume-fit-assistant.zip)
+(the `raw/` URL matters — saving the GitHub file *page* gives you HTML, not a
+zip), unzip it to get a single `resume-fit-assistant/` folder, then
+`chrome://extensions` → **Developer mode** on → **Load unpacked** → select
+that folder. Full walkthrough and troubleshooting:
+[`chrome-extension/README.md`](chrome-extension/README.md).
+
+Rebuild the zip with `node scripts/build-extension.js` (validates the package,
+then zips it).
 
 ## 2. `job-finder/` — scheduled discovery pipeline
 
