@@ -392,7 +392,9 @@ export function SpreadsheetWorkspace({ workbook, workbooks }: Props) {
                 <SheetTh className="min-w-32 text-right">Premium</SheetTh>
                 <SheetTh className="min-w-28 text-right">Commission</SheetTh>
                 <SheetTh className="min-w-60">Notes</SheetTh>
-                <SheetTh className="w-10" />
+                <SheetTh className="sticky right-0 z-30 w-12 bg-slate-100 text-center">
+                  Row
+                </SheetTh>
               </tr>
             </thead>
             <tbody>
@@ -525,7 +527,7 @@ function PolicyGridRow({
         />
       </SheetTd>
       <TextCell value={row.notes} onSave={(v) => save("notes", v)} />
-      <SheetTd className="p-0 text-center">
+      <SheetTd className="sticky right-0 z-10 bg-white p-0 text-center shadow-[-1px_0_0_#e2e8f0] group-hover:bg-navy-50">
         <button
           type="button"
           disabled={disabled}
@@ -535,7 +537,7 @@ function PolicyGridRow({
               "Policy row deleted",
             )
           }
-          className="rounded p-1 text-slate-300 opacity-0 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 focus:opacity-100"
+          className="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
           aria-label={`Delete ${row.policyNumber}`}
         >
           <Trash2 className="size-3.5" />
