@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Newport Specialty Partners — MGA Platform</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">NSP</div>
+      <div>
+        <h1>Newport Specialty Partners</h1>
+        <p class="brand-sub">MGA Roll-Up Platform &middot; Lovell Minnick</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="pipeline" role="tab">M&amp;A Pipeline</button>
+      <button class="tab" data-view="portfolio" role="tab">One Platform</button>
+    </nav>
+    <button id="btn-add-mga" class="btn btn-primary">+ Add MGA</button>
+  </header>
+
+  <main>
+    <!-- ============ PIPELINE VIEW ============ -->
+    <section id="view-pipeline" class="view">
+      <div class="view-head">
+        <div>
+          <h2>M&amp;A Pipeline</h2>
+          <p class="muted">Prospective MGA acquisitions, ranked by best-in-class metrics.</p>
+        </div>
+        <div class="filters">
+          <label class="toggle">
+            <input type="checkbox" id="filter-veterans" />
+            <span>20+ yrs experience</span>
+          </label>
+          <select id="filter-region"><option value="">All regions</option></select>
+          <select id="filter-lob"><option value="">All lines of business</option></select>
+          <select id="sort-by">
+            <option value="cagr">Sort: EBITDA CAGR</option>
+            <option value="yoy">Sort: YoY EBITDA growth</option>
+            <option value="ebitda">Sort: Latest EBITDA</option>
+            <option value="years">Sort: Years of experience</option>
+            <option value="name">Sort: Name</option>
+          </select>
+        </div>
+      </div>
+      <div id="pipeline-list" class="card-grid"></div>
+    </section>
+
+    <!-- ============ PORTFOLIO VIEW ============ -->
+    <section id="view-portfolio" class="view hidden">
+      <div class="view-head">
+        <div>
+          <h2>One Platform — Aggregated Portfolio</h2>
+          <p class="muted">All acquired MGAs, with overlapping lines, coverages, and regions highlighted as synergies.</p>
+        </div>
+      </div>
+      <div id="portfolio-kpis" class="kpi-row"></div>
+      <div class="portfolio-layout">
+        <div>
+          <h3 class="section-label">Acquired MGAs</h3>
+          <div id="portfolio-list" class="card-grid"></div>
+        </div>
+        <aside class="synergy-panel">
+          <h3 class="section-label">Synergy Map</h3>
+          <p class="muted small">Values shared by two or more platform MGAs glow gold — that is where cross-sell and consolidation live.</p>
+          <div id="synergy-groups"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ DETAIL DRAWER ============ -->
+  <div id="drawer-backdrop" class="backdrop hidden"></div>
+  <aside id="drawer" class="drawer hidden" aria-modal="true"></aside>
+
+  <!-- ============ ADD MGA MODAL ============ -->
+  <div id="modal-backdrop" class="backdrop hidden"></div>
+  <div id="add-modal" class="modal hidden">
+    <h3>Add MGA to Pipeline</h3>
+    <form id="add-form">
+      <label>Name <input name="name" required placeholder="e.g. Atlantic Specialty Managers" /></label>
+      <label>Years of experience <input name="years_of_experience" type="number" min="0" required placeholder="e.g. 25" /></label>
+      <label>Headquarters <input name="headquarters" placeholder="City, ST" /></label>
+      <label>Principal contact <input name="principal_contact" placeholder="Full name" /></label>
+      <label>Notes <textarea name="notes" rows="3" placeholder="Deal context, sourcing, valuation color…"></textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="btn-cancel-add">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add to pipeline</button>
+      </div>
+      <p id="add-error" class="error hidden"></p>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
