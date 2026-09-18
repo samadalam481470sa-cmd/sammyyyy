@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Newport | Portfolio Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Newport Specialty Partners home">
+        <span class="brand-mark">N</span>
+        <span>newport<span class="brand-light">.</span></span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a class="nav-item active" href="#portfolio" data-view="portfolio"><span>◫</span> Portfolio</a>
+        <a class="nav-item" href="#pipeline" data-view="pipeline"><span>◌</span> M&amp;A Pipeline <b>12</b></a>
+        <a class="nav-item" href="#programs"><span>◇</span> Programs</a>
+        <a class="nav-item" href="#agencies"><span>⌘</span> Retail Agencies</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="advisor-card">
+          <span class="eyebrow">BACKED BY</span>
+          <strong>Lovell Minnick<br />Partners</strong>
+        </div>
+        <a class="nav-item" href="#settings"><span>⚙</span> Settings</a>
+        <div class="user"><span class="avatar">MS</span><span><strong>Mary S.</strong><small>Corporate Development</small></span></div>
+      </div>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">PORTFOLIO OVERVIEW</p>
+          <h1>One platform. <em>Clearer potential.</em></h1>
+          <p class="subtitle">Your connected view of the Newport Specialty portfolio.</p>
+        </div>
+        <div class="header-actions">
+          <button class="icon-button" aria-label="Search">⌕</button>
+          <button class="icon-button notification" aria-label="Notifications">♧<i></i></button>
+          <button class="primary-button" id="addMga">+ Add MGA</button>
+        </div>
+      </header>
+
+      <section class="view-tabs" aria-label="Dashboard views">
+        <button class="view-tab active" data-view="portfolio">Acquired portfolio <span>8</span></button>
+        <button class="view-tab" data-view="pipeline">Acquisition pipeline <span>12</span></button>
+      </section>
+
+      <section id="portfolioView" class="dashboard-view active">
+        <div class="metric-grid">
+          <article class="metric-card">
+            <p>PORTFOLIO EBITDA <button class="info" aria-label="More information">i</button></p>
+            <strong>$42.8M</strong>
+            <span class="positive">↗ 18.4%</span><small>vs. prior year</small>
+            <div class="sparkline" aria-hidden="true"><svg viewBox="0 0 180 42"><path d="M2 35 L36 28 L70 31 L103 17 L137 20 L178 3" /></svg></div>
+          </article>
+          <article class="metric-card">
+            <p>ACTIVE PROGRAMS</p>
+            <strong>31</strong>
+            <span class="muted">Across 8 MGAs</span>
+            <div class="program-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </article>
+          <article class="metric-card">
+            <p>RETAIL AGENCIES</p>
+            <strong>1,284</strong>
+            <span class="positive">↗ 92</span><small> added this quarter</small>
+            <div class="agency-graphic" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          </article>
+          <article class="metric-card dark">
+            <p>IDENTIFIED SYNERGIES</p>
+            <strong>14</strong>
+            <span>High-confidence opportunities</span>
+            <button id="reviewSynergies">Review opportunities <b>→</b></button>
+          </article>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel synergy-panel">
+            <div class="panel-heading"><div><p class="eyebrow">PORTFOLIO INTELLIGENCE</p><h2>Where your portfolio connects</h2></div><button class="text-button" id="expandSynergies">View all <span>→</span></button></div>
+            <p class="panel-intro">Overlapping capabilities reveal ways to grow together.</p>
+            <div class="synergy-list">
+              <article class="synergy-row"><span class="synergy-icon teal">⌁</span><div><strong>Professional Liability</strong><p>Shared by 4 MGAs · <b>Cross-sell potential</b></p></div><span class="pill high">HIGH</span><button class="arrow" aria-label="View professional liability synergy">→</button></article>
+              <article class="synergy-row"><span class="synergy-icon gold">⌖</span><div><strong>Southeast Regional Coverage</strong><p>3 MGAs active across 6 states · <b>Market expansion</b></p></div><span class="pill medium">MED</span><button class="arrow" aria-label="View regional synergy">→</button></article>
+              <article class="synergy-row"><span class="synergy-icon purple">◈</span><div><strong>Construction &amp; Contractors</strong><p>2 MGAs · 218 shared agency relationships</p></div><span class="pill high">HIGH</span><button class="arrow" aria-label="View construction synergy">→</button></article>
+            </div>
+          </section>
+          <section class="panel performance-panel">
+            <div class="panel-heading"><div><p class="eyebrow">PERFORMANCE</p><h2>EBITDA growth by MGA</h2></div><button class="period">3 YEARS⌄</button></div>
+            <div class="bar-chart" aria-label="EBITDA growth bar chart">
+              <div class="bar-row"><span>IronGate</span><i><b style="width: 90%"></b></i><strong>+34%</strong></div>
+              <div class="bar-row"><span>NorthStar</span><i><b style="width: 73%"></b></i><strong>+28%</strong></div>
+              <div class="bar-row"><span>Summit</span><i><b style="width: 56%"></b></i><strong>+21%</strong></div>
+              <div class="bar-row"><span>HarborPoint</span><i><b style="width: 43%"></b></i><strong>+16%</strong></div>
+              <div class="bar-row"><span>Verity</span><i><b style="width: 31%"></b></i><strong>+12%</strong></div>
+            </div>
+            <button class="text-button">Full performance view <span>→</span></button>
+          </section>
+        </div>
+
+        <section class="panel table-panel">
+          <div class="panel-heading"><div><p class="eyebrow">ACQUIRED ENTITIES</p><h2>Portfolio MGAs</h2></div><div class="table-tools"><button class="filter-button">≡ Filters</button><button class="text-button">View all <span>→</span></button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>MGA</th><th>FOCUS</th><th>REGION</th><th>EXPERIENCE</th><th>Y/Y EBITDA</th><th>STATUS</th></tr></thead><tbody>
+            <tr><td><span class="company-logo teal-bg">IG</span><strong>IronGate Specialty</strong></td><td><span class="tag">Construction</span><span class="tag">Casualty</span></td><td>Southeast</td><td>26 years</td><td class="growth">↗ 34%</td><td><span class="status"><i></i> On platform</span></td></tr>
+            <tr><td><span class="company-logo navy-bg">NS</span><strong>NorthStar Underwriters</strong></td><td><span class="tag">Professional</span></td><td>National</td><td>22 years</td><td class="growth">↗ 28%</td><td><span class="status"><i></i> On platform</span></td></tr>
+            <tr><td><span class="company-logo gold-bg">SH</span><strong>Summit Harbor</strong></td><td><span class="tag">Marine</span><span class="tag">Property</span></td><td>Northeast</td><td>31 years</td><td class="growth">↗ 21%</td><td><span class="status"><i></i> On platform</span></td></tr>
+          </tbody></table></div>
+        </section>
+      </section>
+
+      <section id="pipelineView" class="dashboard-view">
+        <div class="pipeline-hero"><div><p class="eyebrow">CORPORATE DEVELOPMENT</p><h2>Acquisition pipeline</h2><p>Prioritize the best-in-class MGAs that fit the platform.</p></div><button class="primary-button">+ Add prospect</button></div>
+        <div class="filter-row"><button class="filter-active">All targets <span>12</span></button><button>20+ years experience</button><button>EBITDA growth 20%+</button><button>Region ⌄</button><button>Specialty ⌄</button></div>
+        <div class="pipeline-grid" id="pipelineCards"></div>
+      </section>
+    </main>
+    <dialog id="addDialog"><button class="close-dialog" aria-label="Close">×</button><p class="eyebrow">NEW ACCOUNT</p><h2>Add an MGA</h2><p>Start building your acquisition or portfolio record.</p><label>MGA name<input placeholder="e.g. Keystone Specialty" /></label><label>Current status<select><option>Pipeline / Prospect</option><option>Acquired / On-Platform</option></select></label><button class="primary-button dialog-submit">Create MGA</button></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
