@@ -63,29 +63,90 @@ export function getMgaById(id: string): Mga | undefined {
   return platformData.mgas.find((m) => m.id === id);
 }
 
-/** Find overlapping LoB / coverage / region across acquired MGAs */
+type ProgramKey = "lineOfBusiness" | "coverageType" | "geographicRegion";
+
+const SYNERGY_BUCKETS: {
+  dimension: SynergyOverlap["dimension"];
+  key: ProgramKey;
+}[] = [
+  { dimension: "lineOfBusiness", key: "lineOfBusiness" },
+  { dimension: "coverageType", key: "coverageType" },
+  { dimension: "geographicRegion", key: "geographicRegion" },
+];
+
+/** Find overlapping LoB / coverage / region across MGAs in a status set */
 export function findSynergies(
   status: Mga["status"] = "acquired",
 ): SynergyOverlap[] {
   const mgas = platformData.mgas.filter((m) => m.status === status);
   const mgaById = new Map(mgas.map((m) => [m.id, m]));
   const programs = platformData.programs.filter((p) => mgaById.has(p.mgaId));
+  return collectOverlaps(programs, mgaById);
+}
 
-  const buckets: {
-    dimension: SynergyOverlap["dimension"];
-    key: keyof typeof programs[0];
-  }[] = [
-    { dimension: "lineOfBusiness", key: "lineOfBusiness" },
-    { dimension: "coverageType", key: "coverageType" },
-    { dimension: "geographicRegion", key: "geographicRegion" },
-  ];
+/**
+ * Pipeline MGAs that share LoB / coverage / region with at least one
+ * on-platform MGA — acquisition synergy candidates for corp dev.
+ */
+export function findPipelineSynergyCandidates(): SynergyOverlap[] {
+  const acquired = platformData.mgas.filter((m) => m.status === "acquired");
+  const pipeline = platformData.mgas.filter((m) => m.status === "pipeline");
+  const acquiredIds = new Set(acquired.map((m) => m.id));
+  const pipelineIds = new Set(pipeline.map((m) => m.id));
+  const nameById = new Map(
+    [...acquired, ...pipeline].map((m) => [m.id, m.name]),
+  );
+
+  const acquiredPrograms = platformData.programs.filter((p) =>
+    acquiredIds.has(p.mgaId),
+  );
+  const pipelinePrograms = platformData.programs.filter((p) =>
+    pipelineIds.has(p.mgaId),
+  );
 
   const overlaps: SynergyOverlap[] = [];
 
-  for (const { dimension, key } of buckets) {
+  for (const { dimension, key } of SYNERGY_BUCKETS) {
+    const acquiredValues = new Map<string, Set<string>>();
+    for (const p of acquiredPrograms) {
+      const value = p[key];
+      if (!acquiredValues.has(value)) acquiredValues.set(value, new Set());
+      acquiredValues.get(value)!.add(p.mgaId);
+    }
+
+    const pipelineByValue = new Map<string, Set<string>>();
+    for (const p of pipelinePrograms) {
+      const value = p[key];
+      if (!acquiredValues.has(value)) continue;
+      if (!pipelineByValue.has(value)) pipelineByValue.set(value, new Set());
+      pipelineByValue.get(value)!.add(p.mgaId);
+    }
+
+    for (const [value, pipeIds] of pipelineByValue) {
+      const platformIds = [...acquiredValues.get(value)!];
+      const mgaIds = [...platformIds, ...pipeIds];
+      overlaps.push({
+        dimension,
+        value,
+        mgaIds,
+        mgaNames: mgaIds.map((id) => nameById.get(id)!),
+      });
+    }
+  }
+
+  return overlaps.sort((a, b) => b.mgaIds.length - a.mgaIds.length);
+}
+
+function collectOverlaps(
+  programs: typeof platformData.programs,
+  mgaById: Map<string, Mga>,
+): SynergyOverlap[] {
+  const overlaps: SynergyOverlap[] = [];
+
+  for (const { dimension, key } of SYNERGY_BUCKETS) {
     const map = new Map<string, Set<string>>();
     for (const p of programs) {
-      const value = p[key] as string;
+      const value = p[key];
       if (!map.has(value)) map.set(value, new Set());
       map.get(value)!.add(p.mgaId);
     }

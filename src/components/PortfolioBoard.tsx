@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { MgaTable, SectionIntro, StatusBadge } from "@/components/ui";
 import {
+  findPipelineSynergyCandidates,
   findSynergies,
   formatUsdMm,
   getAllMetrics,
 } from "@/lib/metrics";
+import type { SynergyOverlap } from "@/lib/schema";
+import { platformData } from "@/lib/data";
 
 const dimensionLabel = {
   lineOfBusiness: "Line of Business",
@@ -15,9 +18,13 @@ const dimensionLabel = {
 export function PortfolioBoard() {
   const acquired = getAllMetrics("acquired");
   const synergies = findSynergies("acquired");
+  const pipelineCandidates = findPipelineSynergyCandidates();
   const totalEbitda = acquired.reduce(
     (sum, m) => sum + (m.latestEbitda ?? 0),
     0,
+  );
+  const acquiredIds = new Set(
+    platformData.mgas.filter((m) => m.status === "acquired").map((m) => m.id),
   );
 
   return (
@@ -41,8 +48,8 @@ export function PortfolioBoard() {
         />
         <Stat
           label="Synergy signals"
-          value={String(synergies.length)}
-          hint="Overlapping LoB / coverage / region"
+          value={String(synergies.length + pipelineCandidates.length)}
+          hint="On-platform overlaps + pipeline candidates"
         />
       </div>
 
@@ -52,7 +59,7 @@ export function PortfolioBoard() {
       <MgaTable rows={acquired} />
 
       <h3 className="font-display mb-3 mt-10 text-xl font-semibold text-ink">
-        Synergy map
+        On-platform synergy map
       </h3>
       <p className="mb-4 max-w-2xl text-sm text-muted">
         Where two or more on-platform MGAs share a line, coverage, or region —
@@ -60,53 +67,85 @@ export function PortfolioBoard() {
         leverage.
       </p>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {synergies.map((s, i) => (
-          <article
-            key={`${s.dimension}-${s.value}`}
-            className="animate-rise rounded-lg border border-line/80 bg-paper/80 p-4"
-            style={{ animationDelay: `${i * 50}ms` }}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-bronze">
-                {dimensionLabel[s.dimension]}
-              </span>
-              <span className="rounded bg-teal/10 px-2 py-0.5 text-xs font-semibold text-teal-deep">
-                {s.mgaIds.length} MGAs
-              </span>
-            </div>
-            <h4 className="font-display text-lg font-semibold text-ink">
-              {s.value}
-            </h4>
-            <ul className="mt-3 space-y-1.5">
-              {s.mgaIds.map((id, idx) => (
-                <li key={id}>
+      <SynergyGrid items={synergies} empty="No multi-MGA overlaps in the current acquired set." />
+
+      <h3 className="font-display mb-3 mt-10 text-xl font-semibold text-ink">
+        Pipeline synergy candidates
+      </h3>
+      <p className="mb-4 max-w-2xl text-sm text-muted">
+        Prospect MGAs that already overlap an on-platform line, coverage, or
+        region — e.g. Atlantic Binding vs. Harborpoint on Northeast Casualty.
+      </p>
+
+      <SynergyGrid
+        items={pipelineCandidates}
+        empty="No pipeline overlaps with the current platform."
+        highlightPipelineIds={acquiredIds}
+      />
+
+      <div className="mt-8 rounded-lg border border-dashed border-line bg-fog/50 p-4 text-sm text-muted">
+        <StatusBadge status="pipeline" />{" "}
+        <span className="ml-2">
+          Bronze = pipeline prospect · Teal badge count includes both platform
+          and prospect MGAs in that overlap.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SynergyGrid({
+  items,
+  empty,
+  highlightPipelineIds,
+}: {
+  items: SynergyOverlap[];
+  empty: string;
+  highlightPipelineIds?: Set<string>;
+}) {
+  if (items.length === 0) {
+    return <p className="text-sm text-muted">{empty}</p>;
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((s, i) => (
+        <article
+          key={`${s.dimension}-${s.value}-${s.mgaIds.join("-")}`}
+          className="animate-rise rounded-lg border border-line/80 bg-paper/80 p-4"
+          style={{ animationDelay: `${i * 50}ms` }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-bronze">
+              {dimensionLabel[s.dimension]}
+            </span>
+            <span className="rounded bg-teal/10 px-2 py-0.5 text-xs font-semibold text-teal-deep">
+              {s.mgaIds.length} MGAs
+            </span>
+          </div>
+          <h4 className="font-display text-lg font-semibold text-ink">
+            {s.value}
+          </h4>
+          <ul className="mt-3 space-y-1.5">
+            {s.mgaIds.map((id, idx) => {
+              const isPlatform = highlightPipelineIds?.has(id);
+              return (
+                <li key={id} className="flex items-center gap-2">
                   <Link
                     href={`/mgas/${id}`}
                     className="text-sm font-medium text-teal hover:underline"
                   >
                     {s.mgaNames[idx]}
                   </Link>
+                  {highlightPipelineIds && (
+                    <StatusBadge status={isPlatform ? "acquired" : "pipeline"} />
+                  )}
                 </li>
-              ))}
-            </ul>
-          </article>
-        ))}
-        {synergies.length === 0 && (
-          <p className="text-sm text-muted">
-            No multi-MGA overlaps detected in the current portfolio.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-8 rounded-lg border border-dashed border-line bg-fog/50 p-4 text-sm text-muted">
-        <StatusBadge status="acquired" />{" "}
-        <span className="ml-2">
-          Pipeline targets with matching LoB/region appear as synergy
-          <em> candidates</em> after acquisition — see Atlantic Binding vs.
-          Harborpoint (Northeast Casualty).
-        </span>
-      </div>
+              );
+            })}
+          </ul>
+        </article>
+      ))}
     </div>
   );
 }

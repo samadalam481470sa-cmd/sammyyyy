@@ -175,6 +175,14 @@ export const platformData: PlatformData = {
       geographicRegion: "Midwest",
     },
     {
+      id: "p6b",
+      mgaId: "mga-prairie",
+      name: "Midwest Contractor GL",
+      lineOfBusiness: "Casualty",
+      coverageType: "General Liability",
+      geographicRegion: "Midwest",
+    },
+    {
       id: "p7",
       mgaId: "mga-cascade",
       name: "Tech E&O",
