@@ -594,7 +594,7 @@ function CellInput({
   const [focused, setFocused] = useState(false);
   return (
     <input
-      type={type}
+      type={!focused && displayValue ? "text" : type}
       step={step}
       value={focused ? draft : displayValue ?? draft}
       onFocus={() => {
