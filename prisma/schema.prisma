@@ -1,0 +1,102 @@
+// Newport Specialty Partners — MGA CRM & Portfolio Platform
+// Prisma schema modeling the core entities from the platform requirements:
+// MGA, MGA Financials (historical EBITDA time-series), Insurance Programs,
+// and Retail Agencies ("The Jakes").
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // SQLite keeps the MVP self-contained for the wireframe review.
+  // Swap to "postgresql" + DATABASE_URL when moving beyond the MVP.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum support, so `status` / `pipelineStage` are
+// modeled as Strings constrained to the literal unions defined in
+// src/types/mga.ts (MgaStatus: "PIPELINE" | "ACQUIRED"; PipelineStage:
+// "IDENTIFIED" | "INITIAL_OUTREACH" | "LOI" | "DILIGENCE" | "CLOSING").
+// Swapping to Postgres later can promote these back to real enums.
+
+model Mga {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+
+  // Core targeting metrics called out in the requirements
+  yearsOfExperience Int
+  status            String  @default("PIPELINE") // MgaStatus
+  pipelineStage     String? // PipelineStage
+  headquartersState String?
+  website           String?
+
+  contactName  String?
+  contactEmail String?
+
+  acquiredDate DateTime?
+  askPriceUsd  Float? // optional deal-sourcing context for pipeline targets
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  financials       EbitdaRecord[]
+  insurancePrograms InsuranceProgram[]
+  retailAgencies    RetailAgency[]
+
+  @@index([status])
+}
+
+/// Historical EBITDA time-series used to prove growth trajectory.
+model EbitdaRecord {
+  id     String @id @default(cuid())
+  mgaId  String
+  mga    Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  year        Int
+  ebitdaUsd   Float // annual EBITDA in USD
+  revenueUsd  Float?
+
+  createdAt DateTime @default(now())
+
+  @@unique([mgaId, year])
+  @@index([mgaId])
+}
+
+/// A single MGA can run multiple insurance programs, each with its own
+/// line of business, coverage type, and geographic footprint. These are
+/// the dimensions used to detect cross-portfolio synergies.
+model InsuranceProgram {
+  id     String @id @default(cuid())
+  mgaId  String
+  mga    Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  name             String
+  lineOfBusiness   String
+  coverageType     String
+  geographicRegion String
+  premiumVolumeUsd Float?
+
+  createdAt DateTime @default(now())
+
+  @@index([mgaId])
+  @@index([lineOfBusiness])
+  @@index([coverageType])
+  @@index([geographicRegion])
+}
+
+/// "The Jakes" — independent retail agencies distributing an MGA's programs.
+model RetailAgency {
+  id     String @id @default(cuid())
+  mgaId  String
+  mga    Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  name        String
+  state       String?
+  contactName String?
+
+  createdAt DateTime @default(now())
+
+  @@index([mgaId])
+}

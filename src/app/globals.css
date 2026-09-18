@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  background-color: #f4f6fb;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-card;
+  }
+
+  .btn-tab {
+    @apply rounded-md px-3 py-1.5 text-sm font-medium transition-colors;
+  }
+
+  .btn-tab-active {
+    @apply bg-brand-600 text-white shadow-sm;
+  }
+
+  .btn-tab-inactive {
+    @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+  }
+
+  .th-cell {
+    @apply cursor-pointer select-none whitespace-nowrap px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .td-cell {
+    @apply whitespace-nowrap px-4 py-3 text-sm text-slate-700;
+  }
+}
