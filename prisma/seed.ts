@@ -11,6 +11,8 @@ import {
   PROJECTION_FISCAL_YEAR,
   type MgaSeed,
 } from "./seed-data";
+import { WORKBOOK_SEEDS } from "./workbook-seed-data";
+import { CLIENT_SEEDS } from "./client-seed-data";
 
 const prisma = new PrismaClient();
 
@@ -86,6 +88,11 @@ function latestActualWrittenPremium(rows: FinancialRow[]): number {
 
 async function main() {
   console.log("Clearing existing data…");
+  await prisma.followUp.deleteMany();
+  await prisma.client.deleteMany();
+  await prisma.policyRow.deleteMany();
+  await prisma.workbookMember.deleteMany();
+  await prisma.workbook.deleteMany();
   await prisma.retailAgency.deleteMany();
   await prisma.insuranceProgram.deleteMany();
   await prisma.financialPeriod.deleteMany();
@@ -165,12 +172,59 @@ async function main() {
     financialCount += financialRows.length;
   }
 
+  let workbookMemberCount = 0;
+  let policyRowCount = 0;
+  for (const workbook of WORKBOOK_SEEDS) {
+    await prisma.workbook.create({
+      data: {
+        slug: workbook.slug,
+        name: workbook.name,
+        description: workbook.description,
+        accessMode: workbook.accessMode,
+        isPrimary: workbook.isPrimary,
+        ownerEmail: workbook.ownerEmail,
+        ownerName: workbook.ownerName,
+        members: { create: [...workbook.members] },
+        rows: { create: [...workbook.rows] },
+      },
+    });
+    workbookMemberCount += workbook.members.length;
+    policyRowCount += workbook.rows.length;
+  }
+
+  for (const client of CLIENT_SEEDS) {
+    await prisma.client.create({
+      data: {
+        slug: client.slug,
+        companyName: client.companyName,
+        contactName: client.contactName,
+        email: client.email,
+        phone: client.phone,
+        industry: client.industry,
+        city: client.city,
+        state: client.state,
+        region: client.region,
+        mgaName: client.mgaName,
+        producer: client.producer,
+        annualPremiumUsd: client.annualPremiumUsd,
+        policyCount: client.policyCount,
+        status: client.status,
+        notes: client.notes,
+        followUps: { create: client.followUps },
+      },
+    });
+  }
+
   console.log(
     [
       `Seeded ${MGA_SEEDS.length} MGAs`,
       `${financialCount} financial periods`,
       `${programCount} insurance programs`,
       `${agencyCount} retail agencies`,
+      `${WORKBOOK_SEEDS.length} workbooks`,
+      `${policyRowCount} spreadsheet rows`,
+      `${workbookMemberCount} workbook members`,
+      `${CLIENT_SEEDS.length} insurance clients`,
     ].join(", "),
   );
 }

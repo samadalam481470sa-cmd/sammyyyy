@@ -78,6 +78,66 @@ model Mga {
   @@index([primaryRegion])
 }
 
+/// Insurance client / insured account. This is the relationship layer of the
+/// CRM; PolicyRow remains the operational register while this record holds the
+/// people, account facts and the next action.
+model Client {
+  id   String @id @default(cuid())
+  slug String @unique
+
+  companyName String
+  contactName String
+  email       String
+  phone       String?
+
+  industry   String
+  city       String
+  state      String
+  region     String
+  mgaName    String?
+  producer   String?
+
+  annualPremiumUsd Float?
+  policyCount      Int @default(0)
+  /// PROSPECT, ACTIVE, RENEWAL_DUE, AT_RISK or INACTIVE.
+  status String
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  followUps FollowUp[]
+
+  @@index([status])
+  @@index([region])
+  @@index([email])
+}
+
+/// A next action on a client relationship. The due date can be exported as an
+/// iCalendar event and opened directly in Outlook.
+model FollowUp {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  title       String
+  /// CALL, EMAIL, MEETING, RENEWAL_REVIEW or CLAIM_CHECK_IN.
+  activityType String
+  dueAt        DateTime
+  assignedTo   String
+  notes        String?
+
+  isCompleted Boolean @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dueAt])
+  @@index([assignedTo])
+  @@index([isCompleted])
+}
+
 /// One fiscal year of financials for one MGA. The time series behind every
 /// EBITDA growth number on the dashboards — year-over-year deltas and CAGR are
 /// derived from these rows, never stored, so the math can never drift from the
@@ -141,6 +201,110 @@ model InsuranceProgram {
   @@index([lineOfBusiness])
   @@index([coverageType])
   @@index([geographicRegion])
+}
+
+/// A shared spreadsheet of policy records.
+///
+/// Two access models, which is the whole point of this table:
+///   ORGANIZATION — every Newport user can open it. This is the main company
+///                  book of record; `isPrimary` marks the one that opens by
+///                  default and it cannot be locked down or deleted.
+///   RESTRICTED   — only the people listed in WorkbookMember can open it, each
+///                  invited by email address.
+model Workbook {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  description String?
+
+  /// ORGANIZATION or RESTRICTED. See WORKBOOK_ACCESS in src/lib/workbook.ts.
+  accessMode String
+  /// Exactly one workbook is primary: the company-wide book everyone lands on.
+  isPrimary  Boolean @default(false)
+
+  ownerEmail String
+  ownerName  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members WorkbookMember[]
+  rows    PolicyRow[]
+
+  @@index([accessMode])
+}
+
+/// A person granted access to a restricted workbook, identified by email.
+///
+/// Organization-wide workbooks also carry member rows, but only to record an
+/// explicit role — absence of a row there means "default viewer", not "no
+/// access". On a restricted workbook, absence of a row means no access at all.
+model WorkbookMember {
+  id         String   @id @default(cuid())
+  workbookId String
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+
+  email String
+  name  String?
+  /// OWNER, EDITOR or VIEWER. See WORKBOOK_ROLE in src/lib/workbook.ts.
+  role  String
+  /// INVITED until the person first opens the workbook, then ACTIVE.
+  status String @default("INVITED")
+
+  invitedAt    DateTime  @default(now())
+  lastActiveAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One row per person per workbook, so re-inviting updates rather than
+  // silently creating a second grant with a different role.
+  @@unique([workbookId, email])
+  @@index([email])
+}
+
+/// One row of the insurance spreadsheet: a policy or a submission working its
+/// way toward bound.
+model PolicyRow {
+  id         String   @id @default(cuid())
+  workbookId String
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+
+  /// Position in the sheet. Sparse on purpose so a row can be inserted between
+  /// two others without renumbering the whole book.
+  sortOrder Int
+
+  policyNumber String
+  insuredName  String
+  /// Free text rather than a foreign key: a submission can name an MGA the CRM
+  /// has never heard of, and the sheet must not reject it.
+  mgaName      String?
+  lineOfBusiness   String
+  coverageType     String
+  geographicRegion String
+  carrier          String?
+  producerAgency   String?
+  underwriter      String?
+
+  effectiveDate  DateTime?
+  expirationDate DateTime?
+
+  premiumUsd     Float?
+  commissionRate Float?
+
+  /// SUBMITTED, QUOTED, BOUND, RENEWED, DECLINED or LAPSED.
+  status String
+  notes  String?
+
+  /// Email of whoever last touched the row, shown in the grid footer.
+  updatedByEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workbookId, sortOrder])
+  @@index([status])
+  @@index([lineOfBusiness])
 }
 
 /// Retail agency — "the Jakes". Independent, unrelated agencies that place

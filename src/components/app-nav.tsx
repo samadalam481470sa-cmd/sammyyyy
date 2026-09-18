@@ -5,32 +5,66 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { clsx } from "clsx";
+import {
+  BarChart3,
+  BriefcaseBusiness,
+  Building2,
+  ContactRound,
+  GitMerge,
+  Menu,
+  Sheet,
+  Store,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: {
+  href: string;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+}[] = [
   {
     href: "/",
     label: "Executive overview",
     hint: "Platform and pipeline at a glance",
+    icon: BarChart3,
+  },
+  {
+    href: "/spreadsheets",
+    label: "Insurance spreadsheet",
+    hint: "Shared policy and submission register",
+    icon: Sheet,
+  },
+  {
+    href: "/clients",
+    label: "Clients & follow-ups",
+    hint: "Insurance CRM, renewals and Outlook tasks",
+    icon: ContactRound,
   },
   {
     href: "/pipeline",
     label: "M&A pipeline",
     hint: "Targets in market, Best in Class screening",
+    icon: BriefcaseBusiness,
   },
   {
     href: "/portfolio",
     label: "Aggregated portfolio",
     hint: "The one platform view of acquired MGAs",
+    icon: Building2,
   },
   {
     href: "/synergies",
     label: "Synergy analysis",
     hint: "Overlaps, white space and cross-sell",
+    icon: GitMerge,
   },
   {
     href: "/agencies",
     label: "Retail agencies",
     hint: "Every retailer, by MGA",
+    icon: Store,
   },
 ];
 
@@ -55,7 +89,8 @@ export function AppNav() {
           aria-controls="mobile-nav"
           className="rounded-md border border-navy-700 px-3 py-1.5 text-xs font-semibold text-navy-100"
         >
-          {mobileOpen ? "Close" : "Menu"}
+          {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+          <span className="sr-only">{mobileOpen ? "Close" : "Menu"}</span>
         </button>
       </div>
 
@@ -77,7 +112,10 @@ export function AppNav() {
                       : "text-navy-200 hover:bg-navy-900 hover:text-white",
                   )}
                 >
-                  {item.label}
+                  <span className="flex items-center gap-2">
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -106,7 +144,8 @@ export function AppNav() {
                         : "text-navy-200 hover:bg-navy-900 hover:text-white",
                     )}
                   >
-                    <span className="block text-sm font-medium">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <item.icon className="size-4 shrink-0" />
                       {item.label}
                     </span>
                     <span
