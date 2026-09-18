@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0c1f33;
+  --ink-soft: #24384d;
+  --fog: #eef3f6;
+  --paper: #f7fafb;
+  --line: #c5d2dc;
+  --teal: #1f6f78;
+  --teal-deep: #15545b;
+  --bronze: #9a7348;
+  --signal: #c45c26;
+  --good: #1b7a4e;
+  --muted: #5a7080;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-fog: var(--fog);
+  --color-paper: var(--paper);
+  --color-line: var(--line);
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-bronze: var(--bronze);
+  --color-signal: var(--signal);
+  --color-good: var(--good);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #d7e8ec 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #e8dfd2 0%, transparent 50%),
+    linear-gradient(180deg, #f4f8fa 0%, #eef3f6 40%, #e8eef2 100%);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.02em;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes fade-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.55s ease-out both;
+}
+
+.animate-bar {
+  transform-origin: bottom;
+  animation: bar-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-slide {
+  animation: fade-slide 0.4s ease-out both;
+}
