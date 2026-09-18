@@ -1,0 +1,173 @@
+// Newport Specialty Partners — MGA roll-up CRM / portfolio platform
+//
+// Minimum viable schema. Four tables, one direction of ownership:
+//
+//   Mga (1) ──< FinancialPeriod    historical EBITDA, one row per fiscal year
+//   Mga (1) ──< InsuranceProgram   line of business / coverage / region tags
+//   Mga (1) ──< RetailAgency       "the Jakes" — independent retailers the MGA distributes through
+//
+// Provider is SQLite so the whole platform runs with no database server. The
+// model is intentionally Postgres-portable: no SQLite-specific types are used,
+// and every field marked "@db"-free maps 1:1 onto Postgres. The one thing that
+// changes on migration is that the String status/stage columns become native
+// Postgres enums. See docs/SCHEMA.md for the field-by-field rationale and the
+// list of decisions still open for Mary's confirmation.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Managing General Agent — the primary account entity in the CRM.
+/// Every other table in the platform hangs off this one.
+model Mga {
+  id   String @id @default(cuid())
+  /// URL-safe identifier used for deep links, e.g. /mgas/harborline-underwriters
+  slug String @unique
+  name String
+
+  // ---- Pipeline vs. platform -------------------------------------------------
+  /// Two-bucket lifecycle required by the spec: PIPELINE or ON_PLATFORM.
+  /// Values come from MGA_STATUS in src/lib/taxonomy.ts.
+  status String
+  /// Finer-grained corp-dev stage inside the PIPELINE bucket
+  /// (SOURCED, QUALIFIED, DILIGENCE, UNDER_LOI) or CLOSED once on platform.
+  /// PASSED records a target the team declined, so the reason survives.
+  stage  String
+
+  // ---- Operator profile ------------------------------------------------------
+  /// Years the MGA has been underwriting. Newport's thesis targets 20-30+.
+  yearsOfExperience Int
+  foundedYear       Int
+  /// Founder / principal underwriter — the relationship owner on the MGA side.
+  principalName     String
+  headquartersCity  String
+  headquartersState String
+  /// Region tag for the MGA as a whole; individual programs carry their own.
+  primaryRegion     String
+  employeeCount     Int?
+  website           String?
+
+  // ---- Deal facts ------------------------------------------------------------
+  /// Null until the deal closes.
+  acquisitionDate     DateTime?
+  /// Enterprise value at close, in whole US dollars.
+  enterpriseValueUsd  Float?
+  /// EV / trailing EBITDA at close for platform companies; ask multiple for pipeline.
+  ebitdaMultiple      Float?
+  /// Newport's ownership after close, 0-100.
+  ownershipPercent    Float?
+  /// Internal corp-dev owner of the relationship.
+  dealLead            String?
+  /// Free-text diligence notes surfaced on the MGA detail screen.
+  notes               String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  financials     FinancialPeriod[]
+  programs       InsuranceProgram[]
+  retailAgencies RetailAgency[]
+
+  @@index([status])
+  @@index([primaryRegion])
+}
+
+/// One fiscal year of financials for one MGA. The time series behind every
+/// EBITDA growth number on the dashboards — year-over-year deltas and CAGR are
+/// derived from these rows, never stored, so the math can never drift from the
+/// inputs.
+model FinancialPeriod {
+  id    String @id @default(cuid())
+  mgaId String
+  mga   Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  fiscalYear Int
+  revenueUsd Float
+  /// EBITDA as Mary defines it: earnings before interest, bad debt and taxes.
+  ebitdaUsd  Float
+  /// Bad-debt add-back included in ebitdaUsd, kept separately so the platform
+  /// can also report a conventional EBITDA that excludes it.
+  badDebtAddbackUsd Float?
+  /// Gross written premium placed through the MGA in the year.
+  writtenPremiumUsd Float
+
+  /// True once a year has audited statements behind it.
+  isAudited   Boolean @default(false)
+  /// True for management projections on pipeline targets. The pipeline
+  /// dashboard can exclude projected years so growth is not flattered by them.
+  isProjected Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mgaId, fiscalYear])
+  @@index([fiscalYear])
+}
+
+/// An insurance program written by an MGA. A single MGA runs several. These
+/// rows carry the three tags the synergy analysis joins on.
+model InsuranceProgram {
+  id    String @id @default(cuid())
+  mgaId String
+  mga   Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Tag values are drawn from the canonical lists in src/lib/taxonomy.ts.
+  /// Keeping them as normalised strings (rather than lookup tables) is what
+  /// makes overlap detection an exact match instead of fuzzy comparison.
+  lineOfBusiness  String
+  coverageType    String
+  geographicRegion String
+
+  /// Carrier whose paper the program is written on — the binding constraint on
+  /// moving a program between MGAs after an acquisition.
+  carrierPartner    String?
+  writtenPremiumUsd Float
+  /// Loss ratio as a decimal, e.g. 0.58 for 58%.
+  lossRatio         Float?
+  isActive          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([mgaId])
+  @@index([lineOfBusiness])
+  @@index([coverageType])
+  @@index([geographicRegion])
+}
+
+/// Retail agency — "the Jakes". Independent, unrelated agencies that place
+/// business through an MGA. Modelled here as one-to-many off the MGA per spec
+/// (`Associated_MGA` foreign key); see docs/SCHEMA.md for the open question
+/// about retailers that appoint with more than one platform MGA.
+model RetailAgency {
+  id    String @id @default(cuid())
+  mgaId String
+  mga   Mga    @relation(fields: [mgaId], references: [id], onDelete: Cascade)
+
+  name String
+  /// The individual producer who owns the relationship — the actual "Jake".
+  principalName String
+  city  String
+  state String
+  region String
+
+  appointedOn DateTime?
+  /// Premium this retailer placed through the MGA in the trailing 12 months.
+  annualPremiumPlacedUsd Float?
+  policyCount            Int?
+  isActive               Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([mgaId])
+  @@index([region])
+}

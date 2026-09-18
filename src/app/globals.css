@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/**
+ * Design tokens for the Newport platform.
+ *
+ * The palette is a deep institutional navy with a single gold accent reserved
+ * for one meaning only: a target that clears the acquisition thesis, or a tag
+ * that overlaps across the portfolio. Growth is green, decline is red, and
+ * nothing else on the screen competes for those colours.
+ */
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+
+  --color-navy-50: #f2f7fb;
+  --color-navy-100: #e2ecf6;
+  --color-navy-200: #c3d8ec;
+  --color-navy-300: #92badf;
+  --color-navy-400: #5a95cd;
+  --color-navy-500: #2f72b3;
+  --color-navy-600: #245c92;
+  --color-navy-700: #1d4a75;
+  --color-navy-800: #16395a;
+  --color-navy-900: #102c46;
+  --color-navy-950: #0b1f33;
+
+  --color-gold-50: #fdf8ed;
+  --color-gold-100: #f9ecca;
+  --color-gold-200: #f2d795;
+  --color-gold-300: #e9bb5b;
+  --color-gold-400: #e1a233;
+  --color-gold-500: #c9851d;
+  --color-gold-600: #a66518;
+  --color-gold-700: #854b18;
+  --color-gold-800: #6f3d19;
+  --color-gold-900: #5f3418;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-slate-50);
+  color: var(--color-slate-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every figure on the platform is compared against the figure above it, so all
+   numerals are tabular by default. */
+table,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollable panels keep a visible but unobtrusive scrollbar so a truncated
+   matrix or long table is discoverable. */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+
+.thin-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.thin-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--color-slate-300);
+  border-radius: 9999px;
+}
+
+.thin-scroll::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
