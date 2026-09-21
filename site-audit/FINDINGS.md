@@ -80,13 +80,23 @@ the boot when `appUrl` resolves to localhost outside development so this cannot 
 
 Checks: `unprotected-route-scan`, `swallowed-api-error-scan`
 
-`/scan` returns HTTP 200 to a signed-out visitor and renders the full "Set up this gate" screen.
-Its own data call, `GET /api/seller/events`, is correctly rejected with 401 — so the event picker
-is empty, the "Cache event for offline scanning" button is disabled, and nothing explains why.
-The home page links to `/scan` publicly ("Gate scanner"), so this is the first thing gate staff
-hit before signing in.
+Which entry path you use decides whether the guard works, and the one that fails is the one gate
+staff actually use:
 
-`/dashboard` gets this right: it answers `302 → /sign-in?redirect=/dashboard` from the server.
+| How `/scan` is opened | What happens |
+| --- | --- |
+| Clicking "Gate scanner" inside the running app | Correctly redirected to `/sign-in?redirect=/scan` |
+| Opening `/scan` directly — bookmark, saved link, home-screen launch, hard reload | HTTP 200, the scanner renders, no redirect |
+
+Compare `/dashboard`, which answers `302 → /sign-in?redirect=/dashboard` from the server on a cold
+load. `/scan` answers 200 and lets the client render the whole "Set up this gate" screen. Its own
+data call, `GET /api/seller/events`, is then correctly rejected with 401 — so the event picker is
+empty, "Cache event for offline scanning" is disabled, and nothing on screen explains why.
+
+That cold-load path is not an edge case. The web manifest's `start_url` is `/scan`, a gate device
+is set up once and reopened from a bookmark or home-screen icon every shift, and a reload at the
+gate is the first thing anyone tries when the scanner misbehaves.
+
 `/scan` is only guarded on the client, by the `seller` route middleware:
 
 ```js
@@ -98,9 +108,10 @@ export default defineNuxtRouteMiddleware((to) => {
 });
 ```
 
-The guard is a no-op whenever `isLoaded` is still false, which is the case on a cold load, and
-route middleware does not re-run when `isLoaded` later flips to true. So the visitor is stranded
-on a page that cannot work.
+The guard does nothing while `isLoaded` is still false. On an in-app navigation Clerk has long
+since loaded, so the redirect fires — which is why clicking the link looks fine. On a cold load the
+middleware runs before Clerk is ready, returns nothing, and route middleware does not re-run when
+`isLoaded` later flips to true. The visitor is left on a page that cannot work.
 
 Fix: protect `/scan` server-side, the way `/dashboard` already is, so the redirect happens before
 any HTML is produced. Keep the client middleware as a second line of defence, but make it wait

@@ -137,12 +137,12 @@ export async function auditRoutes({ browser, baseUrl, config, findings, axeSourc
       findings.add({
         id: `unprotected-route${route.path.replace(/\//g, '-')}`,
         severity: 'high',
-        title: `Protected route ${route.path} renders for a signed-out visitor`,
+        title: `Protected route ${route.path} renders for a signed-out visitor on a cold load`,
         where: route.path,
-        evidence: `HTTP ${status}, final URL ${relativeFinalUrl}, still rendering "${truncate(head.bodyText, 160)}"${
+        evidence: `Opened directly (no in-app navigation): HTTP ${status}, final URL ${relativeFinalUrl}, still rendering "${truncate(head.bodyText, 160)}"${
           apiDenials.length ? `. Its own data calls were rejected: ${apiDenials.map((r) => `${r.status} ${r.url.replace(origin, '')}`).join(', ')}` : ''
         }.`,
-        fix: `Guard ${route.path} the same way /dashboard is guarded (server-side, before the page renders). The client-only route middleware no-ops while Clerk is still loading, so it never fires on a cold load.`,
+        fix: `Guard ${route.path} the same way /dashboard is guarded (server-side, before the page renders). A client-only route middleware that checks \`isLoaded\` first does fire on in-app navigation but no-ops on a cold load, and it never re-runs once the auth state arrives.`,
       });
 
       if (apiDenials.length && !/sign in|sign-in|not authorised|not authorized|no access|unauthori/i.test(head.bodyText)) {
