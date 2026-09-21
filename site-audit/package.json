@@ -1,0 +1,15 @@
+{
+  "name": "thenetticket-site-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Black-box bug audit for the deployed TheNetTicket site (ticket.thenetvr.com).",
+  "scripts": {
+    "audit": "node audit.mjs",
+    "audit:json": "node audit.mjs --quiet"
+  },
+  "devDependencies": {
+    "axe-core": "4.10.2",
+    "playwright": "1.55.0"
+  }
+}

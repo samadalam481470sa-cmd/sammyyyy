@@ -1,0 +1,22 @@
+{
+  "baseUrl": "https://ticket.thenetvr.com",
+  "expectedLang": "en",
+  "routes": [
+    { "path": "/", "role": "marketing" },
+    { "path": "/sign-in", "role": "auth" },
+    { "path": "/sign-up", "role": "auth" },
+    { "path": "/legal/terms", "role": "content" },
+    { "path": "/legal/privacy", "role": "content" },
+    { "path": "/legal/refunds", "role": "content" },
+    { "path": "/dashboard", "role": "protected" },
+    { "path": "/dashboard/orders", "role": "protected" },
+    { "path": "/dashboard/box-office", "role": "protected" },
+    { "path": "/dashboard/staff", "role": "protected" },
+    { "path": "/dashboard/settings", "role": "protected" },
+    { "path": "/scan", "role": "protected", "pwa": true, "mustWorkOffline": true },
+    { "path": "/venue/audit-probe-venue/audit-probe-event", "role": "buyer", "expectNotFound": true },
+    { "path": "/tickets/audit-probe-token", "role": "buyer", "expectNotFound": true }
+  ],
+  "signInPath": "/sign-in",
+  "healthPath": "/api/health"
+}
