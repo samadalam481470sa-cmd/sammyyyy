@@ -1,4 +1,4 @@
-import '@fontsource-variable/inter';
+import '@fontsource-variable/source-sans-3';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';

@@ -10,7 +10,7 @@ export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen">
       <Sidebar
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((value) => !value)}
@@ -25,7 +25,7 @@ export function AppShell() {
         )}
       >
         <TopHeader onOpenNav={() => setMobileNavOpen(true)} />
-        <main className="flex-1">
+        <main className="relative flex-1">
           <Outlet />
         </main>
       </div>

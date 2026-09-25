@@ -26,7 +26,7 @@ npm run dev      # http://localhost:5173
 
 ## Stack
 
-React 19 · TypeScript · Vite · Tailwind CSS v4 · React Router · Recharts · Lucide React.
+React 19 · TypeScript · Vite · Tailwind CSS v4 · React Router · Recharts · Lucide React · Source Sans 3.
 
 ## Project structure
 
