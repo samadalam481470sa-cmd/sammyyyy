@@ -58,14 +58,14 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', enabled: true },
-  { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: false },
-  { id: 'relationships', label: 'Relationships', path: '/relationships', enabled: false },
-  { id: 'tasks', label: 'Tasks & Follow-Ups', path: '/tasks', enabled: false },
-  { id: 'sources', label: 'Sources / Bankers', path: '/sources', enabled: false },
-  { id: 'carriers', label: 'Carriers / Reinsurers', path: '/carriers', enabled: false },
-  { id: 'portfolio', label: 'Portfolio Companies', path: '/portfolio', enabled: false },
-  { id: 'documents', label: 'Documents', path: '/documents', enabled: false },
-  { id: 'reports', label: 'Reports', path: '/reports', enabled: false },
+  { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: true },
+  { id: 'relationships', label: 'Relationships', path: '/relationships', enabled: true },
+  { id: 'tasks', label: 'Tasks & Follow-Ups', path: '/tasks', enabled: true },
+  { id: 'sources', label: 'Sources / Bankers', path: '/sources', enabled: true },
+  { id: 'carriers', label: 'Carriers / Reinsurers', path: '/carriers', enabled: true },
+  { id: 'portfolio', label: 'Portfolio Companies', path: '/portfolio', enabled: true },
+  { id: 'documents', label: 'Documents', path: '/documents', enabled: true },
+  { id: 'reports', label: 'Reports', path: '/reports', enabled: true },
 ]
 
 export const CURRENT_USER = {

@@ -60,27 +60,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <ul className="space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const Icon = ICONS[item.id] ?? Briefcase
-            if (!item.enabled) {
-              return (
-                <li key={item.id}>
-                  <div
-                    title={collapsed ? `${item.label} (Coming soon)` : undefined}
-                    className={`flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/35 ${
-                      collapsed ? 'justify-center px-2' : ''
-                    }`}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-                    {!collapsed && (
-                      <span className="truncate">
-                        {item.label}
-                        <span className="sr-only"> (Coming soon)</span>
-                      </span>
-                    )}
-                  </div>
-                </li>
-              )
-            }
-
             return (
               <li key={item.id}>
                 <NavLink
