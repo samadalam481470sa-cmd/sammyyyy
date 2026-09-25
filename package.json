@@ -1,0 +1,41 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samadalam481470sa-cmd/sammyyyy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/samadalam481470sa-cmd/sammyyyy/issues"
+  },
+  "homepage": "https://github.com/samadalam481470sa-cmd/sammyyyy#readme",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
