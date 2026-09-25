@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* Newport brand palette */
+  --color-navy-950: #060f1f;
+  --color-navy-900: #0a1930;
+  --color-navy-800: #0f2340;
+  --color-navy-700: #16304f;
+  --color-navy-600: #1e3d61;
+  --color-navy-500: #2c5378;
+
+  --color-accent-50: #eef7fc;
+  --color-accent-100: #d9edf7;
+  --color-accent-200: #b7dcef;
+  --color-accent-300: #8fc7e4;
+  --color-accent-400: #5fadd4;
+  --color-accent-500: #3d92bd;
+  --color-accent-600: #2c749a;
+  --color-accent-700: #235c7c;
+
+  --color-surface: #f6f8fb;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 6px -1px rgb(15 23 42 / 0.06);
+  --shadow-card-lg: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: #0f1729;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.card-shadow {
+  box-shadow: var(--shadow-card);
+}
+
+.card-shadow-lg {
+  box-shadow: var(--shadow-card-lg);
+}
