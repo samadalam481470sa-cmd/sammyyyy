@@ -44,6 +44,7 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
       <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
       <input
         type="search"
+        name="global-search"
         value={filters.search}
         onChange={(event) => onSearchChange(event.target.value)}
         placeholder="Search projects, companies, contacts..."
@@ -84,7 +85,7 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
           </p>
         </div>
 
-        <div className="hidden w-64 md:block xl:w-80">{searchField}</div>
+        <div className="hidden w-48 md:block lg:w-56 2xl:w-80">{searchField}</div>
 
         <div className="flex items-center gap-1.5 lg:gap-2">
           <button
@@ -109,13 +110,13 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
             className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-slate-100 lg:pr-2"
           >
             <Avatar name={`${CURRENT_USER.firstName} ${CURRENT_USER.lastName}`} size="md" />
-            <span className="hidden text-left leading-tight xl:block">
+            <span className="hidden text-left leading-tight 2xl:block">
               <span className="block text-[13px] font-medium text-navy-900">
                 {CURRENT_USER.firstName} {CURRENT_USER.lastName}
               </span>
               <span className="block text-[11px] text-slate-500">{CURRENT_USER.title}</span>
             </span>
-            <ChevronDown className="hidden size-4 text-slate-400 xl:block" />
+            <ChevronDown className="hidden size-4 text-slate-400 2xl:block" />
           </button>
 
           <Button
@@ -129,8 +130,8 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
             }
             className="ml-1 hidden sm:inline-flex"
           >
-            <span className="hidden lg:inline">New Opportunity</span>
-            <span className="lg:hidden">New</span>
+            <span className="hidden xl:inline">New Opportunity</span>
+            <span className="xl:hidden">New</span>
           </Button>
         </div>
       </div>

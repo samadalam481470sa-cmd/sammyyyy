@@ -54,6 +54,7 @@ export function NewportAI({ context }: NewportAIProps) {
         <div className="min-w-0 flex-1">
           <form onSubmit={onSubmit} className="relative">
             <input
+              name="newport-ai-question"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               placeholder="Ask about your acquisition pipeline..."

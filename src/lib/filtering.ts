@@ -88,13 +88,23 @@ export function describeFilters(filters: DashboardFilters): FilterChip[] {
 
 const PRIORITY_WEIGHT: Record<string, number> = { A: 0, B: 1, C: 2 };
 
+/** Deals still in play outrank concluded ones in the working list. */
+function statusWeight(status: OpportunityStatusId): number {
+  if (status === 'active') return 0;
+  if (status === 'pending') return 1;
+  return 2;
+}
+
 /**
- * Ordering for the Priority Deals table: what needs attention first, then the
- * team's A/B/C priority, then the deals furthest along the process.
+ * Ordering for the Priority Deals table: what needs attention first, then
+ * deals still in play, then the team's A/B/C priority and process stage.
  */
 export function sortPriorityDeals(views: OpportunityView[]): OpportunityView[] {
   return [...views].sort((a, b) => {
     if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
+
+    const statusDelta = statusWeight(a.status) - statusWeight(b.status);
+    if (statusDelta !== 0) return statusDelta;
 
     const priorityDelta = (PRIORITY_WEIGHT[a.priority] ?? 9) - (PRIORITY_WEIGHT[b.priority] ?? 9);
     if (priorityDelta !== 0) return priorityDelta;

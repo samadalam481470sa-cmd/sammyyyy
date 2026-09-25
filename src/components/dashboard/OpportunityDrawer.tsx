@@ -5,7 +5,12 @@ import {
   getPriority,
   getSourceType,
 } from '../../config/picklists';
-import { formatCurrencyCompact, formatDateLong, formatDueLabel } from '../../lib/format';
+import {
+  formatCurrencyCompact,
+  formatDateLong,
+  formatDueLabel,
+  formatRelativeTime,
+} from '../../lib/format';
 import type { OpportunityView } from '../../types';
 import { Avatar } from '../ui/Avatar';
 import { StageBadge, StatusBadge } from '../ui/Badge';
@@ -96,7 +101,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
         )}
         <DetailRow
           label="Last activity"
-          value={`${formatDateLong(opportunity.lastActivityDate)} (${opportunity.daysSinceLastActivity} days ago)`}
+          value={`${formatDateLong(opportunity.lastActivityDate)} · ${formatRelativeTime(opportunity.lastActivityDate)}`}
         />
         {opportunity.criticalDate ? (
           <DetailRow

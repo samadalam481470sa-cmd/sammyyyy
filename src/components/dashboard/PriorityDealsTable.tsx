@@ -73,16 +73,16 @@ export function PriorityDealsTable({
         <div className="scrollbar-slim overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-sm">
             <colgroup>
+              <col style={{ width: '13.5%' }} />
               <col style={{ width: '14%' }} />
-              <col style={{ width: '15%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '10%' }} />
+              <col style={{ width: '9.5%' }} />
               <col style={{ width: '11%' }} />
               <col style={{ width: '7%' }} />
               <col style={{ width: '8%' }} />
               <col style={{ width: '8%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '9%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '10%' }} />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">

@@ -52,19 +52,20 @@ export function PipelineOverview({
       />
 
       <div className="scrollbar-slim overflow-x-auto px-5 py-5">
-        <ol className="flex min-w-[860px] items-stretch gap-1">
+        {/* One continuous row on desktop; a grid on narrower screens. */}
+        <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:flex xl:min-w-[900px] xl:items-stretch xl:gap-0.5">
           {stages.map((stage, index) => {
             const selected = stage.id === selectedStage;
             const empty = stage.count === 0;
 
             return (
-              <li key={stage.id} className="flex min-w-0 flex-1 items-stretch">
+              <li key={stage.id} className="flex min-w-0 items-stretch xl:flex-1">
                 <button
                   type="button"
                   onClick={() => onSelectStage(stage.id)}
                   aria-pressed={selected}
                   className={clsx(
-                    'flex w-full min-w-0 flex-col rounded-xl border px-3 py-3 text-left transition-all duration-150',
+                    'flex w-full min-w-0 flex-col rounded-xl border px-2.5 py-3 text-left transition-all duration-150',
                     selected
                       ? 'border-navy-900 bg-navy-900 text-white shadow-card-hover'
                       : empty
@@ -74,7 +75,7 @@ export function PipelineOverview({
                 >
                   <span
                     className={clsx(
-                      'truncate text-[10.5px] font-semibold uppercase tracking-[0.08em]',
+                      'line-clamp-2 min-h-[26px] text-[10px] font-semibold uppercase leading-[1.3] tracking-[0.04em]',
                       selected ? 'text-navy-200' : empty ? 'text-slate-400' : 'text-slate-500',
                     )}
                     title={stage.label}
@@ -119,7 +120,7 @@ export function PipelineOverview({
                 {index < stages.length - 1 ? (
                   <ChevronRight
                     aria-hidden="true"
-                    className="size-4 shrink-0 self-center text-slate-300"
+                    className="hidden size-3.5 shrink-0 self-center text-slate-300 xl:block"
                   />
                 ) : null}
               </li>
