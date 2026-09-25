@@ -10,17 +10,19 @@ interface PipelineOverviewProps {
   onSelectStage: (stage: StageId | null) => void
 }
 
-const ARROW = 14
+const ARROW = 18
+/** How far each stage tucks under the previous one. Less than ARROW, so a chevron-shaped gap stays visible. */
+const OVERLAP = 8
 
 /** Salesforce Path chevron. The first stage is flat on the left; the last is flat on the right. */
 function chevronClip(index: number, last: number): string {
   if (index === 0) {
-    return `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%)`
+    return `polygon(0% 0%, calc(100% - ${ARROW}px) 0%, 100% 50%, calc(100% - ${ARROW}px) 100%, 0% 100%)`
   }
   if (index === last) {
-    return `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${ARROW}px 50%)`
+    return `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, ${ARROW}px 50%)`
   }
-  return `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%, ${ARROW}px 50%)`
+  return `polygon(0% 0%, calc(100% - ${ARROW}px) 0%, 100% 50%, calc(100% - ${ARROW}px) 100%, 0% 100%, ${ARROW}px 50%)`
 }
 
 /**
@@ -67,7 +69,7 @@ export function PipelineOverview({
               <li
                 key={stage.id}
                 className="relative min-w-0 flex-1"
-                style={{ marginLeft: index === 0 ? 0 : -ARROW, zIndex: last - index + 1 }}
+                style={{ marginLeft: index === 0 ? 0 : -OVERLAP, zIndex: last - index + 1 }}
               >
                 <button
                   type="button"
@@ -84,7 +86,7 @@ export function PipelineOverview({
                 >
                   <span
                     className="block"
-                    style={{ paddingLeft: index === 0 ? 14 : ARROW + 10, paddingRight: 18 }}
+                    style={{ paddingLeft: index === 0 ? 12 : ARROW + 8, paddingRight: ARROW + 6 }}
                   >
                     <span className="line-clamp-2 text-[10px] leading-tight font-bold tracking-wide uppercase">
                       {stage.label}
