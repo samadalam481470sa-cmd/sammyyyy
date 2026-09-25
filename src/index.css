@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Source Sans 3", "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+
+  --color-navy-950: #071422;
+  --color-navy-900: #0b1c2e;
+  --color-navy-800: #143049;
+  --color-navy-700: #1e4466;
+  --color-navy-600: #2c5f86;
+  --color-accent-100: #e7f1f8;
+  --color-accent-300: #9fc0d8;
+  --color-accent-500: #4e86b0;
+  --color-ink: #152433;
+  --color-muted: #5c6c7c;
+  --color-line: #e4e8ed;
+  --color-canvas: #f4f6f8;
+  --color-sand: #f8f4ec;
+  --color-amber: #8c5e1a;
+  --color-amber-soft: #f8f4ec;
+  --color-danger: #8e3b42;
+  --color-danger-soft: #f8eeee;
+  --color-positive: #1f6b45;
+  --color-positive-soft: #e7f0ea;
+}
+
+@layer components {
+  .card {
+    border-radius: 1rem;
+    border: 1px solid var(--color-line);
+    background: #fff;
+    box-shadow:
+      0 1px 2px rgb(15 35 55 / 0.04),
+      0 12px 32px rgb(15 35 55 / 0.04);
+  }
+
+  .card-attention {
+    border-color: rgb(140 94 26 / 0.28);
+    background: linear-gradient(180deg, #fffdf8 0%, #fff 48%);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: 0.65rem;
+    border: 1px solid var(--color-line);
+    background: #fff;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+  }
+
+  .field:focus {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 1px;
+    border-color: transparent;
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-canvas);
+}
+
+::selection {
+  background: #d6e6f2;
+  color: #0b1c2e;
+}
+
+.app-shell {
+  min-height: 100vh;
+  --sidebar-width: 248px;
+}
+
+.app-main {
+  min-width: 0;
+  margin-left: 0;
+  transition: margin-left 180ms ease;
+}
+
+.app-sidebar {
+  width: 248px;
+  transition: width 180ms ease;
+}
+
+@media (min-width: 1024px) {
+  .app-main {
+    margin-left: var(--sidebar-width);
+  }
+
+  .app-shell[data-sidebar="collapsed"] {
+    --sidebar-width: 76px;
+  }
+
+  .app-shell[data-sidebar="collapsed"] .app-sidebar {
+    width: 76px;
+  }
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #d5dde6 transparent;
+}
+
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-main,
+  .app-sidebar {
+    transition: none;
+  }
+}
