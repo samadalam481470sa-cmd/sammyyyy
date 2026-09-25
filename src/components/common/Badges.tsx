@@ -7,24 +7,21 @@ import {
   TASK_PRIORITIES,
 } from '../../config/picklists'
 
-/**
- * Restrained badge styling per status. Status and stage are rendered by
- * distinct components to reinforce that they are separate concepts.
- */
+/** Salesforce Lightning badge colors. Status and stage stay visually distinct. */
 const STATUS_STYLES: Record<StatusId, string> = {
-  active: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  pending: 'bg-amber-50 text-amber-700 ring-amber-200',
-  inactive: 'bg-slate-100 text-slate-600 ring-slate-200',
-  closed: 'bg-slate-100 text-slate-600 ring-slate-200',
-  declined: 'bg-rose-50 text-rose-700 ring-rose-200',
-  withdrew: 'bg-slate-100 text-slate-600 ring-slate-200',
-  completed: 'bg-navy-50 text-navy-700 ring-navy-200',
+  active: 'bg-[#cdefc4] text-[#194e31]',
+  pending: 'bg-[#f9e3b6] text-[#5c3404]',
+  inactive: 'bg-[#ecebea] text-[#444444]',
+  closed: 'bg-[#ecebea] text-[#444444]',
+  declined: 'bg-[#fddde3] text-[#8e030f]',
+  withdrew: 'bg-[#ecebea] text-[#444444]',
+  completed: 'bg-brand-100 text-brand-700',
 }
 
 export function StatusBadge({ status }: { status: StatusId }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${STATUS_STYLES[status]}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[status]}`}
     >
       {statusLabel(status)}
     </span>
@@ -33,16 +30,16 @@ export function StatusBadge({ status }: { status: StatusId }) {
 
 export function StageBadge({ stage }: { stage: StageId }) {
   return (
-    <span className="inline-flex items-center rounded-md bg-navy-50 px-2 py-0.5 text-[11px] font-medium text-navy-700 ring-1 ring-inset ring-navy-100">
+    <span className="inline-flex items-center rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
       {stageLabel(stage)}
     </span>
   )
 }
 
 const PRIORITY_STYLES: Record<TaskPriorityId, string> = {
-  A: 'bg-navy-900 text-white',
-  B: 'bg-navy-100 text-navy-800',
-  C: 'bg-slate-100 text-slate-500',
+  A: 'bg-brand-500 text-white',
+  B: 'bg-hub-500 text-white',
+  C: 'bg-[#ecebea] text-[#444444]',
 }
 
 export function PriorityBadge({ priority }: { priority: TaskPriorityId }) {
@@ -50,7 +47,7 @@ export function PriorityBadge({ priority }: { priority: TaskPriorityId }) {
   return (
     <span
       title={meta?.label}
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-bold ${PRIORITY_STYLES[priority]}`}
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-[3px] text-[11px] font-bold ${PRIORITY_STYLES[priority]}`}
     >
       {priority}
     </span>

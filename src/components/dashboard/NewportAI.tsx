@@ -9,7 +9,7 @@ const SUGGESTED_PROMPTS = [
 ]
 
 /**
- * UI prototype for the Newport AI assistant.
+ * UI prototype for the Newport AI assistant, styled like an in-app assistant panel.
  *
  * `submitPrompt` is the future integration point: replace its stub body with a
  * call to the AI backend and render streamed responses in place of the notice.
@@ -30,56 +30,58 @@ export function NewportAI() {
   }
 
   return (
-    <section className="rounded-xl border border-navy-100 bg-gradient-to-br from-navy-50/80 to-white p-5 shadow-sm">
-      <div className="flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-navy-900 text-accent-300">
-          <Sparkles className="h-4 w-4" />
+    <section className="overflow-hidden rounded-[4px] border border-line bg-white shadow-[0_2px_2px_rgba(0,0,0,0.05)]">
+      <div className="flex items-center gap-2 border-b border-line bg-[#f4f8fe] px-4 py-2.5">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-500 text-white">
+          <Sparkles className="h-3.5 w-3.5" />
         </span>
-        <h2 className="text-[15px] font-semibold text-navy-900">Newport AI</h2>
-        <span className="ml-auto rounded-full bg-navy-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-600">
+        <h2 className="text-[13px] font-bold text-ink">Newport AI</h2>
+        <span className="ml-auto rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-bold tracking-wide text-brand-700 uppercase">
           Preview
         </span>
       </div>
 
-      <form onSubmit={handleSubmit} className="relative mt-3">
-        <input
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Ask about your acquisition pipeline..."
-          className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3 pr-10 text-[13px] text-slate-800 placeholder:text-slate-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
-        />
-        <button
-          type="submit"
-          aria-label="Ask Newport AI"
-          className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md bg-navy-900 text-white transition-colors hover:bg-navy-700"
-        >
-          <SendHorizonal className="h-3.5 w-3.5" />
-        </button>
-      </form>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {SUGGESTED_PROMPTS.map((suggestion) => (
+      <div className="px-4 py-3">
+        <form onSubmit={handleSubmit} className="relative">
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Ask about your acquisition pipeline..."
+            className="h-9 w-full rounded-[4px] border border-[#c9c9c9] bg-white pl-3 pr-10 text-[13px] text-ink placeholder:text-muted focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
           <button
-            key={suggestion}
-            type="button"
-            onClick={() => {
-              setPrompt(suggestion)
-              submitPrompt(suggestion)
-            }}
-            className="rounded-full border border-navy-100 bg-white px-2.5 py-1 text-[11px] font-medium text-navy-700 transition-colors hover:border-navy-300 hover:bg-navy-50"
+            type="submit"
+            aria-label="Ask Newport AI"
+            className="absolute top-1/2 right-1 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[4px] bg-brand-500 text-white transition-colors hover:bg-brand-600"
           >
-            {suggestion}
+            <SendHorizonal className="h-3.5 w-3.5" />
           </button>
-        ))}
-      </div>
+        </form>
 
-      {submitted && (
-        <div className="mt-3 rounded-lg border border-navy-100 bg-white px-3 py-2.5 text-xs text-slate-500">
-          <span className="font-medium text-navy-800">“{submitted}”</span> — Newport AI responses
-          will be connected in a future sprint.
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {SUGGESTED_PROMPTS.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => {
+                setPrompt(suggestion)
+                submitPrompt(suggestion)
+              }}
+              className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-50"
+            >
+              {suggestion}
+            </button>
+          ))}
         </div>
-      )}
+
+        {submitted && (
+          <div className="mt-3 rounded-[4px] border border-line bg-canvas px-3 py-2.5 text-xs text-muted">
+            <span className="font-semibold text-ink">“{submitted}”</span> — Newport AI responses
+            will be connected in a future sprint.
+          </div>
+        )}
+      </div>
     </section>
   )
 }

@@ -1,4 +1,3 @@
-import { ChevronRight } from 'lucide-react'
 import { STAGES, type StageId } from '../../config/picklists'
 import type { EnrichedOpportunity } from '../../types'
 import { formatMoney } from '../../lib/format'
@@ -11,8 +10,21 @@ interface PipelineOverviewProps {
   onSelectStage: (stage: StageId | null) => void
 }
 
+const ARROW = 14
+
+/** Salesforce Path chevron. The first stage is flat on the left; the last is flat on the right. */
+function chevronClip(index: number, last: number): string {
+  if (index === 0) {
+    return `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%)`
+  }
+  if (index === last) {
+    return `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${ARROW}px 50%)`
+  }
+  return `polygon(0 0, calc(100% - ${ARROW}px) 0, 100% 50%, calc(100% - ${ARROW}px) 100%, 0 100%, ${ARROW}px 50%)`
+}
+
 /**
- * Horizontal stage visualization of the acquisition process.
+ * Acquisition stages drawn as a Salesforce-style path.
  * Clicking a stage filters the Priority Deals table below.
  */
 export function PipelineOverview({
@@ -28,17 +40,18 @@ export function PipelineOverview({
       nwp: deals.reduce((sum, o) => sum + o.nwp, 0),
     }
   })
+  const last = byStage.length - 1
 
   return (
     <Card
       title="Acquisition Pipeline"
-      subtitle="Deals by acquisition stage — select a stage to filter the table below"
+      subtitle="Select a stage to filter the deals below"
       actions={
         selectedStage && (
           <button
             type="button"
             onClick={() => onSelectStage(null)}
-            className="text-xs font-medium text-navy-600 hover:text-navy-800"
+            className="text-xs font-semibold text-brand-500 hover:text-brand-700 hover:underline"
           >
             Show all stages
           </button>
@@ -46,65 +59,44 @@ export function PipelineOverview({
       }
     >
       <div className="-mx-1 overflow-x-auto pb-1">
-        <ol className="flex min-w-[900px] items-stretch gap-1 px-1">
+        <ol className="flex min-w-[1080px] items-stretch px-1">
           {byStage.map((stage, index) => {
             const selected = selectedStage === stage.id
             const empty = stage.count === 0
             return (
-              <li key={stage.id} className="flex min-w-0 flex-1 items-stretch gap-1">
+              <li
+                key={stage.id}
+                className="relative min-w-0 flex-1"
+                style={{ marginLeft: index === 0 ? 0 : -ARROW, zIndex: last - index + 1 }}
+              >
                 <button
                   type="button"
                   onClick={() => onSelectStage(selected ? null : stage.id)}
                   aria-pressed={selected}
-                  className={`flex min-w-0 flex-1 flex-col rounded-lg border px-3 py-3 text-left transition-all ${
+                  style={{ clipPath: chevronClip(index, last) }}
+                  className={`flex h-[78px] w-full flex-col justify-center text-left transition-[filter] hover:brightness-95 ${
                     selected
-                      ? 'border-navy-600 bg-navy-900 shadow-md'
+                      ? 'bg-brand-500 text-white'
                       : empty
-                        ? 'border-slate-100 bg-slate-50/60 hover:border-slate-200'
-                        : 'border-slate-200 bg-white hover:border-navy-300 hover:shadow-sm'
+                        ? 'bg-[#ecebea] text-muted'
+                        : 'bg-brand-100 text-brand-900'
                   }`}
                 >
                   <span
-                    className={`h-1 w-full rounded-full ${
-                      selected ? 'bg-accent-400' : empty ? 'bg-slate-200' : 'bg-navy-200'
-                    }`}
-                    style={
-                      !selected && !empty
-                        ? {
-                            backgroundColor: `color-mix(in srgb, var(--color-navy-800) ${
-                              25 + (index / (byStage.length - 1)) * 75
-                            }%, var(--color-navy-100))`,
-                          }
-                        : undefined
-                    }
-                  />
-                  <span
-                    className={`mt-2.5 line-clamp-2 text-[11px] font-semibold leading-tight ${
-                      selected ? 'text-white' : empty ? 'text-slate-400' : 'text-slate-600'
-                    }`}
+                    className="block"
+                    style={{ paddingLeft: index === 0 ? 14 : ARROW + 10, paddingRight: 18 }}
                   >
-                    {stage.label}
-                  </span>
-                  <span
-                    className={`mt-1.5 text-xl font-semibold tracking-tight ${
-                      selected ? 'text-white' : empty ? 'text-slate-300' : 'text-navy-900'
-                    }`}
-                  >
-                    {stage.count}
-                  </span>
-                  <span
-                    className={`mt-0.5 text-[11px] ${
-                      selected ? 'text-navy-200' : 'text-slate-400'
-                    }`}
-                  >
-                    {stage.count > 0 ? `${formatMoney(stage.nwp)} NWP` : '—'}
+                    <span className="line-clamp-2 text-[10px] leading-tight font-bold tracking-wide uppercase">
+                      {stage.label}
+                    </span>
+                    <span className="mt-0.5 flex items-baseline gap-1.5">
+                      <span className="text-lg leading-none font-bold">{stage.count}</span>
+                      <span className={`text-[10px] ${selected ? 'text-white/80' : 'opacity-70'}`}>
+                        {stage.count > 0 ? `${formatMoney(stage.nwp)} NWP` : '—'}
+                      </span>
+                    </span>
                   </span>
                 </button>
-                {index < byStage.length - 1 && (
-                  <span className="flex items-center text-slate-300">
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </span>
-                )}
               </li>
             )
           })}

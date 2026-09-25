@@ -10,19 +10,22 @@ interface CardProps {
   flush?: boolean
 }
 
+/** Salesforce Lightning card: square corners, hairline border, gray header strip. */
 export function Card({ title, subtitle, actions, children, className = '', flush = false }: CardProps) {
   return (
-    <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <section
+      className={`rounded-[4px] border border-line bg-white shadow-[0_2px_2px_rgba(0,0,0,0.05)] ${className}`}
+    >
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-[#fafaf9] px-4 py-2.5">
           <div>
-            {title && <h2 className="text-[15px] font-semibold text-navy-900">{title}</h2>}
-            {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+            {title && <h2 className="text-[13px] font-bold text-ink">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-[11px] text-muted">{subtitle}</p>}
           </div>
           {actions}
         </header>
       )}
-      <div className={flush ? '' : 'px-5 py-4'}>{children}</div>
+      <div className={flush ? '' : 'px-4 py-3.5'}>{children}</div>
     </section>
   )
 }

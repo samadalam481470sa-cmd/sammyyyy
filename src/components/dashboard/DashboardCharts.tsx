@@ -14,18 +14,18 @@ import { STAGES, STATUSES } from '../../config/picklists'
 import type { EnrichedOpportunity } from '../../types'
 import { Card } from '../common/Card'
 
-/** Executive palette: navy scale with one light-blue accent, no loud colors. */
+/** Salesforce chart colors, with HubSpot orange for pending. */
 const STATUS_COLORS: Record<string, string> = {
-  active: '#2a5f90',
-  pending: '#d9a441',
-  inactive: '#94a3b8',
-  closed: '#64748b',
-  declined: '#b06767',
-  withdrew: '#a8b3c2',
-  completed: '#5d9bd6',
+  active: '#0176d3',
+  pending: '#ff7a59',
+  inactive: '#939393',
+  closed: '#706e6b',
+  declined: '#ba0517',
+  withdrew: '#c9c9c9',
+  completed: '#2e844a',
 }
 
-const BAR_COLOR = '#2a5f90'
+const BAR_COLOR = '#0176d3'
 
 interface DashboardChartsProps {
   /** The currently filtered set — charts respond to dashboard filters. */
@@ -47,7 +47,7 @@ export function DashboardCharts({ opportunities }: DashboardChartsProps) {
   const hasActive = activeByStage.some((d) => d.value > 0)
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2">
       <Card title="Deals by Status" subtitle="All deals in the current view">
         {byStatus.length === 0 ? (
           <EmptyChart />
@@ -81,7 +81,7 @@ export function DashboardCharts({ opportunities }: DashboardChartsProps) {
                     style={{ backgroundColor: STATUS_COLORS[entry.id] }}
                   />
                   <span className="flex-1 truncate">{entry.name}</span>
-                  <span className="font-semibold tabular-nums text-navy-900">{entry.value}</span>
+                  <span className="font-bold tabular-nums text-ink">{entry.value}</span>
                 </li>
               ))}
             </ul>
@@ -98,9 +98,9 @@ export function DashboardCharts({ opportunities }: DashboardChartsProps) {
               <BarChart data={activeByStage} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 9.5, fill: '#94a3b8' }}
+                  tick={{ fontSize: 9.5, fill: '#706e6b' }}
                   tickLine={false}
-                  axisLine={{ stroke: '#e2e8f0' }}
+                  axisLine={{ stroke: '#e5e5e5' }}
                   interval={0}
                   angle={-32}
                   textAnchor="end"
@@ -108,13 +108,13 @@ export function DashboardCharts({ opportunities }: DashboardChartsProps) {
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  tick={{ fontSize: 10, fill: '#706e6b' }}
                   tickLine={false}
                   axisLine={false}
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  cursor={{ fill: '#f1f5f9' }}
+                  cursor={{ fill: '#f3f3f3' }}
                   formatter={formatDealCount}
                 />
                 <Bar dataKey="value" fill={BAR_COLOR} radius={[3, 3, 0, 0]} maxBarSize={28} />
@@ -134,9 +134,9 @@ const formatDealCount = (value: unknown): [string] => {
 
 const tooltipStyle: CSSProperties = {
   fontSize: 12,
-  borderRadius: 8,
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 4px 12px rgba(12, 30, 54, 0.08)',
+  borderRadius: 4,
+  border: '1px solid #e5e5e5',
+  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)',
 }
 
 function EmptyChart() {

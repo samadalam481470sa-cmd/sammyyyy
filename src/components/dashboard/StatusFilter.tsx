@@ -9,7 +9,7 @@ interface StatusFilterProps {
   onClear: () => void
 }
 
-/** Global status filter — status is the broad deal condition, distinct from stage. */
+/** Salesforce button-group filter. Status is the broad deal condition, distinct from stage. */
 export function StatusFilter({ value, counts, showClear, onChange, onClear }: StatusFilterProps) {
   const options: { id: StatusId | 'all'; label: string }[] = [
     { id: 'all', label: 'All Deals' },
@@ -18,8 +18,8 @@ export function StatusFilter({ value, counts, showClear, onChange, onClear }: St
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-        {options.map((option) => {
+      <div className="inline-flex flex-wrap overflow-hidden rounded-[4px] border border-[#c9c9c9] bg-white">
+        {options.map((option, index) => {
           const active = value === option.id
           const count = option.id === 'all' ? undefined : counts[option.id]
           return (
@@ -28,17 +28,13 @@ export function StatusFilter({ value, counts, showClear, onChange, onClear }: St
               type="button"
               onClick={() => onChange(option.id)}
               aria-pressed={active}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                active ? 'bg-navy-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-              }`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                index > 0 ? 'border-l border-[#c9c9c9]' : ''
+              } ${active ? 'bg-brand-500 text-white' : 'text-brand-700 hover:bg-brand-50'}`}
             >
               {option.label}
               {count !== undefined && count > 0 && (
-                <span
-                  className={`rounded-full px-1.5 text-[11px] font-semibold ${
-                    active ? 'bg-navy-700 text-navy-100' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
+                <span className={`text-[11px] ${active ? 'text-white/80' : 'text-muted'}`}>
                   {count}
                 </span>
               )}
@@ -51,7 +47,7 @@ export function StatusFilter({ value, counts, showClear, onChange, onClear }: St
         <button
           type="button"
           onClick={onClear}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-navy-800"
+          className="flex h-8 items-center gap-1.5 rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[12px] font-semibold text-brand-700 shadow-sm transition-colors hover:bg-canvas"
         >
           <FilterX className="h-3.5 w-3.5" />
           Clear Filters

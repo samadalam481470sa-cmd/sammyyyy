@@ -22,16 +22,21 @@ export function QuickActions({ onAction }: QuickActionsProps) {
   return (
     <Card title="Quick Actions">
       <div className="grid grid-cols-2 gap-2">
-        {ACTIONS.map((action) => {
+        {ACTIONS.map((action, index) => {
           const Icon = action.icon
+          const primary = index === 0
           return (
             <button
               key={action.id}
               type="button"
               onClick={() => onAction(action.label)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-[13px] font-medium text-slate-700 transition-colors hover:border-navy-300 hover:bg-navy-50 hover:text-navy-800"
+              className={`flex items-center gap-2 rounded-[4px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
+                primary
+                  ? 'border-hub-500 bg-hub-500 text-white hover:bg-hub-600'
+                  : 'border-[#c9c9c9] bg-white text-brand-700 hover:bg-canvas'
+              }`}
             >
-              <Icon className="h-4 w-4 text-navy-500" />
+              <Icon className="h-3.5 w-3.5" />
               {action.label}
             </button>
           )

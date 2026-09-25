@@ -8,29 +8,29 @@ interface SidebarProps {
   onToggleCollapsed: () => void
 }
 
+/** HubSpot-style dark navigation: charcoal rail, orange marker on the active item. */
 export function Sidebar({ activePage, collapsed, onNavigate, onToggleCollapsed }: SidebarProps) {
   return (
     <aside
-      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-navy-950 text-slate-300 transition-[width] duration-200 ${
-        collapsed ? 'w-[68px]' : 'w-64'
+      className={`sticky top-0 flex h-screen shrink-0 flex-col bg-nav text-[#cbd6e2] transition-[width] duration-200 ${
+        collapsed ? 'w-[60px]' : 'w-[220px]'
       }`}
     >
-      <div className="flex items-center gap-3 px-4 pt-5 pb-6">
-        {/* Logo placeholder */}
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-navy-800 text-sm font-bold text-accent-300 ring-1 ring-navy-700">
+      <div className="flex items-center gap-2.5 px-3.5 pt-4 pb-5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] bg-hub-500 text-sm font-bold text-white">
           N
         </div>
         {!collapsed && (
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-[13px] font-semibold tracking-wide text-white">NEWPORT</p>
-            <p className="truncate text-[10px] font-medium tracking-[0.14em] text-slate-400">
-              SPECIALTY PARTNERS
+            <p className="truncate text-[13px] font-semibold text-white">Newport</p>
+            <p className="truncate text-[10px] font-medium tracking-wide text-[#99acc2]">
+              Specialty Partners
             </p>
           </div>
         )}
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5" aria-label="Primary">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2" aria-label="Primary">
         {NAV_ITEMS.map((item) => (
           <SidebarLink
             key={item.id}
@@ -42,7 +42,7 @@ export function Sidebar({ activePage, collapsed, onNavigate, onToggleCollapsed }
         ))}
       </nav>
 
-      <div className="space-y-0.5 border-t border-navy-800 px-2.5 py-3">
+      <div className="space-y-0.5 border-t border-white/10 px-2 py-3">
         <SidebarLink
           item={SETTINGS_NAV_ITEM}
           active={activePage === SETTINGS_NAV_ITEM.id}
@@ -52,13 +52,13 @@ export function Sidebar({ activePage, collapsed, onNavigate, onToggleCollapsed }
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-slate-400 transition-colors hover:bg-navy-900 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-[4px] px-3 py-2 text-[13px] font-medium text-[#99acc2] transition-colors hover:bg-white/10 hover:text-white"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? (
-            <PanelLeftOpen className="h-[18px] w-[18px] shrink-0" />
+            <PanelLeftOpen className="h-4 w-4 shrink-0" />
           ) : (
-            <PanelLeftClose className="h-[18px] w-[18px] shrink-0" />
+            <PanelLeftClose className="h-4 w-4 shrink-0" />
           )}
           {!collapsed && <span>Collapse</span>}
         </button>
@@ -82,13 +82,13 @@ function SidebarLink({ item, active, collapsed, onNavigate }: SidebarLinkProps) 
       onClick={() => onNavigate(item.id)}
       title={collapsed ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
-      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-[4px] border-l-[3px] px-2.5 py-2 text-left text-[13px] font-medium transition-colors ${
         active
-          ? 'bg-navy-800 text-white shadow-sm ring-1 ring-navy-700'
-          : 'text-slate-400 hover:bg-navy-900 hover:text-white'
+          ? 'border-hub-500 bg-nav-deep text-white'
+          : 'border-transparent text-[#cbd6e2] hover:bg-white/10 hover:text-white'
       }`}
     >
-      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-accent-300' : ''}`} />
+      <Icon className="h-4 w-4 shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </button>
   )

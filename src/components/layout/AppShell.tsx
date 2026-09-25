@@ -30,7 +30,7 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-canvas">
       <Sidebar
         activePage={activePage}
         collapsed={collapsed}

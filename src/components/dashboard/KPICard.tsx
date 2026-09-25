@@ -11,6 +11,7 @@ interface KPICardProps {
   onClick?: () => void
 }
 
+/** Salesforce dashboard metric tile, with a HubSpot-orange bar when it needs attention. */
 export function KPICard({
   label,
   value,
@@ -25,32 +26,17 @@ export function KPICard({
     <button
       type="button"
       onClick={onClick}
-      className={`group rounded-xl border bg-white p-4 text-left shadow-sm transition-all hover:shadow-md ${
-        selected
-          ? 'border-navy-500 ring-2 ring-navy-100'
-          : attention
-            ? 'border-amber-200 hover:border-amber-300'
-            : 'border-slate-200 hover:border-navy-200'
+      className={`rounded-[4px] border bg-white px-4 pt-3 pb-3.5 text-left shadow-[0_2px_2px_rgba(0,0,0,0.05)] transition-colors ${
+        selected ? 'border-brand-500 ring-2 ring-brand-100' : 'border-line hover:border-[#c9c9c9]'
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-        <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-            attention ? 'bg-amber-50 text-amber-600' : 'bg-navy-50 text-navy-600'
-          }`}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
+      <span className={`mb-2.5 block h-1 w-8 rounded-full ${attention ? 'bg-hub-500' : 'bg-brand-500'}`} />
+      <div className="flex items-center gap-1.5">
+        <Icon className={`h-3.5 w-3.5 ${attention ? 'text-hub-500' : 'text-brand-500'}`} />
+        <p className="text-[11px] font-bold tracking-wide text-muted uppercase">{label}</p>
       </div>
-      <p
-        className={`mt-2 text-2xl font-semibold tracking-tight ${
-          attention ? 'text-amber-700' : 'text-navy-900'
-        }`}
-      >
-        {value}
-      </p>
-      {caption && <p className="mt-1 text-[11px] text-slate-400">{caption}</p>}
+      <p className="mt-1 text-[26px] leading-none font-bold tracking-tight text-ink">{value}</p>
+      {caption && <p className="mt-1.5 text-[11px] text-muted">{caption}</p>}
     </button>
   )
 }

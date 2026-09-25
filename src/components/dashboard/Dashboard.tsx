@@ -69,7 +69,7 @@ export function Dashboard({
     onFiltersChange({ ...filters, attentionOnly: !filters.attentionOnly })
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 px-6 py-6 lg:px-8">
+    <div className="space-y-4 px-5 py-4">
       <StatusFilter
         value={filters.status}
         counts={Object.fromEntries(
@@ -83,7 +83,7 @@ export function Dashboard({
         onClear={onClearFilters}
       />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KPICard
           label="Active Deals"
           value={String(kpis.activeCount)}
@@ -129,13 +129,13 @@ export function Dashboard({
         onSelectStage={setStage}
       />
 
-      <div className="grid gap-5 xl:grid-cols-3">
-        <div className="min-w-0 space-y-5 xl:col-span-2">
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="min-w-0 space-y-4 xl:col-span-2">
           <PriorityDealsTable opportunities={filtered} onSelect={onSelectOpportunity} />
           <DashboardCharts opportunities={filtered} />
           <RecentActivity activity={activity} />
         </div>
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-4">
           <PriorityTasks tasks={tasks} />
           <AttentionAlerts opportunities={stageAgnostic} onSelect={onSelectOpportunity} />
           <NewportAI />
