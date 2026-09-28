@@ -1,0 +1,15 @@
+{
+  "name": "thenetticket-concurrency-test",
+  "private": true,
+  "type": "module",
+  "description": "Black-box fee checks and 10–100 concurrent buyer load/race harness for TheNetTicket deployments",
+  "scripts": {
+    "fee-check": "node fee-check.mjs",
+    "read-load": "node read-load.mjs",
+    "race-buyers": "node race-buyers.mjs",
+    "all-safe": "node fee-check.mjs && node read-load.mjs --users 10 && node read-load.mjs --users 50 && node read-load.mjs --users 100"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
