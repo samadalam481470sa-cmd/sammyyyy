@@ -1,0 +1,17 @@
+{
+  "baseUrl": "https://ticket.thenetvr.com",
+  "productionHosts": ["ticket.thenetvr.com"],
+  "expectedPlatformFeeText": "$1.50",
+  "expectedPlatformFeeCents": 150,
+  "expectedEffectiveDate": "2026-09-17",
+  "readPaths": [
+    "/",
+    "/legal/terms",
+    "/legal/privacy",
+    "/legal/refunds",
+    "/sign-in",
+    "/api/health"
+  ],
+  "defaultUsers": 10,
+  "defaultTimeoutMs": 15000
+}
