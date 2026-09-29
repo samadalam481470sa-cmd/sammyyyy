@@ -18,14 +18,18 @@ Public routes stayed healthy at 100 concurrent virtual users. The long p95 tail 
 
 ## Buyer write race
 
-Dry-run only — no staging `EVENT_PATH` / ticket-type IDs available from this workspace. Production write races are refused by the harness (Terms §8 + real capacity risk).
+**Not yet runnable end-to-end from this agent.** Blockers (2026-09-29):
 
-Next step on staging: create a throwaway event with `capacity = 5`, then:
+1. No public event on `dev.ticket.thenetvr.com` (all probed `/venue/...` → Event not found).
+2. Automated seller signup on DEV is stopped by **Cloudflare Turnstile** (“Verify you are human”), so we cannot create a throwaway free event ourselves.
+3. Production write races remain refused (Terms §8 + real capacity).
+
+The harness now knows the real buyer API (`POST /api/orders` with `eventId`, `timeslotId`, `items`, `buyerEmail` + `Idempotency-Key`, then optional `POST .../checkout`).
+
+**Unblock:** paste a DEV public event path (free tickets preferred), e.g. `/venue/your-venue/concurrency-load-test` with capacity ≥ 100 (happy path) or capacity 5 (oversell). Then:
 
 ```bash
-BASE_URL=https://<staging> EVENT_PATH=/venue/.../... \
-TICKET_TYPE_ID=… ENTRY_TIME_ID=… CAPACITY=5 \
-npm run race-buyers -- --users 20 --write
+BASE_URL=https://dev.ticket.thenetvr.com \
+EVENT_PATH=/venue/.../... \
+npm run race-buyers -- --users 100 --write --checkout
 ```
-
-Pair with 3 browser subagents for the last-ticket UX check (see `docs/thenetticket-concurrency-testing.md`).
