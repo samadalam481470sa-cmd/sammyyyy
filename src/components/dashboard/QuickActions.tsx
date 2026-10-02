@@ -1,44 +1,24 @@
 import { FileSpreadsheet, ListChecks, NotebookPen, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useToast } from '../../hooks/useToast';
+import { useDashboard } from '../../hooks/useDashboard';
+import type { CrmActionModal } from '../../hooks/useDashboardData';
 import { Button } from '../ui/Button';
 
 interface QuickAction {
-  id: string;
+  id: Exclude<CrmActionModal, null>;
   label: string;
   icon: LucideIcon;
-  toast: string;
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  {
-    id: 'new-opportunity',
-    label: 'New Opportunity',
-    icon: Plus,
-    toast: 'Opportunity intake ships with the Opportunities module.',
-  },
-  {
-    id: 'add-task',
-    label: 'Add Task',
-    icon: ListChecks,
-    toast: 'Task creation ships with the Tasks & Follow-Ups module.',
-  },
-  {
-    id: 'log-activity',
-    label: 'Log Activity',
-    icon: NotebookPen,
-    toast: 'Activity logging ships with the Opportunity profile.',
-  },
-  {
-    id: 'import-excel',
-    label: 'Import Excel',
-    icon: FileSpreadsheet,
-    toast: 'Excel import will migrate the existing pipeline tracker.',
-  },
+  { id: 'opportunity', label: 'New Opportunity', icon: Plus },
+  { id: 'task', label: 'Add Task', icon: ListChecks },
+  { id: 'activity', label: 'Log Activity', icon: NotebookPen },
+  { id: 'import', label: 'Import Excel', icon: FileSpreadsheet },
 ];
 
 export function QuickActions() {
-  const { notify } = useToast();
+  const { openModal } = useDashboard();
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -53,7 +33,7 @@ export function QuickActions() {
             size="sm"
             variant="secondary"
             icon={<Icon className="size-3.5 text-slate-500" />}
-            onClick={() => notify(action.label, action.toast)}
+            onClick={() => openModal(action.id)}
           >
             {action.label}
           </Button>

@@ -1,13 +1,19 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { AppShell } from './components/layout/AppShell';
+import { CrmActionModals } from './components/crm/CrmActionModals';
 import { Dashboard } from './components/dashboard/Dashboard';
-import { ALL_NAV_ITEMS } from './config/navigation';
-import { ModulePlaceholderPage } from './pages/ModulePlaceholderPage';
+import { AppShell } from './components/layout/AppShell';
+import { CarriersPage } from './pages/CarriersPage';
+import { DocumentsPage } from './pages/DocumentsPage';
+import { OpportunitiesPage } from './pages/OpportunitiesPage';
+import { PortfolioPage } from './pages/PortfolioPage';
+import { RelationshipsPage } from './pages/RelationshipsPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { SourcesPage } from './pages/SourcesPage';
+import { TasksPage } from './pages/TasksPage';
 import { DashboardDataProvider } from './state/DashboardDataProvider';
 import { DashboardFiltersProvider } from './state/DashboardFiltersProvider';
 import { ToastProvider } from './state/ToastProvider';
-
-const PLACEHOLDER_ROUTES = ALL_NAV_ITEMS.filter((item) => !item.available);
 
 export default function App() {
   return (
@@ -18,12 +24,19 @@ export default function App() {
             <Routes>
               <Route element={<AppShell />}>
                 <Route index element={<Dashboard />} />
-                {PLACEHOLDER_ROUTES.map((item) => (
-                  <Route key={item.id} path={item.path} element={<ModulePlaceholderPage />} />
-                ))}
-                <Route path="*" element={<ModulePlaceholderPage />} />
+                <Route path="opportunities" element={<OpportunitiesPage />} />
+                <Route path="relationships" element={<RelationshipsPage />} />
+                <Route path="tasks" element={<TasksPage />} />
+                <Route path="sources" element={<SourcesPage />} />
+                <Route path="carriers" element={<CarriersPage />} />
+                <Route path="portfolio" element={<PortfolioPage />} />
+                <Route path="documents" element={<DocumentsPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="*" element={<Dashboard />} />
               </Route>
             </Routes>
+            <CrmActionModals />
           </DashboardFiltersProvider>
         </DashboardDataProvider>
       </ToastProvider>

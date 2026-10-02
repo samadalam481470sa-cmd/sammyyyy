@@ -17,7 +17,7 @@ export interface NavItem {
   label: string;
   path: string;
   icon: LucideIcon;
-  /** Modules scheduled for later sprints render a placeholder page. */
+  /** All modules are interactive in the unlocked CRM build. */
   available: boolean;
   description: string;
 }
@@ -36,40 +36,39 @@ export const PRIMARY_NAV: NavItem[] = [
     label: 'Opportunities',
     path: '/opportunities',
     icon: Briefcase,
-    available: false,
-    description:
-      'The full opportunity register with profiles, financials, status and stage history.',
+    available: true,
+    description: 'Full opportunity register with financials, status and stage.',
   },
   {
     id: 'relationships',
     label: 'Relationships',
     path: '/relationships',
     icon: Users,
-    available: false,
-    description: 'Principals, management teams and contacts connected to each opportunity.',
+    available: true,
+    description: 'Principals, bankers, intermediaries and carrier contacts.',
   },
   {
     id: 'tasks',
     label: 'Tasks & Follow-Ups',
     path: '/tasks',
     icon: ListChecks,
-    available: false,
-    description: 'Every A / B / C next action across the deal team in one working list.',
+    available: true,
+    description: 'Every A / B / C next action across the deal team.',
   },
   {
     id: 'sources',
     label: 'Sources / Bankers',
     path: '/sources',
     icon: Landmark,
-    available: false,
-    description: 'Deal origination by investment banker, intermediary and direct relationship.',
+    available: true,
+    description: 'Deal origination by banker, intermediary and direct channel.',
   },
   {
     id: 'carriers',
     label: 'Carriers / Reinsurers',
     path: '/carriers',
     icon: ShieldCheck,
-    available: false,
+    available: true,
     description: 'Capacity partners, paper relationships and reinsurance support.',
   },
   {
@@ -77,24 +76,24 @@ export const PRIMARY_NAV: NavItem[] = [
     label: 'Portfolio Companies',
     path: '/portfolio',
     icon: Building2,
-    available: false,
-    description: 'Completed acquisitions, integration status and post-close performance.',
+    available: true,
+    description: 'Closed and completed acquisitions with post-close context.',
   },
   {
     id: 'documents',
     label: 'Documents',
     path: '/documents',
     icon: FileText,
-    available: false,
-    description: 'NDAs, IOIs, LOIs and diligence materials stored against each project.',
+    available: true,
+    description: 'NDAs, IOIs, LOIs and diligence materials by project.',
   },
   {
     id: 'reports',
     label: 'Reports',
     path: '/reports',
     icon: ChartColumn,
-    available: false,
-    description: 'Pipeline, origination and portfolio reporting for the investment committee.',
+    available: true,
+    description: 'Pipeline and portfolio reporting for the investment committee.',
   },
 ];
 
@@ -104,8 +103,8 @@ export const SECONDARY_NAV: NavItem[] = [
     label: 'Settings',
     path: '/settings',
     icon: Settings,
-    available: false,
-    description: 'Users, permissions and the pick-list values used across the CRM.',
+    available: true,
+    description: 'Team roster and the pick-list values used across the CRM.',
   },
 ];
 

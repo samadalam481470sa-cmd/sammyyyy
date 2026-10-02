@@ -103,11 +103,79 @@ export interface ActivityEvent {
   timestamp: IsoDateTime;
 }
 
-/** Everything the dashboard needs for a single render pass. */
+export interface Contact {
+  id: string;
+  name: string;
+  role: string;
+  organization: string;
+  relationshipType: 'target_management' | 'banker' | 'intermediary' | 'carrier' | 'internal';
+  email: string;
+  phone: string;
+  opportunityIds: string[];
+}
+
+export interface CarrierPartner {
+  id: string;
+  name: string;
+  type: 'carrier' | 'reinsurer' | 'capacity';
+  specialty: string;
+  relationshipOwner: string;
+  activeDeals: number;
+  notes: string;
+}
+
+export interface DocumentRecord {
+  id: string;
+  name: string;
+  category: 'nda' | 'ioi' | 'loi' | 'diligence' | 'financials' | 'other';
+  opportunityId: string;
+  uploadedBy: string;
+  uploadedAt: IsoDateTime;
+  status: 'draft' | 'final' | 'shared';
+}
+
+/** Everything the CRM shell needs for a single render pass. */
 export interface DashboardSnapshot {
   opportunities: Opportunity[];
   tasks: TaskItem[];
   activity: ActivityEvent[];
   team: TeamMember[];
+  contacts: Contact[];
+  carriers: CarrierPartner[];
+  documents: DocumentRecord[];
   generatedAt: IsoDateTime;
+}
+
+export interface NewOpportunityInput {
+  projectName: string;
+  entityName: string;
+  type: Opportunity['type'];
+  status: Opportunity['status'];
+  stage: Opportunity['stage'];
+  dealLead: string;
+  specialty: string;
+  geography: string;
+  nwp: number;
+  netRevenue: number;
+  pfEbitda: number;
+  nextAction: string;
+  nextActionDate: string;
+  priority: Opportunity['priority'];
+  sourceType: Opportunity['sourceType'];
+  sourceName: string;
+}
+
+export interface NewTaskInput {
+  priority: TaskItem['priority'];
+  action: string;
+  opportunityId: string;
+  owner: string;
+  dueDate: string;
+}
+
+export interface NewActivityInput {
+  kind: ActivityKind;
+  description: string;
+  opportunityId: string;
+  actor: string;
 }

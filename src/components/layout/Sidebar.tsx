@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Lock, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { APP_CONFIG } from '../../config/app';
 import { PRIMARY_NAV, SECONDARY_NAV, type NavItem } from '../../config/navigation';
@@ -138,12 +138,7 @@ function SidebarLink({ item, collapsed, onNavigate }: SidebarLinkProps) {
           ) : null}
           <Icon className={clsx('size-[18px] shrink-0', isActive ? 'text-accent-300' : 'text-navy-300')} />
           {!collapsed ? (
-            <>
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {!item.available ? (
-                <Lock className="size-3 shrink-0 text-navy-400" aria-label="Available in a future sprint" />
-              ) : null}
-            </>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
           ) : null}
         </>
       )}

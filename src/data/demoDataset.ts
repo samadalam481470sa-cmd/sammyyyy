@@ -1,15 +1,9 @@
-/**
- * DEMO DATA ONLY.
- *
- * Fictional records used to exercise the dashboard. Every company, person and
- * financial figure below is invented and does not represent Newport Specialty
- * Partners activity. Replace this module with a database/API response shaped
- * like `DashboardSnapshot` — no component reads from it directly.
- */
-
 import type {
   ActivityEvent,
+  CarrierPartner,
+  Contact,
   DashboardSnapshot,
+  DocumentRecord,
   IsoDateTime,
   Opportunity,
   TaskItem,
@@ -547,12 +541,212 @@ export const DEMO_ACTIVITY: ActivityEvent[] = [
   },
 ];
 
+export const DEMO_CONTACTS: Contact[] = [
+  {
+    id: 'ct-dennis',
+    name: 'Dennis DiCapua',
+    role: 'Managing Director',
+    organization: 'Newport Specialty Partners',
+    relationshipType: 'internal',
+    email: 'dennis@newport.demo',
+    phone: '(212) 555-0142',
+    opportunityIds: ['opp-guardian', 'opp-beacon', 'opp-compass'],
+  },
+  {
+    id: 'ct-mary',
+    name: 'Mary Sbaschnig',
+    role: 'Managing Director',
+    organization: 'Newport Specialty Partners',
+    relationshipType: 'internal',
+    email: 'mary@newport.demo',
+    phone: '(212) 555-0198',
+    opportunityIds: ['opp-jugular', 'opp-atlas', 'opp-northstar'],
+  },
+  {
+    id: 'ct-halstead',
+    name: 'Claire Halstead',
+    role: 'Managing Director',
+    organization: 'Halstead Rowe Partners',
+    relationshipType: 'banker',
+    email: 'claire@halsteadrowe.demo',
+    phone: '(212) 555-2201',
+    opportunityIds: ['opp-guardian', 'opp-beacon', 'opp-quarry'],
+  },
+  {
+    id: 'ct-ardsley',
+    name: 'Marcus Ardsley',
+    role: 'Partner',
+    organization: 'Ardsley Advisors',
+    relationshipType: 'banker',
+    email: 'marcus@ardsley.demo',
+    phone: '(312) 555-4410',
+    opportunityIds: ['opp-summit', 'opp-solstice', 'opp-tempest'],
+  },
+  {
+    id: 'ct-crosscover',
+    name: 'Elena Vasquez',
+    role: 'CEO',
+    organization: 'CrossCover Insurance Services',
+    relationshipType: 'target_management',
+    email: 'elena@crosscover.demo',
+    phone: '(617) 555-0881',
+    opportunityIds: ['opp-guardian'],
+  },
+  {
+    id: 'ct-orion',
+    name: 'James Whitford',
+    role: 'Founder & President',
+    organization: 'Orion Intermediaries',
+    relationshipType: 'target_management',
+    email: 'james@orionint.demo',
+    phone: '(703) 555-3312',
+    opportunityIds: ['opp-jugular'],
+  },
+  {
+    id: 'ct-larkspur',
+    name: 'Nina Larkspur',
+    role: 'Principal',
+    organization: 'Larkspur Intermediary Group',
+    relationshipType: 'intermediary',
+    email: 'nina@larkspur.demo',
+    phone: '(215) 555-7704',
+    opportunityIds: ['opp-jugular', 'opp-kestrel', 'opp-sable'],
+  },
+  {
+    id: 'ct-cardinal',
+    name: 'Robert Chen',
+    role: 'VP Treaty',
+    organization: 'Cardinal Point Re',
+    relationshipType: 'carrier',
+    email: 'robert@cardinalpoint.demo',
+    phone: '(212) 555-9090',
+    opportunityIds: ['opp-harbor', 'opp-lantern', 'opp-trident', 'opp-sentinel'],
+  },
+];
+
+export const DEMO_CARRIERS: CarrierPartner[] = [
+  {
+    id: 'car-cardinal',
+    name: 'Cardinal Point Re',
+    type: 'reinsurer',
+    specialty: 'Treaty & Facultative',
+    relationshipOwner: 'Elena Park',
+    activeDeals: 4,
+    notes: 'Primary capacity partner for marine, casualty and cyber add-ons.',
+  },
+  {
+    id: 'car-northline',
+    name: 'Northline Specialty Insurance',
+    type: 'carrier',
+    specialty: 'E&S Property',
+    relationshipOwner: 'Dennis DiCapua',
+    activeDeals: 2,
+    notes: 'Exploring paper support for Project Beacon and coastal programs.',
+  },
+  {
+    id: 'car-apex',
+    name: 'Apex Capacity Partners',
+    type: 'capacity',
+    specialty: 'Excess Casualty',
+    relationshipOwner: 'Priya Raman',
+    activeDeals: 1,
+    notes: 'Potential capacity for Project Lantern term sheet.',
+  },
+  {
+    id: 'car-harborline',
+    name: 'Harborline Mutual',
+    type: 'carrier',
+    specialty: 'Inland Marine',
+    relationshipOwner: 'Tom Whelan',
+    activeDeals: 1,
+    notes: 'Introduced Project Harbor via carrier partner channel.',
+  },
+];
+
+export const DEMO_DOCUMENTS: DocumentRecord[] = [
+  {
+    id: 'doc-1',
+    name: 'Project Guardian — Mutual NDA (executed)',
+    category: 'nda',
+    opportunityId: 'opp-guardian',
+    uploadedBy: 'Dennis DiCapua',
+    uploadedAt: hoursAgo(30),
+    status: 'final',
+  },
+  {
+    id: 'doc-2',
+    name: 'Project Guardian — Initial materials package',
+    category: 'diligence',
+    opportunityId: 'opp-guardian',
+    uploadedBy: 'Claire Halstead',
+    uploadedAt: hoursAgo(28),
+    status: 'shared',
+  },
+  {
+    id: 'doc-3',
+    name: 'Project Atlas — LOI (v3)',
+    category: 'loi',
+    opportunityId: 'opp-atlas',
+    uploadedBy: 'Mary Sbaschnig',
+    uploadedAt: daysFromNow(-2, 11),
+    status: 'draft',
+  },
+  {
+    id: 'doc-4',
+    name: 'Project Summit — Revised IOI',
+    category: 'ioi',
+    opportunityId: 'opp-summit',
+    uploadedBy: 'Priya Raman',
+    uploadedAt: hoursAgo(20),
+    status: 'draft',
+  },
+  {
+    id: 'doc-5',
+    name: 'Project Beacon — Actuarial scope memo',
+    category: 'diligence',
+    opportunityId: 'opp-beacon',
+    uploadedBy: 'Dennis DiCapua',
+    uploadedAt: hoursAgo(8),
+    status: 'shared',
+  },
+  {
+    id: 'doc-6',
+    name: 'Project Jugular — Loss triangles FY23–25',
+    category: 'financials',
+    opportunityId: 'opp-jugular',
+    uploadedBy: 'Priya Raman',
+    uploadedAt: hoursAgo(26),
+    status: 'shared',
+  },
+  {
+    id: 'doc-7',
+    name: 'Project Northstar — Closing binder index',
+    category: 'other',
+    opportunityId: 'opp-northstar',
+    uploadedBy: 'Mary Sbaschnig',
+    uploadedAt: daysFromNow(-21, 12),
+    status: 'final',
+  },
+  {
+    id: 'doc-8',
+    name: 'Project Voyager — Integration charter',
+    category: 'other',
+    opportunityId: 'opp-voyager',
+    uploadedBy: 'Priya Raman',
+    uploadedAt: daysFromNow(-90, 10),
+    status: 'final',
+  },
+];
+
 export function buildDemoSnapshot(): DashboardSnapshot {
   return {
-    opportunities: DEMO_OPPORTUNITIES,
-    tasks: DEMO_TASKS,
-    activity: DEMO_ACTIVITY,
-    team: DEMO_TEAM,
+    opportunities: DEMO_OPPORTUNITIES.map((item) => ({ ...item })),
+    tasks: DEMO_TASKS.map((item) => ({ ...item })),
+    activity: DEMO_ACTIVITY.map((item) => ({ ...item })),
+    team: DEMO_TEAM.map((item) => ({ ...item })),
+    contacts: DEMO_CONTACTS.map((item) => ({ ...item, opportunityIds: [...item.opportunityIds] })),
+    carriers: DEMO_CARRIERS.map((item) => ({ ...item })),
+    documents: DEMO_DOCUMENTS.map((item) => ({ ...item })),
     generatedAt: new Date().toISOString(),
   };
 }

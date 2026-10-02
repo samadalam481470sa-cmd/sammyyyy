@@ -37,7 +37,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
       footer={
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] font-medium text-navy-900">
-            Full Opportunity Profile — Coming in next sprint
+            Opportunity snapshot — open Opportunities for the full register
           </p>
           <ArrowUpRight className="size-4 text-slate-400" />
         </div>

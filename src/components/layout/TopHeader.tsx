@@ -12,7 +12,7 @@ const DASHBOARD_PATH = '/';
 
 export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
   const { filters, setSearch, setAttentionOnly } = useDashboardFilters();
-  const { opportunities } = useDashboard();
+  const { opportunities, openModal } = useDashboard();
   const { notify } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -104,9 +104,7 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
 
           <button
             type="button"
-            onClick={() =>
-              notify('Profile & preferences', 'User settings arrive with the Settings module.')
-            }
+            onClick={() => navigate('/settings')}
             className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-slate-100 lg:pr-2"
           >
             <Avatar name={`${CURRENT_USER.firstName} ${CURRENT_USER.lastName}`} size="md" />
@@ -122,12 +120,7 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
           <Button
             variant="primary"
             icon={<Plus className="size-4" />}
-            onClick={() =>
-              notify(
-                'New Opportunity',
-                'Opportunity intake is wired up with the Opportunities module next sprint.',
-              )
-            }
+            onClick={() => openModal('opportunity')}
             className="ml-1 hidden sm:inline-flex"
           >
             <span className="hidden xl:inline">New Opportunity</span>
