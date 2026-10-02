@@ -1,6 +1,7 @@
 import { Bell, ChevronDown, Menu, Plus, Search, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CURRENT_USER } from '../../config/app';
+import { ALL_NAV_ITEMS } from '../../config/navigation';
 import { useDashboard } from '../../hooks/useDashboard';
 import { useDashboardFilters } from '../../hooks/useDashboardFilters';
 import { useToast } from '../../hooks/useToast';
@@ -18,6 +19,13 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
   const location = useLocation();
 
   const attentionCount = opportunities.filter((opportunity) => opportunity.needsAttention).length;
+  const isDashboard = location.pathname === DASHBOARD_PATH;
+  const activeNav =
+    ALL_NAV_ITEMS.find((item) =>
+      item.path === '/'
+        ? location.pathname === '/'
+        : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+    ) ?? ALL_NAV_ITEMS[0];
 
   function goToDashboard() {
     if (location.pathname !== DASHBOARD_PATH) navigate(DASHBOARD_PATH);
@@ -77,12 +85,23 @@ export function TopHeader({ onOpenNav }: { onOpenNav: () => void }) {
         </button>
 
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-navy-900 lg:text-xl">
-            {greetingForTime()}, {CURRENT_USER.firstName}
-          </h1>
-          <p className="truncate text-xs text-slate-500 lg:text-[13px]">
-            Here&rsquo;s what&rsquo;s happening across Newport&rsquo;s acquisition pipeline.
-          </p>
+          {isDashboard ? (
+            <>
+              <p className="truncate text-lg font-semibold tracking-tight text-navy-900 lg:text-xl">
+                {greetingForTime()}, {CURRENT_USER.firstName}
+              </p>
+              <p className="truncate text-xs text-slate-500 lg:text-[13px]">
+                Here&rsquo;s what&rsquo;s happening across Newport&rsquo;s acquisition pipeline.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="truncate text-lg font-semibold tracking-tight text-navy-900 lg:text-xl">
+                {activeNav.label}
+              </p>
+              <p className="truncate text-xs text-slate-500 lg:text-[13px]">{activeNav.description}</p>
+            </>
+          )}
         </div>
 
         <div className="hidden w-48 md:block lg:w-56 2xl:w-80">{searchField}</div>
