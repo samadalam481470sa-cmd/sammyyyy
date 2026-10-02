@@ -32,6 +32,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     {
+      id: 'database',
+      label: 'Interactive Database',
+      description: 'Unified live tables & joins',
+      icon: Database,
+      badge: 'LIVE',
+      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+      highlight: true,
+    },
+    {
       id: 'pipeline',
       label: 'M&A Pipeline',
       description: 'Prospect screening & diligence',
@@ -46,7 +55,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Layers,
       badge: `${acquiredCount} MGAs`,
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-      highlight: true,
     },
     {
       id: 'synergies',

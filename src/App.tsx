@@ -9,20 +9,14 @@ import { SchemaArchitectureView } from './components/SchemaArchitectureView';
 import { RetailAgenciesView } from './components/RetailAgenciesView';
 import { RollupSimulator } from './components/RollupSimulator';
 import { AddMGAModal } from './components/AddMGAModal';
+import { InteractiveDatabase } from './components/InteractiveDatabase';
 import { 
-  ShieldCheck, 
-  Sparkles, 
   Database, 
-  HelpCircle, 
-  Layers, 
-  GitPullRequest,
   CheckCircle2,
-  Calendar,
-  AlertCircle
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [currentTab, setCurrentTab] = useState<string>('pipeline');
+  const [currentTab, setCurrentTab] = useState<string>('database');
   const [mgas, setMGAs] = useState<MGA[]>(mockMGAs);
   const [synergies, setSynergies] = useState<SynergyOpportunity[]>(mockSynergyOpportunities);
   const [retailAgencies, setRetailAgencies] = useState<RetailAgency[]>(mockRetailAgencies);
@@ -94,6 +88,7 @@ export const App: React.FC = () => {
             </span>
             <span className="text-slate-600">/</span>
             <span className="text-xs text-slate-400 font-medium">
+              {currentTab === 'database' && 'Unified Interactive Portfolio Database'}
               {currentTab === 'pipeline' && 'M&A Corporate Development Pipeline'}
               {currentTab === 'portfolio' && 'Aggregated Platform Portfolio ("The One Platform")'}
               {currentTab === 'synergies' && 'Synergy & Capacity Consolidation Engine'}
@@ -105,11 +100,18 @@ export const App: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setCurrentTab('database')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition-all"
+            >
+              <Database className="h-3.5 w-3.5" />
+              <span>Interactive Database</span>
+            </button>
+            <button
               onClick={() => setCurrentTab('schema')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all"
             >
               <Database className="h-3.5 w-3.5" />
-              <span>Mary Call Spec (7:00 PM)</span>
+              <span>Mary Call Spec</span>
             </button>
             <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center font-bold text-xs text-white border border-white/20">
               LM
@@ -119,6 +121,15 @@ export const App: React.FC = () => {
 
         {/* Dynamic View Body */}
         <div className="p-6 max-w-7xl mx-auto w-full space-y-6 flex-1">
+          {currentTab === 'database' && (
+            <InteractiveDatabase
+              mgas={mgas}
+              retailAgencies={retailAgencies}
+              synergies={synergies}
+              onSelectMGA={(mga) => setSelectedMGA(mga)}
+            />
+          )}
+
           {currentTab === 'pipeline' && (
             <PipelineDashboard
               mgas={mgas}
