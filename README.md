@@ -12,10 +12,10 @@ Centralized CRM + portfolio synergy platform for Newport Specialty Partners (Lov
 
 ## Live link
 
-**Public demo (Cloudflare Tunnel):**  
-https://nurse-desktop-statewide-deliver.trycloudflare.com
+**Public demo (Cloudflare Tunnel — currently live):**  
+https://parent-layout-locate-lafayette.trycloudflare.com
 
-> This tunnel stays live while the Cloud Agent environment is running. Re-run `npm run build && npx serve -s dist -l 4173` + cloudflared if it expires.
+> If that URL times out later, the temporary tunnel expired (Cloud Agent restart). Ask me to republish and I’ll spin up a fresh link in ~30 seconds. For a permanent URL, enable GitHub Pages on the `gh-pages` branch (already pushed) under repo Settings → Pages.
 
 ## Run locally
 
