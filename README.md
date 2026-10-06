@@ -12,10 +12,13 @@ Centralized CRM + portfolio synergy platform for Newport Specialty Partners (Lov
 
 ## Live link
 
-**Public demo (Cloudflare Tunnel — currently live):**  
-https://parent-layout-locate-lafayette.trycloudflare.com
+**Phone layout (open this on your phone):**  
+https://holding-persistent-win-tissue.trycloudflare.com/?phone=1
 
-> If that URL times out later, the temporary tunnel expired (Cloud Agent restart). Ask me to republish and I’ll spin up a fresh link in ~30 seconds. For a permanent URL, enable GitHub Pages on the `gh-pages` branch (already pushed) under repo Settings → Pages.
+**Desktop layout:**  
+https://holding-persistent-win-tissue.trycloudflare.com
+
+> Tunnel URLs expire when the Cloud Agent environment restarts. Ask me to republish if it dies. For a permanent URL, enable GitHub Pages on the `gh-pages` branch.
 
 ## Run locally
 

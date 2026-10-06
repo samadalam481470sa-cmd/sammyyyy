@@ -1,7 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/utils';
 import { 
-  Building2, 
   Layers, 
   GitPullRequest, 
   Database, 
@@ -9,8 +8,8 @@ import {
   SlidersHorizontal,
   Briefcase,
   ShieldCheck,
-  TrendingUp,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -20,6 +19,9 @@ interface SidebarProps {
   acquiredCount: number;
   synergyCount: number;
   jakesCount: number;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+  forcePhone?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,6 +31,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   acquiredCount,
   synergyCount,
   jakesCount,
+  mobileOpen = false,
+  onMobileClose,
+  forcePhone = false,
 }) => {
   const navItems = [
     {
@@ -38,7 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Database,
       badge: 'LIVE',
       badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-      highlight: true,
     },
     {
       id: 'pipeline',
@@ -86,21 +90,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
   ];
 
-  return (
-    <aside className="w-72 bg-slate-900/90 border-r border-slate-800 flex flex-col shrink-0">
-      {/* Brand Header */}
+  const handleNav = (id: string) => {
+    setCurrentTab(id);
+    onMobileClose?.();
+  };
+
+  const panel = (
+    <aside
+      className={cn(
+        'bg-slate-900/95 border-r border-slate-800 flex flex-col shrink-0 h-full',
+        forcePhone ? 'w-full' : 'w-72',
+        !forcePhone && 'hidden md:flex'
+      )}
+    >
       <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 via-sky-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-sky-500/20 ring-1 ring-white/20">
-            <ShieldCheck className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-base tracking-tight text-white">NEWPORT</span>
-              <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">MGA</span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 via-sky-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-sky-500/20 ring-1 ring-white/20">
+              <ShieldCheck className="h-6 w-6 text-white" />
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Specialty Partners Platform</p>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-base tracking-tight text-white">NEWPORT</span>
+                <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">MGA</span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium">Specialty Partners Platform</p>
+            </div>
           </div>
+          {onMobileClose && (
+            <button
+              onClick={onMobileClose}
+              className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-300"
+              aria-label="Close menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <div className="mt-4 p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50 flex items-center justify-between">
@@ -114,7 +139,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Navigation */}
       <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         <div className="px-3 pb-2 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
           Core Workspaces
@@ -126,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => setCurrentTab(item.id)}
+              onClick={() => handleNav(item.id)}
               className={cn(
                 'w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left transition-all group relative',
                 isActive
@@ -158,21 +182,90 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </div>
 
-      {/* Footer Info / Mary Call Banner */}
       <div className="p-4 border-t border-slate-800/80 bg-slate-950/60">
         <div className="p-3 rounded-lg bg-gradient-to-br from-slate-900 to-sky-950/50 border border-sky-800/40">
           <div className="flex items-center justify-between text-xs font-semibold text-sky-300 mb-1">
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
-              7:00 PM Call Ready
+              Phone Layout Live
             </span>
-            <span className="text-[10px] bg-sky-950 text-sky-400 px-1.5 py-0.5 rounded border border-sky-800 font-mono">v1.2 MVP</span>
+            <span className="text-[10px] bg-sky-950 text-sky-400 px-1.5 py-0.5 rounded border border-sky-800 font-mono">v1.3</span>
           </div>
           <p className="text-[11px] text-slate-300 leading-relaxed">
-            Prepared for Mary & PE Leadership: MGA schema, EBITDA YoY trends & Synergy overlap engine.
+            Mobile CRM for Mary: pipeline, EBITDA, Jakes & synergies in one thumb-friendly layout.
           </p>
         </div>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      {!forcePhone && panel}
+
+      {/* Mobile drawer */}
+      {(forcePhone || true) && (
+        <div
+          className={cn(
+            'fixed inset-0 z-50 transition-opacity',
+            forcePhone ? '' : 'md:hidden',
+            mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          )}
+        >
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={onMobileClose} />
+          <div
+            className={cn(
+              'absolute inset-y-0 left-0 w-[86%] max-w-sm shadow-2xl transition-transform duration-200',
+              mobileOpen ? 'translate-x-0' : '-translate-x-full'
+            )}
+          >
+            <div className="h-full flex md:hidden">
+              {/* Force visible panel in drawer */}
+              <aside className="w-full bg-slate-900 border-r border-slate-800 flex flex-col h-full">
+                <div className="p-5 border-b border-slate-800/80 bg-slate-950/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-sky-600 via-sky-500 to-indigo-500 flex items-center justify-center">
+                        <ShieldCheck className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-base text-white">NEWPORT</span>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">MGA</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Phone Menu</p>
+                      </div>
+                    </div>
+                    <button onClick={onMobileClose} className="p-2 rounded-lg bg-slate-800 text-slate-300" aria-label="Close">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = currentTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleNav(item.id)}
+                        className={cn(
+                          'w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all',
+                          isActive ? 'bg-sky-600 text-white' : 'text-slate-300 hover:bg-slate-800'
+                        )}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" />
+                        <span className="text-sm font-semibold">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

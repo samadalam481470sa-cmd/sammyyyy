@@ -18,10 +18,10 @@ describe('UI Components Render Tests', () => {
       />
     );
 
-    expect(screen.getByText('NEWPORT')).toBeInTheDocument();
+    expect(screen.getAllByText('NEWPORT').length).toBeGreaterThan(0);
     expect(screen.getByText('Sponsor: Lovell Minnick')).toBeInTheDocument();
-    expect(screen.getByText('M&A Pipeline')).toBeInTheDocument();
-    expect(screen.getByText('Aggregated Portfolio')).toBeInTheDocument();
+    expect(screen.getAllByText('M&A Pipeline').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Aggregated Portfolio').length).toBeGreaterThan(0);
   });
 
   it('renders pipeline dashboard with Best-in-Class filter and KPI metrics', () => {
