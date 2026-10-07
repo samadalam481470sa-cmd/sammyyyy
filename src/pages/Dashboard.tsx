@@ -11,9 +11,9 @@ import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
-import { mockOpportunities } from '@/data/mockOpportunities'
 import { mockActivity, mockAlerts, mockPriorityTasks } from '@/data/mockTasks'
 import { DEMO_DISCLAIMER } from '@/data/constants'
+import { useData } from '@/data/DataContext'
 import type { AcquisitionStage, DashboardFilters, Opportunity } from '@/types'
 import {
   computeDealsByStatus,
@@ -30,6 +30,7 @@ const DEFAULT_FILTERS: DashboardFilters = {
 }
 
 export function Dashboard() {
+  const { opportunities } = useData()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -40,23 +41,23 @@ export function Dashboard() {
   }, [])
 
   const filtered = useMemo(
-    () => filterOpportunities(mockOpportunities, filters),
-    [filters],
+    () => filterOpportunities(opportunities, filters),
+    [filters, opportunities],
   )
 
   /** Pipeline / KPIs use a broader set when status filter is active stages matter */
   const pipelineSource = useMemo(() => {
     // Pipeline should focus on Active + Pending for M&A view unless filtering Needs Attention
     if (filters.status === 'Needs Attention') {
-      return mockOpportunities.filter((o) => o.needsAttention)
+      return opportunities.filter((o) => o.needsAttention)
     }
     if (filters.status === 'All Deals') {
-      return mockOpportunities.filter(
+      return opportunities.filter(
         (o) => o.status === 'Active' || o.status === 'Pending',
       )
     }
-    return mockOpportunities.filter((o) => o.status === filters.status)
-  }, [filters.status])
+    return opportunities.filter((o) => o.status === filters.status)
+  }, [filters.status, opportunities])
 
   const pipelineFiltered = useMemo(() => {
     if (!filters.search.trim()) return pipelineSource
@@ -69,14 +70,14 @@ export function Dashboard() {
   const kpis = useMemo(() => {
     // Executive KPIs always reflect full book unless searching
     const base = filters.search.trim()
-      ? filterOpportunities(mockOpportunities, {
+      ? filterOpportunities(opportunities, {
           status: 'All Deals',
           stage: null,
           search: filters.search,
         })
-      : mockOpportunities
+      : opportunities
     return computeKpis(base)
-  }, [filters.search])
+  }, [filters.search, opportunities])
 
   const pipeline = useMemo(
     () => computePipelineByStage(pipelineFiltered),
@@ -85,12 +86,12 @@ export function Dashboard() {
 
   const chartOpportunities = useMemo(() => {
     // Charts respond to status + search (not stage) so stage filter remains table-focused
-    return filterOpportunities(mockOpportunities, {
+    return filterOpportunities(opportunities, {
       status: filters.status,
       stage: null,
       search: filters.search,
     })
-  }, [filters.status, filters.search])
+  }, [filters.status, filters.search, opportunities])
 
   const byStatus = useMemo(
     () => computeDealsByStatus(chartOpportunities),
@@ -112,7 +113,7 @@ export function Dashboard() {
   const tableRows = useMemo(() => {
     let rows = filtered
     if (filters.status === 'All Deals' && !filters.stage && !filters.search.trim()) {
-      rows = mockOpportunities.filter(
+      rows = opportunities.filter(
         (o) => o.status === 'Active' || o.status === 'Pending',
       )
     }
@@ -124,7 +125,7 @@ export function Dashboard() {
         return a.projectName.localeCompare(b.projectName)
       })
       .slice(0, 8)
-  }, [filtered, filters])
+  }, [filtered, filters, opportunities])
 
   const setStatus = (status: DashboardFilters['status']) => {
     setFilters((prev) => ({
@@ -142,7 +143,7 @@ export function Dashboard() {
   const clearFilters = () => setFilters(DEFAULT_FILTERS)
 
   const openById = (projectId: string) => {
-    const opp = mockOpportunities.find((o) => o.id === projectId) ?? null
+    const opp = opportunities.find((o) => o.id === projectId) ?? null
     setSelected(opp)
   }
 

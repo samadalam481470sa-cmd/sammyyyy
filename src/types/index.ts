@@ -1,5 +1,3 @@
-/** Core domain types for Newport Specialty Partners Acquisition CRM */
-
 export type OpportunityStatus =
   | 'Active'
   | 'Pending'
@@ -44,6 +42,7 @@ export type AttentionReason =
 
 export interface Opportunity {
   id: string
+  projectNumber?: number
   projectName: string
   entityName: string
   type: OpportunityType
@@ -54,11 +53,8 @@ export interface Opportunity {
   sourceName: string
   specialty: string
   geography: string
-  /** Net Written Premium in USD */
   nwp: number
-  /** Net Revenue in USD */
   netRevenue: number
-  /** Pro Forma EBITDA in USD */
   pfEbitda: number
   nextAction: string | null
   nextActionDate: string | null
@@ -66,6 +62,8 @@ export interface Opportunity {
   lastActivityDate: string
   needsAttention: boolean
   attentionReasons: AttentionReason[]
+  outstandingItems?: string[]
+  diligenceNotes?: string
 }
 
 export interface PriorityTask {
@@ -100,3 +98,37 @@ export interface DashboardFilters {
   stage: AcquisitionStage | null
   search: string
 }
+
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  role: string
+  initials: string
+}
+
+export type OpportunityUpdate = Partial<
+  Pick<
+    Opportunity,
+    | 'projectName'
+    | 'entityName'
+    | 'type'
+    | 'status'
+    | 'stage'
+    | 'dealLead'
+    | 'sourceType'
+    | 'sourceName'
+    | 'specialty'
+    | 'geography'
+    | 'nwp'
+    | 'netRevenue'
+    | 'pfEbitda'
+    | 'nextAction'
+    | 'nextActionDate'
+    | 'priority'
+    | 'needsAttention'
+    | 'attentionReasons'
+    | 'outstandingItems'
+    | 'diligenceNotes'
+  >
+>

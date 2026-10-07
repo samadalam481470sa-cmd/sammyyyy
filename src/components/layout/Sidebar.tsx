@@ -9,16 +9,21 @@ import {
   Landmark,
   FileText,
   BarChart3,
-  Settings,
+  FolderKanban,
+  ShieldCheck,
+  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react'
 import { NAV_ITEMS } from '@/data/constants'
+import { useAuth } from '@/auth/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   opportunities: Briefcase,
+  projects: FolderKanban,
   relationships: Users,
   tasks: CheckSquare,
   sources: Building2,
@@ -26,6 +31,7 @@ const ICONS: Record<string, LucideIcon> = {
   portfolio: Landmark,
   documents: FileText,
   reports: BarChart3,
+  security: ShieldCheck,
 }
 
 interface SidebarProps {
@@ -34,6 +40,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { signOut, user } = useAuth()
+  const navigate = useNavigate()
+
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-navy-800 bg-navy-900 text-white transition-[width] duration-200 ${
@@ -86,15 +95,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       <div className="border-t border-navy-800 p-2">
-        <div
-          className={`flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/35 ${
+        {!collapsed && user && (
+          <p className="mb-1 truncate px-3 text-[11px] text-white/40">{user.name}</p>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            void signOut().then(() => navigate('/login'))
+          }}
+          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/5 hover:text-white ${
             collapsed ? 'justify-center px-2' : ''
           }`}
-          title={collapsed ? 'Settings (Coming soon)' : undefined}
+          title={collapsed ? 'Sign out' : undefined}
         >
-          <Settings className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-          {!collapsed && <span>Settings</span>}
-        </div>
+          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+          {!collapsed && <span>Sign out</span>}
+        </button>
         <button
           type="button"
           onClick={onToggle}

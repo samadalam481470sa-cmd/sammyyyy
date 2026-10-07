@@ -59,6 +59,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', enabled: true },
   { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: true },
+  { id: 'projects', label: 'Projects', path: '/projects', enabled: true },
   { id: 'relationships', label: 'Relationships', path: '/relationships', enabled: true },
   { id: 'tasks', label: 'Tasks & Follow-Ups', path: '/tasks', enabled: true },
   { id: 'sources', label: 'Sources / Bankers', path: '/sources', enabled: true },
@@ -66,6 +67,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'portfolio', label: 'Portfolio Companies', path: '/portfolio', enabled: true },
   { id: 'documents', label: 'Documents', path: '/documents', enabled: true },
   { id: 'reports', label: 'Reports', path: '/reports', enabled: true },
+  { id: 'security', label: 'Security', path: '/security', enabled: true },
 ]
 
 export const CURRENT_USER = {

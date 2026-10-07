@@ -1,6 +1,6 @@
 import { Bell, Plus, Search } from 'lucide-react'
-import { CURRENT_USER } from '@/data/constants'
 import { getGreeting } from '@/utils/dashboard'
+import { useAuth } from '@/auth/AuthContext'
 
 interface TopHeaderProps {
   search: string
@@ -10,6 +10,9 @@ interface TopHeaderProps {
 
 export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeaderProps) {
   const greeting = getGreeting()
+  const { user } = useAuth()
+  const firstName = user?.name.split(' ')[0] ?? 'there'
+  const initials = user?.initials ?? 'NP'
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur-sm">
@@ -19,10 +22,11 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
             Acquisition & Strategic Growth CRM
           </p>
           <h1 className="mt-1 font-brand text-2xl font-bold tracking-tight text-navy-900">
-            {greeting}, {CURRENT_USER.firstName}
+            {greeting}, {firstName}
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Here&apos;s what&apos;s happening across Newport&apos;s acquisition pipeline.
+            Snapshot of deal status, outstanding work, and diligence — one-stop acquisition
+            tracking.
           </p>
         </div>
 
@@ -53,10 +57,10 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
 
           <div
             className="flex h-10 w-10 items-center justify-center rounded-full bg-navy-900 text-xs font-semibold text-white"
-            title={CURRENT_USER.name}
-            aria-label={`Signed in as ${CURRENT_USER.name}`}
+            title={user?.name}
+            aria-label={`Signed in as ${user?.name ?? 'user'}`}
           >
-            {CURRENT_USER.initials}
+            {initials}
           </div>
 
           <button
