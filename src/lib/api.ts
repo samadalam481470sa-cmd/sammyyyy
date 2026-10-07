@@ -94,6 +94,45 @@ export async function fetchApiKeySlots() {
   }>('/security/api-keys')
 }
 
+/**
+ * Download helpers — database is accessible anywhere (via link) and
+ * downloadable everywhere (CSV for Excel, JSON for integrations, full .db file).
+ */
+async function downloadFile(path: string) {
+  const token = sessionStorage.getItem(TOKEN_KEY)
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error || `Download failed (${res.status})`)
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const match = /filename="?([^";]+)"?/.exec(disposition)
+  const filename = match?.[1] ?? 'newport-export'
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export function downloadOpportunitiesCsv() {
+  return downloadFile('/export/opportunities.csv')
+}
+
+export function downloadOpportunitiesJson() {
+  return downloadFile('/export/opportunities.json')
+}
+
+export function downloadDatabaseFile() {
+  return downloadFile('/export/database')
+}
+
 export async function fetchAuditLogs(limit = 40) {
   return apiFetch<
     Array<{

@@ -6,6 +6,7 @@ import { apiRateLimit } from './middleware/security.ts'
 import { authRouter } from './routes/auth.ts'
 import { opportunitiesRouter } from './routes/opportunities.ts'
 import { securityRouter } from './routes/security.ts'
+import { exportRouter } from './routes/export.ts'
 import './db/index.ts'
 
 const app = express()
@@ -41,6 +42,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter)
 app.use('/api/opportunities', opportunitiesRouter)
 app.use('/api/security', securityRouter)
+app.use('/api/export', exportRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
