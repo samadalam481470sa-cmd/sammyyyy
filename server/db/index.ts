@@ -5,6 +5,14 @@ import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'node:crypto'
 import { mockOpportunities } from '../../src/data/mockOpportunities.ts'
+import {
+  mockCarriers,
+  mockContacts,
+  mockDocuments,
+  mockPortfolio,
+  mockSources,
+  mockTasksDb,
+} from '../../src/data/mockModules.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.resolve(__dirname, '../../data')
@@ -138,6 +146,69 @@ export function seedDatabase() {
   }
 }
 
+function seedModuleTables() {
+  const count = (table: string) =>
+    (db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c
+
+  if (count('contacts') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO contacts (id, name, title, company, category, email, phone,
+        opportunity_id, project_name, status, last_contact_date, notes)
+      VALUES (@id, @name, @title, @company, @category, @email, @phone,
+        @opportunityId, @projectName, @status, @lastContactDate, @notes)
+    `)
+    mockContacts.forEach((r) => ins.run(r))
+  }
+
+  if (count('tasks') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO tasks (id, priority, action, opportunity_id, project_name,
+        owner, due_date, status, notes)
+      VALUES (@id, @priority, @action, @opportunityId, @projectName,
+        @owner, @dueDate, @status, @notes)
+    `)
+    mockTasksDb.forEach((r) => ins.run(r))
+  }
+
+  if (count('sources') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO sources (id, name, firm, type, email, phone, status, deals_referred, notes)
+      VALUES (@id, @name, @firm, @type, @email, @phone, @status, @dealsReferred, @notes)
+    `)
+    mockSources.forEach((r) => ins.run(r))
+  }
+
+  if (count('carriers') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO carriers (id, name, kind, am_best_rating, lines, capacity_status,
+        contact_name, contact_email, notes)
+      VALUES (@id, @name, @kind, @amBestRating, @lines, @capacityStatus,
+        @contactName, @contactEmail, @notes)
+    `)
+    mockCarriers.forEach((r) => ins.run(r))
+  }
+
+  if (count('portfolio_companies') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO portfolio_companies (id, name, acquired_date, specialty, geography,
+        nwp, pf_ebitda, integration_status, deal_lead, notes)
+      VALUES (@id, @name, @acquiredDate, @specialty, @geography,
+        @nwp, @pfEbitda, @integrationStatus, @dealLead, @notes)
+    `)
+    mockPortfolio.forEach((r) => ins.run(r))
+  }
+
+  if (count('documents') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO documents (id, name, doc_type, opportunity_id, project_name, status,
+        confidentiality, uploaded_by, link, uploaded_at, notes)
+      VALUES (@id, @name, @docType, @opportunityId, @projectName, @status,
+        @confidentiality, @uploadedBy, @link, @uploadedAt, @notes)
+    `)
+    mockDocuments.forEach((r) => ins.run(r))
+  }
+}
+
 export function createSessionToken() {
   return `nwp_sess_${randomBytes(24).toString('hex')}`
 }
@@ -145,3 +216,4 @@ export function createSessionToken() {
 export { hashToken }
 
 seedDatabase()
+seedModuleTables()

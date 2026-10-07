@@ -8,7 +8,13 @@ import { LoginPage } from '@/pages/LoginPage'
 import { OpportunitiesPage } from '@/pages/OpportunitiesPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { RelationshipsPage } from '@/pages/RelationshipsPage'
+import { TasksPage } from '@/pages/TasksPage'
+import { SourcesPage } from '@/pages/SourcesPage'
+import { CarriersPage } from '@/pages/CarriersPage'
+import { PortfolioPage } from '@/pages/PortfolioPage'
+import { DocumentsPage } from '@/pages/DocumentsPage'
+import { ReportsPage } from '@/pages/ReportsPage'
 
 // Hash routing keeps the static demo working from any CDN subpath
 const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
@@ -31,13 +37,13 @@ export default function App() {
               <Route path="opportunities" element={<OpportunitiesPage />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="security" element={<SecurityPage />} />
-              <Route path="relationships" element={<PlaceholderPage title="Relationships" />} />
-              <Route path="tasks" element={<PlaceholderPage title="Tasks & Follow-Ups" />} />
-              <Route path="sources" element={<PlaceholderPage title="Sources / Bankers" />} />
-              <Route path="carriers" element={<PlaceholderPage title="Carriers / Reinsurers" />} />
-              <Route path="portfolio" element={<PlaceholderPage title="Portfolio Companies" />} />
-              <Route path="documents" element={<PlaceholderPage title="Documents" />} />
-              <Route path="reports" element={<PlaceholderPage title="Reports" />} />
+              <Route path="relationships" element={<RelationshipsPage />} />
+              <Route path="tasks" element={<TasksPage />} />
+              <Route path="sources" element={<SourcesPage />} />
+              <Route path="carriers" element={<CarriersPage />} />
+              <Route path="portfolio" element={<PortfolioPage />} />
+              <Route path="documents" element={<DocumentsPage />} />
+              <Route path="reports" element={<ReportsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Route>

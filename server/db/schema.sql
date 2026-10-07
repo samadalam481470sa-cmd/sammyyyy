@@ -84,7 +84,106 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Relationships: people tied to deals (management, bankers, counsel, accountants)
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  company TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT 'Other',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  opportunity_id TEXT,
+  project_name TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'Active',
+  last_contact_date TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Tasks & follow-ups (A/B/C priorities)
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  priority TEXT NOT NULL DEFAULT 'B',
+  action TEXT NOT NULL,
+  opportunity_id TEXT,
+  project_name TEXT NOT NULL DEFAULT '',
+  owner TEXT NOT NULL DEFAULT '',
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'Open',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Deal sources: bankers and intermediaries
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  firm TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'Investment Banker',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'Active',
+  deals_referred INTEGER NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Carriers / reinsurers capacity partners
+CREATE TABLE IF NOT EXISTS carriers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'Carrier',
+  am_best_rating TEXT NOT NULL DEFAULT '',
+  lines TEXT NOT NULL DEFAULT '',
+  capacity_status TEXT NOT NULL DEFAULT 'Active',
+  contact_name TEXT NOT NULL DEFAULT '',
+  contact_email TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Completed acquisitions
+CREATE TABLE IF NOT EXISTS portfolio_companies (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  acquired_date TEXT,
+  specialty TEXT NOT NULL DEFAULT '',
+  geography TEXT NOT NULL DEFAULT '',
+  nwp REAL NOT NULL DEFAULT 0,
+  pf_ebitda REAL NOT NULL DEFAULT 0,
+  integration_status TEXT NOT NULL DEFAULT 'Integrating',
+  deal_lead TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Deal document register (metadata; file storage via secure link)
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  doc_type TEXT NOT NULL DEFAULT 'Other',
+  opportunity_id TEXT,
+  project_name TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'Draft',
+  confidentiality TEXT NOT NULL DEFAULT 'Confidential',
+  uploaded_by TEXT NOT NULL DEFAULT '',
+  link TEXT NOT NULL DEFAULT '',
+  uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON opportunities(stage);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_contacts_opp ON contacts(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);
