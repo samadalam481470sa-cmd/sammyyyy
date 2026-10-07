@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '@/auth/AuthContext'
 import { ProtectedRoute } from '@/auth/ProtectedRoute'
 import { DataProvider } from '@/data/DataContext'
@@ -10,10 +10,13 @@ import { ProjectsPage } from '@/pages/ProjectsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 
+// Hash routing keeps the static demo working from any CDN subpath
+const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
+
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <Router basename={import.meta.env.VITE_STATIC_DEMO ? undefined : import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
@@ -39,7 +42,7 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
+      </Router>
     </AuthProvider>
   )
 }
