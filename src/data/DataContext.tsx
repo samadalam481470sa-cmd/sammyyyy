@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Opportunity, OpportunityUpdate } from '@/types'
-import { fetchOpportunities, updateOpportunity } from '@/lib/api'
+import { fetchOpportunities, getStoredSession, updateOpportunity } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { mockOpportunities } from '@/data/mockOpportunities'
 
@@ -61,6 +61,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   const saveOpportunity = useCallback(async (id: string, patch: OpportunityUpdate) => {
+    // Static demo hosting has no API; persist edits in memory for the session
+    if (getStoredSession()?.token === 'local-demo') {
+      let merged: Opportunity | undefined
+      setOpportunities((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o
+          merged = { ...o, ...patch }
+          return merged
+        }),
+      )
+      if (!merged) throw new Error('Opportunity not found')
+      return merged
+    }
     const updated = await updateOpportunity(id, patch)
     setOpportunities((prev) =>
       prev.map((o) => (o.id === id ? { ...o, ...updated } : o)),

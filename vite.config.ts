@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
+  // GH_PAGES build serves from https://<user>.github.io/sammyyyy/
+  base: process.env.GH_PAGES ? '/sammyyyy/' : '/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

@@ -12,6 +12,7 @@ import {
   clearSession,
   demoSignIn,
   getStoredSession,
+  storeSession,
   signOut as apiSignOut,
 } from '@/lib/api'
 
@@ -30,8 +31,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(initial?.user ?? null)
 
   const signInDemo = useCallback(async () => {
-    const data = await demoSignIn()
-    setUser(data.user)
+    try {
+      const data = await demoSignIn()
+      setUser(data.user)
+    } catch {
+      // Static hosting (no API server): fall back to a local demo session
+      const demoUser = {
+        id: 'user-dennis',
+        email: 'dennis@newportspecialty.demo',
+        name: 'Dennis DiCapua',
+        role: 'partner',
+        initials: 'DD',
+      }
+      storeSession('local-demo', demoUser)
+      setUser(demoUser)
+    }
   }, [])
 
   const signInWithApiKey = useCallback(async (apiKey: string) => {
