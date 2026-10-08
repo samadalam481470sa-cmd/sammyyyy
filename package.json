@@ -1,0 +1,16 @@
+{
+  "name": "job-search-toolkit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome autofill extension + multi-user job-discovery web service. Finds, ranks, and prepares applications for you to review and submit yourself.",
+  "scripts": {
+    "start": "node web/server.js",
+    "discover": "node job-finder/src/index.js",
+    "discover:all": "node job-finder/src/multiuser.js",
+    "build:extension": "node scripts/build-extension.js",
+    "test": "node --test job-finder/test/*.test.js web/test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
