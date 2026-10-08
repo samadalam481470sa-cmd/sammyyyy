@@ -120,6 +120,24 @@ export async function updateOpportunity(id: string, patch: OpportunityUpdate) {
   })
 }
 
+export async function createOpportunity(payload: Partial<Opportunity>) {
+  return apiFetch<Opportunity>('/opportunities', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function askNewportAi(question: string) {
+  return apiFetch<{
+    answer: string
+    sources: Array<{ type: string; id: string; label: string }>
+    mode: 'retrieval' | 'llm'
+  }>('/ai/ask', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  })
+}
+
 export async function fetchApiKeySlots() {
   return apiFetch<{
     slots: Array<{

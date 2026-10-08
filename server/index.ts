@@ -8,6 +8,7 @@ import { opportunitiesRouter } from './routes/opportunities.ts'
 import { securityRouter } from './routes/security.ts'
 import { exportRouter } from './routes/export.ts'
 import { resourcesRouter } from './routes/resources.ts'
+import { aiRouter } from './routes/ai.ts'
 import './db/index.ts'
 
 const app = express()
@@ -31,7 +32,7 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-Id'],
   }),
 )
-app.use(express.json({ limit: '100kb' }))
+app.use(express.json({ limit: '1mb' }))
 app.use(apiRateLimit)
 
 app.get('/api/health', (_req, res) => {
@@ -48,6 +49,7 @@ app.use('/api/opportunities', opportunitiesRouter)
 app.use('/api/security', securityRouter)
 app.use('/api/export', exportRouter)
 app.use('/api/resources', resourcesRouter)
+app.use('/api/ai', aiRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
