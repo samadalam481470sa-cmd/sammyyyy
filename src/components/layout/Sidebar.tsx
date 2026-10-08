@@ -101,6 +101,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         const merged = mergeNavOrderWithDefaults(defaults, data.order)
         saveLocalNavOrder(user.id, merged)
         setOrderIds(merged)
+        // Persist corrected Dashboard-first order when server had a broken layout
+        if (merged.join('|') !== data.order.join('|')) {
+          void saveNavOrder(merged).catch(() => undefined)
+        }
       })
       .catch(() => {
         // offline / unauthorized — keep local order

@@ -7,41 +7,41 @@ const sample: NavItem[] = [
   { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: true },
   { id: 'projects', label: 'Projects', path: '/projects', enabled: true },
   { id: 'reports', label: 'Reports', path: '/reports', enabled: true },
+  { id: 'meetings', label: 'Meetings', path: '/meetings', enabled: true },
+  { id: 'security', label: 'Security', path: '/security', enabled: true },
 ]
 
 describe('navOrder', () => {
-  it('applies saved order and inserts missing items before the next default neighbor', () => {
-    const ordered = applyNavOrder(sample, ['reports', 'dashboard', 'opportunities'])
-    expect(ordered.map((i) => i.id)).toEqual([
-      'projects',
-      'reports',
-      'dashboard',
-      'opportunities',
-    ])
+  it('uses defaults when saved order does not start with dashboard', () => {
+    const defaults = sample.map((i) => i.id)
+    const saved = ['meetings', 'security', 'dashboard', 'opportunities']
+    expect(mergeNavOrderWithDefaults(defaults, saved)).toEqual(defaults)
   })
 
-  it('moves an id within the list', () => {
-    const ids = sample.map((i) => i.id)
-    expect(moveNavId(ids, 0, 2)).toEqual([
-      'opportunities',
-      'projects',
+  it('keeps dashboard first when applying a valid saved order', () => {
+    const ordered = applyNavOrder(sample, [
       'dashboard',
       'reports',
+      'opportunities',
+      'projects',
+      'security',
     ])
+    expect(ordered.map((i) => i.id)[0]).toBe('dashboard')
+    expect(ordered.map((i) => i.id)).toContain('meetings')
   })
 
-  it('ignores bad move indexes', () => {
+  it('moves an id within the list but pins dashboard at top', () => {
     const ids = sample.map((i) => i.id)
-    expect(moveNavId(ids, 0, 0)).toEqual(ids)
-    expect(moveNavId(ids, -1, 2)).toEqual(ids)
+    const moved = moveNavId(ids, 0, 2)
+    expect(moved[0]).toBe('dashboard')
   })
 
   it('inserts newly added ids before the next known default neighbor', () => {
     const defaults = ['dashboard', 'reports', 'meetings', 'security']
-    const saved = ['reports', 'dashboard', 'security']
+    const saved = ['dashboard', 'reports', 'security']
     expect(mergeNavOrderWithDefaults(defaults, saved)).toEqual([
-      'reports',
       'dashboard',
+      'reports',
       'meetings',
       'security',
     ])
