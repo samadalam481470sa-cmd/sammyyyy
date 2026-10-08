@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Lock, Mic, Phone, Users, Video } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { sessionOwnerKey } from '@/lib/ownerKey'
-import { ALL_TEAM_MEMBERS, TEAM_SLOT_MEMBERS, defaultInvitees, memberByOwnerKey } from '@/lib/teamRoster'
+import { ALL_TEAM_MEMBERS, defaultInvitees, memberByOwnerKey } from '@/lib/teamRoster'
 import { newHuddleRoomId } from '@/lib/huddleCrypto'
 import {
   isInvited,
@@ -34,9 +34,8 @@ function RemoteTile({ ownerKey, stream }: RemoteFeed) {
 export function TeamHuddle() {
   const { user } = useAuth()
   const ownerKey = sessionOwnerKey(user)
-  const isManager = Boolean(user?.isManager)
   const [room, setRoom] = useState<HuddleRoom | null>(() => loadHuddleRoom())
-  const [selected, setSelected] = useState<string[]>(() => defaultInvitees(isManager))
+  const [selected, setSelected] = useState<string[]>(() => defaultInvitees())
   const [video, setVideo] = useState(true)
   const [live, setLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,10 +45,6 @@ export function TeamHuddle() {
   const localRef = useRef<HTMLVideoElement | null>(null)
   const localStream = useRef<MediaStream | null>(null)
   const sessionRef = useRef<HuddleSession | null>(null)
-
-  useEffect(() => {
-    if (!isManager) setSelected(defaultInvitees(false))
-  }, [isManager])
 
   useEffect(() => {
     const tick = window.setInterval(() => setRoom(loadHuddleRoom()), 1200)
@@ -63,7 +58,6 @@ export function TeamHuddle() {
     }
   }, [])
 
-  const invitedLocked = useMemo(() => TEAM_SLOT_MEMBERS.map((m) => m.ownerKey), [])
   const canJoinExisting = isInvited(room, ownerKey) && room?.roomId !== undefined
 
   const attachLocal = (stream: MediaStream) => {
@@ -77,7 +71,7 @@ export function TeamHuddle() {
 
   const start = async (existing: HuddleRoom | null) => {
     setError(null)
-    const invitees = isManager ? selected : invitedLocked
+    const invitees = [...new Set([...selected, ownerKey])]
     if (invitees.length === 0) {
       setError('Select at least one key to add.')
       return
@@ -91,13 +85,10 @@ export function TeamHuddle() {
       const nextRoom: HuddleRoom = existing ?? {
         roomId: newHuddleRoomId(),
         hostKey: ownerKey,
-        invited: [...new Set([...invitees, ownerKey])],
+        invited: invitees,
         video,
         createdAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-      }
-      if (!existing && isManager) {
-        nextRoom.invited = [...new Set([...invitees, ownerKey])]
       }
       if (!isInvited(nextRoom, ownerKey)) {
         stream.getTracks().forEach((t) => t.stop())
@@ -141,7 +132,7 @@ export function TeamHuddle() {
   }
 
   const toggle = (owner: string) => {
-    if (!isManager || live) return
+    if (live || owner === ownerKey) return
     setSelected((prev) => (prev.includes(owner) ? prev.filter((id) => id !== owner) : [...prev, owner]))
   }
 
@@ -155,14 +146,12 @@ export function TeamHuddle() {
       <div className="space-y-3 p-3">
         <p className="text-[11px] leading-relaxed text-ink-subtle">
           Encrypted video / voice huddle for Newport keys. Media is peer-to-peer DTLS-SRTP. Signaling
-          is AES-GCM sealed. Partner keys are included automatically; the managerial key chooses who
-          to add.
+          is AES-GCM sealed. Anyone on a key can choose who to add or leave out.
         </p>
 
         <div className="space-y-1.5">
-          {(isManager ? ALL_TEAM_MEMBERS : TEAM_SLOT_MEMBERS).map((m) => {
-            const checked =
-              m.ownerKey === ownerKey || (isManager ? selected.includes(m.ownerKey) : true)
+          {ALL_TEAM_MEMBERS.map((m) => {
+            const checked = m.ownerKey === ownerKey || selected.includes(m.ownerKey)
             const connected = peerKeys.includes(m.ownerKey) || (live && m.ownerKey === ownerKey)
             return (
               <label
@@ -174,7 +163,7 @@ export function TeamHuddle() {
                 <input
                   type="checkbox"
                   checked={checked}
-                  disabled={!isManager || live || m.ownerKey === ownerKey}
+                  disabled={live || m.ownerKey === ownerKey}
                   onChange={() => toggle(m.ownerKey)}
                   className="accent-navy-900"
                 />
@@ -188,14 +177,7 @@ export function TeamHuddle() {
           })}
         </div>
 
-        {!isManager && (
-          <p className="text-[11px] text-ink-muted">
-            All five partner keys are on this huddle. The managerial key is not auto-added.
-          </p>
-        )}
-        {isManager && (
-          <p className="text-[11px] text-ink-muted">Select which key names join this huddle.</p>
-        )}
+        <p className="text-[11px] text-ink-muted">Select which key names join this huddle.</p>
 
         <div className="flex flex-wrap gap-2">
           <button

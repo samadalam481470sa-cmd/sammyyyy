@@ -26,8 +26,7 @@ export function memberByOwnerKey(ownerKey: string): TeamMember | undefined {
   return ALL_TEAM_MEMBERS.find((m) => m.ownerKey === ownerKey)
 }
 
-/** Non-manager keys always huddle with every partner slot (not the manager). */
-export function defaultInvitees(isManager: boolean): string[] {
-  if (isManager) return TEAM_SLOT_MEMBERS.map((m) => m.ownerKey)
+/** Starting selection: every partner slot. Any key can then add or remove people. */
+export function defaultInvitees(_isManager?: boolean): string[] {
   return TEAM_SLOT_MEMBERS.map((m) => m.ownerKey)
 }
