@@ -15,3 +15,15 @@ job-finder/users/
 
 node_modules/
 .DS_Store
+
+# auto-apply runtime / secrets (also listed under auto-apply/.gitignore)
+auto-apply/node_modules/
+auto-apply/dist/
+auto-apply/release/
+auto-apply/.env
+auto-apply/config/profile.json
+auto-apply/browser-profile/
+auto-apply/screenshots/
+auto-apply/resumes/generated/
+auto-apply/auto-apply.db
+auto-apply/auto-apply.db-*

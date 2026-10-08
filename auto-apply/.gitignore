@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+.env
+config/profile.json
+browser-profile/
+screenshots/
+resumes/generated/
+auto-apply.db
+auto-apply.db-*
+*.log
+.DS_Store
+data/

@@ -1,0 +1,59 @@
+{
+  "fields": {
+    "firstName": "Samad",
+    "lastName": "Alam",
+    "fullName": "Samad Alam",
+    "preferredName": "Sam",
+    "middleName": "",
+    "email": "FILL_ME",
+    "phone": "FILL_ME",
+    "phoneType": "Mobile",
+    "city": "Carrollton",
+    "state": "TX",
+    "country": "United States",
+    "postalCode": "FILL_ME",
+    "address": "FILL_ME",
+    "location": "Carrollton, TX",
+    "linkedin": "https://linkedin.com/in/samadaalam",
+    "github": "FILL_ME",
+    "website": "",
+    "twitter": "",
+    "school": "The University of Texas at Dallas",
+    "degree": "Bachelor of Science",
+    "major": "Information Technology Systems",
+    "highestDegree": "Bachelor's",
+    "gradDate": "August 2026",
+    "workAuthorization": "Yes",
+    "needsSponsorship": "No",
+    "willingToRelocate": "FILL_ME",
+    "startDate": "FILL_ME",
+    "salaryExpectation": "FILL_ME",
+    "howDidYouHear": "Company website",
+    "referredBy": "",
+    "skills": "Python, Java, SQL, JavaScript, AWS, Azure, Tableau, Power BI",
+    "language": "English",
+    "currentCompany": "Surge Plus Technologies"
+  },
+  "eeo": {
+    "gender": "Decline to self-identify",
+    "race": "Decline to self-identify",
+    "veteran": "Decline to self-identify",
+    "disability": "Decline to self-identify"
+  },
+  "experience": [
+    {
+      "company": "Surge Plus Technologies",
+      "title": "Software Engineer Intern",
+      "start": "Jan 2025",
+      "end": "Present"
+    },
+    {
+      "company": "Avis Budget Group",
+      "title": "Sales Manager",
+      "start": "August 2021",
+      "end": "2023"
+    }
+  ],
+  "fieldsOff": ["birthday", "middleName"],
+  "resumeFileName": "Samad-Alam-Resume.pdf"
+}

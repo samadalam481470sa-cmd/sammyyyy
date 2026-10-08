@@ -1,0 +1,47 @@
+{
+  "titleInclude": [
+    "analyst",
+    "it ",
+    "systems",
+    "cloud",
+    "security",
+    "support engineer",
+    "technical",
+    "software engineer",
+    "software developer",
+    "data analyst",
+    "business analyst"
+  ],
+  "titleExclude": [
+    "senior",
+    "sr.",
+    "sr ",
+    "staff",
+    "principal",
+    "lead",
+    "manager",
+    "director",
+    "vp ",
+    "architect"
+  ],
+  "locations": [
+    "dallas",
+    "fort worth",
+    "plano",
+    "irving",
+    "richardson",
+    "frisco",
+    "carrollton",
+    "austin",
+    "remote",
+    "united states",
+    "usa",
+    "us"
+  ],
+  "keywords": ["aws", "sql", "python", "javascript", "security", "linux", "tableau", "azure", "data"],
+  "minScore": 3,
+  "dailyCap": 15,
+  "maxPerCompanyPerWeek": 2,
+  "minutesBetweenApplications": 10,
+  "dryRun": true
+}

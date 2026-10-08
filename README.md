@@ -40,6 +40,10 @@ cover-letter drafts as downloadable artifacts.
 
 Setup and configuration: [`job-finder/README.md`](job-finder/README.md).
 
+## 4. `auto-apply/` — human-in-the-loop apply worker
+
+TypeScript + Playwright bot that discovers Greenhouse/Lever/Ashby jobs hourly, fills forms from your profile, drafts AI answers only from your facts, and tracks everything on a local dashboard. **`dryRun: true` by default** (fills + screenshots, never submits). No CAPTCHA solving, fingerprint spoofing, or proxy evasion. See [`auto-apply/README.md`](auto-apply/README.md).
+
 ## 3. `web/` — multi-user web service
 
 A self-hostable web app (no npm dependencies) where **any user can upload a

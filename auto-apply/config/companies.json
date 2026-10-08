@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Stripe",
+    "ats": "greenhouse",
+    "token": "stripe"
+  },
+  {
+    "name": "Figma",
+    "ats": "greenhouse",
+    "token": "figma"
+  },
+  {
+    "name": "Databricks",
+    "ats": "greenhouse",
+    "token": "databricks"
+  },
+  {
+    "name": "Duolingo",
+    "ats": "greenhouse",
+    "token": "duolingo"
+  },
+  {
+    "name": "Toast",
+    "ats": "greenhouse",
+    "token": "toast"
+  },
+  {
+    "name": "Cloudflare",
+    "ats": "greenhouse",
+    "token": "cloudflare"
+  },
+  {
+    "name": "Samsara",
+    "ats": "greenhouse",
+    "token": "samsara"
+  },
+  {
+    "name": "Match Group",
+    "ats": "lever",
+    "token": "matchgroup"
+  },
+  {
+    "name": "Linear",
+    "ats": "ashby",
+    "token": "linear"
+  },
+  {
+    "name": "Vanta",
+    "ats": "ashby",
+    "token": "vanta"
+  },
+  {
+    "name": "Ramp",
+    "ats": "ashby",
+    "token": "ramp"
+  }
+]
