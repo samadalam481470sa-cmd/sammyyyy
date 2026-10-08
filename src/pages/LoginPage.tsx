@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { KeyRound, ShieldCheck, Lock, Fingerprint, FileClock, Timer } from 'lucide-react'
+import { KeyRound, ShieldCheck, Lock } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { attachLoginShield } from '@/lib/loginGuard'
 import newportLogo from '@/assets/newport-logo.png'
@@ -87,11 +87,6 @@ export function LoginPage() {
             </span>
           </div>
 
-          <p className="mt-2 text-xs leading-snug text-ink-muted">
-            This system contains confidential acquisition data. Access is restricted to
-            authorized Newport Specialty Partners personnel and monitored at all times.
-          </p>
-
           <button
             type="button"
             disabled={busy}
@@ -154,26 +149,10 @@ export function LoginPage() {
             </p>
           )}
 
-          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3">
-            <div className="flex flex-col items-center gap-1.5 text-center">
-              <Fingerprint className="h-4 w-4 text-accent" strokeWidth={1.75} />
-              <span className="text-[10px] leading-tight text-ink-subtle">
-                SHA-256 hashed credentials
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-1.5 text-center">
-              <FileClock className="h-4 w-4 text-accent" strokeWidth={1.75} />
-              <span className="text-[10px] leading-tight text-ink-subtle">
-                Full audit trail on every action
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-1.5 text-center">
-              <Timer className="h-4 w-4 text-accent" strokeWidth={1.75} />
-              <span className="text-[10px] leading-tight text-ink-subtle">
-                Auto-expiring sessions
-              </span>
-            </div>
-          </div>
+          <p className="mt-4 border-t border-border pt-3 text-xs leading-snug text-ink-muted">
+            This system contains confidential acquisition data. Access is restricted to
+            authorized Newport Specialty Partners personnel and monitored at all times.
+          </p>
         </div>
       </div>
 
