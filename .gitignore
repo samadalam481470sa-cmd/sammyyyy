@@ -1,17 +1,35 @@
-# Personal resume copies with real contact details — keep these out of a
-# public repo. Point RESUME_FILE at one of these locally if you want the
-# pipeline to use the full version.
-job-finder/resume.local.txt
-job-finder/*.local.txt
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Pipeline run outputs and dedupe cache (published as CI artifacts instead)
-job-finder/output/
-job-finder/.cache/
+node_modules
+dist
+dist-ssr
+*.local
+.netlify
 
-# Uploaded resumes and per-user results from the web service. These contain
-# OTHER PEOPLE'S personal data (names, contact details) and must never be
-# committed to a public repo.
-job-finder/users/
-
-node_modules/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+/src/generated/prisma
+
+.env
+data/*.db
+data/*.db-*
+
+# Job-finder / extension artifacts
+*.zip
+coverage
