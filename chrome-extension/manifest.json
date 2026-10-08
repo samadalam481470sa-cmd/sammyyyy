@@ -1,15 +1,30 @@
 {
   "manifest_version": 3,
   "name": "Resume-Fit Autofill Assistant",
-  "version": "1.0.0",
-  "description": "Stores your real resume, autofills job application forms with your own accurate info, and scores how well a posting matches your resume. Nothing is invented and nothing is submitted automatically — you stay in control.",
-  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
+  "version": "1.3.0",
+  "description": "Stores your real resume, autofills job application forms with your own accurate info, drafts answers, finds fresh job listings near you, and scores how well a posting matches your resume. Nothing is invented and nothing is submitted automatically — you stay in control.",
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "alarms"],
+  "host_permissions": [
+    "https://remoteok.com/*",
+    "https://boards-api.greenhouse.io/*",
+    "https://api.lever.co/*",
+    "https://api.ashbyhq.com/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Resume-Fit Autofill Assistant"
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "commands": {
+    "full-autofill": {
+      "suggested_key": {
+        "default": "Alt+Shift+F",
+        "mac": "Alt+Shift+F"
+      },
+      "description": "Autofill the current page with your resume"
+    }
   },
   "content_scripts": [
     {

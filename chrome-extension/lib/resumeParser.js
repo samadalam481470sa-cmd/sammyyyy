@@ -55,6 +55,34 @@
     return "";
   }
 
+  // Splits the "City, ST [ZIP]" header block into its parts so forms with
+  // separate city/state/zip inputs can be filled accurately.
+  function extractCityStateZip(text) {
+    const headerLines = text.split("\n").slice(0, 6);
+    let city = "";
+    let state = "";
+    let zip = "";
+    for (const line of headerLines) {
+      const match = line.match(/\b([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+)*),\s*([A-Z]{2})\b(?:\s+(\d{5}(?:-\d{4})?))?/);
+      if (match) {
+        city = match[1];
+        state = match[2];
+        if (match[3]) zip = match[3];
+        break;
+      }
+    }
+    if (!zip) {
+      for (const line of headerLines) {
+        const zipMatch = line.match(/\b\d{5}(?:-\d{4})?\b/);
+        if (zipMatch) {
+          zip = zipMatch[0];
+          break;
+        }
+      }
+    }
+    return { city, state, zip };
+  }
+
   function findSectionIndex(lines, headerNames) {
     const normalized = lines.map((l) => l.trim().toLowerCase().replace(/[:\-–]+$/, ""));
     for (let i = 0; i < normalized.length; i++) {
@@ -135,6 +163,8 @@
     const cleanText = (text || "").replace(/\r\n/g, "\n");
     const name = extractName(cleanText);
     const { firstName, lastName } = splitFullName(name);
+    const github = extractFirstMatch(cleanText, GITHUB_RE);
+    const { city, state, zip } = extractCityStateZip(cleanText);
 
     return {
       name,
@@ -143,8 +173,19 @@
       email: extractFirstMatch(cleanText, EMAIL_RE),
       phone: extractFirstMatch(cleanText, PHONE_RE),
       linkedin: extractFirstMatch(cleanText, LINKEDIN_RE),
-      website: extractFirstMatch(cleanText, GITHUB_RE) || extractFirstMatch(cleanText, WEBSITE_RE),
+      github,
+      website: github || extractFirstMatch(cleanText, WEBSITE_RE),
       location: extractLocation(cleanText),
+      city,
+      state,
+      zip,
+      address: "",
+      currentTitle: "",
+      currentCompany: "",
+      school: "",
+      degree: "",
+      gradYear: "",
+      yearsExperience: "",
       skills: extractSkillsList(cleanText),
       summary: extractSection(cleanText, "summary"),
       experience: extractSection(cleanText, "experience"),
