@@ -40,6 +40,24 @@ cover-letter drafts as downloadable artifacts.
 
 Setup and configuration: [`job-finder/README.md`](job-finder/README.md).
 
+## 3. `web/` — multi-user web service
+
+A self-hostable web app (no npm dependencies) where **any user can upload a
+resume** and get a private, continuously-updated shortlist. One process serves
+the upload UI and runs a **built-in scheduler** that re-scans every few hours,
+so it "runs 24/7" for as long as it's up — host it with Docker, systemd, pm2,
+or a small VM. It reuses the same scoring/tailoring engine as the other two
+components.
+
+```bash
+npm start            # serves http://localhost:3000
+# or, always-on:
+docker build -t job-finder . && docker run -d -p 3000:3000 \
+  -v job-finder-data:/app/job-finder/users job-finder
+```
+
+Setup, routes, and privacy notes: [`web/README.md`](web/README.md).
+
 ## Where the line is
 
 These tools do discovery, matching, tailoring, and form-filling. They do not:
@@ -47,10 +65,13 @@ These tools do discovery, matching, tailoring, and form-filling. They do not:
 - **submit applications autonomously** — automated submission breaches the
   Terms of Service of essentially every job board and ATS, and risks your
   accounts mid-search;
+- **run "under the radar"** — the web service reads from documented public job
+  APIs and makes no attempt to hide automated activity or evade bot detection
+  (no synthetic mouse movement or similar tricks). Hiding automation is how
+  accounts get banned, so it's a line this project won't cross;
 - **invent facts** — unknown fields are filled from data you provided, drafted
   from your real resume and marked for review, or left blank and flagged.
-  Gap lists are shown as gaps, never quietly filled in;
-- **evade bot detection** — no synthetic mouse movement or similar tricks.
+  Gap lists are shown as gaps, never quietly filled in.
 
 The human stays the one who reviews and clicks submit. Everything else is
 automated.

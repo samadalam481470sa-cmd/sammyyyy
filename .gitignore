@@ -8,5 +8,10 @@ job-finder/*.local.txt
 job-finder/output/
 job-finder/.cache/
 
+# Uploaded resumes and per-user results from the web service. These contain
+# OTHER PEOPLE'S personal data (names, contact details) and must never be
+# committed to a public repo.
+job-finder/users/
+
 node_modules/
 .DS_Store
