@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.netlify
 
 # Editor directories and files
 .vscode/*
@@ -28,3 +29,7 @@ dist-ssr
 .env
 data/*.db
 data/*.db-*
+
+# Job-finder / extension artifacts
+*.zip
+coverage

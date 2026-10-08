@@ -3,9 +3,19 @@ import {
   fetchApiKeySlots,
   fetchAuditLogs,
   fetchChangeHistory,
+  getStoredSession,
   type ChangeHistoryEntry,
 } from '@/lib/api'
+import { loadDemoChangeHistory } from '@/lib/demoStore'
 import { History, KeyRound, ScrollText, Shield } from 'lucide-react'
+
+const DEMO_SLOTS = [
+  { slot: 1, label: 'Primary integration (demo)', key_prefix: 'nwp_demo_', status: 'active', last_used_at: null },
+  { slot: 2, label: 'Reserved slot 2', key_prefix: 'nwp_slot2_', status: 'pending', last_used_at: null },
+  { slot: 3, label: 'Reserved slot 3', key_prefix: 'nwp_slot3_', status: 'pending', last_used_at: null },
+  { slot: 4, label: 'Reserved slot 4', key_prefix: 'nwp_slot4_', status: 'pending', last_used_at: null },
+  { slot: 5, label: 'Reserved slot 5', key_prefix: 'nwp_slot5_', status: 'pending', last_used_at: null },
+]
 
 export function SecurityPage() {
   const [slots, setSlots] = useState<
@@ -32,6 +42,26 @@ export function SecurityPage() {
 
   useEffect(() => {
     void (async () => {
+      if (getStoredSession()?.token === 'local-demo') {
+        setSlots(DEMO_SLOTS)
+        setLogs([])
+        const local = loadDemoChangeHistory().map((c, i) => ({
+          id: `local_${i}_${c.createdAt}`,
+          actorName: c.actorName,
+          apiKeySlot: null,
+          authMethod: 'demo',
+          resourceType: c.resourceType,
+          resourceId: c.resourceId,
+          changeType: c.changeType,
+          changedFields: c.changedFields,
+          before: null,
+          after: null,
+          createdAt: c.createdAt,
+        }))
+        setChanges(local.slice(0, 80))
+        setError(null)
+        return
+      }
       try {
         const [keys, audit, history] = await Promise.all([
           fetchApiKeySlots(),
@@ -43,6 +73,23 @@ export function SecurityPage() {
         setChanges(history.changes)
         setError(null)
       } catch (err) {
+        setSlots(DEMO_SLOTS)
+        setLogs([])
+        setChanges(
+          loadDemoChangeHistory().map((c, i) => ({
+            id: `local_${i}_${c.createdAt}`,
+            actorName: c.actorName,
+            apiKeySlot: null,
+            authMethod: 'demo',
+            resourceType: c.resourceType,
+            resourceId: c.resourceId,
+            changeType: c.changeType,
+            changedFields: c.changedFields,
+            before: null,
+            after: null,
+            createdAt: c.createdAt,
+          })),
+        )
         setError(err instanceof Error ? err.message : 'Failed to load security data')
       }
     })()

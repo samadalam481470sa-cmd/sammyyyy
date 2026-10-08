@@ -11,6 +11,7 @@ import type { Opportunity, OpportunityUpdate } from '@/types'
 import { fetchOpportunities, getStoredSession, updateOpportunity } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { mockOpportunities } from '@/data/mockOpportunities'
+import { appendDemoChange, loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
 
 interface DataContextValue {
   opportunities: Opportunity[]
@@ -44,12 +45,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true)
     setError(null)
+    if (getStoredSession()?.token === 'local-demo') {
+      setOpportunities(
+        withProjectNumbers(loadDemoCollection('opportunities', mockOpportunities)),
+      )
+      setLoading(false)
+      return
+    }
     try {
       const data = await fetchOpportunities()
       setOpportunities(withProjectNumbers(data))
     } catch (err) {
       // Fallback keeps UI usable if API is briefly unavailable
-      setOpportunities(withProjectNumbers(mockOpportunities))
+      setOpportunities(
+        withProjectNumbers(loadDemoCollection('opportunities', mockOpportunities)),
+      )
       setError(err instanceof Error ? err.message : 'Failed to load opportunities')
     } finally {
       setLoading(false)
@@ -61,17 +71,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refresh])
 
   const saveOpportunity = useCallback(async (id: string, patch: OpportunityUpdate) => {
-    // Static demo hosting has no API; persist edits in memory for the session
+    // Static demo: persist to localStorage so reopening the link keeps edits
     if (getStoredSession()?.token === 'local-demo') {
       let merged: Opportunity | undefined
-      setOpportunities((prev) =>
-        prev.map((o) => {
+      setOpportunities((prev) => {
+        const next = prev.map((o) => {
           if (o.id !== id) return o
           merged = { ...o, ...patch }
           return merged
-        }),
-      )
+        })
+        saveDemoCollection('opportunities', next)
+        return next
+      })
       if (!merged) throw new Error('Opportunity not found')
+      appendDemoChange({
+        resourceType: 'opportunity',
+        resourceId: id,
+        changeType: 'update',
+        changedFields: Object.keys(patch),
+        actorName: 'Dennis DiCapua',
+        createdAt: new Date().toISOString(),
+      })
       return merged
     }
     const updated = await updateOpportunity(id, patch)

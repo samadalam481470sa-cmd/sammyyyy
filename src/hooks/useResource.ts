@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getStoredSession } from '@/lib/api'
+import { appendDemoChange, loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
 
 const API_BASE = '/api/resources'
 
@@ -31,8 +32,8 @@ export interface ResourceApi<T extends { id: string }> {
 
 /**
  * Loads a CRM module collection from the database API.
- * In local-demo (static hosting) mode, edits are kept in memory using the
- * provided mock records so the demo stays fully interactive.
+ * In local-demo (static hosting) mode, edits persist in localStorage so
+ * reopening the share link keeps every change.
  */
 export function useResource<T extends { id: string }>(
   resource: string,
@@ -48,7 +49,7 @@ export function useResource<T extends { id: string }>(
     setError(null)
     if (isLocalDemo()) {
       localMode.current = true
-      setItems(mock)
+      setItems(loadDemoCollection(resource, mock))
       setLoading(false)
       return
     }
@@ -58,7 +59,7 @@ export function useResource<T extends { id: string }>(
       setItems(data)
     } catch (err) {
       localMode.current = true
-      setItems(mock)
+      setItems(loadDemoCollection(resource, mock))
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
@@ -73,14 +74,24 @@ export function useResource<T extends { id: string }>(
     async (id: string, patch: Partial<T>) => {
       if (localMode.current) {
         let merged: T | undefined
-        setItems((prev) =>
-          prev.map((item) => {
+        setItems((prev) => {
+          const next = prev.map((item) => {
             if (item.id !== id) return item
             merged = { ...item, ...patch }
             return merged
-          }),
-        )
+          })
+          saveDemoCollection(resource, next)
+          return next
+        })
         if (!merged) throw new Error('Record not found')
+        appendDemoChange({
+          resourceType: resource,
+          resourceId: id,
+          changeType: 'update',
+          changedFields: Object.keys(patch),
+          actorName: 'Dennis DiCapua',
+          createdAt: new Date().toISOString(),
+        })
         return merged
       }
       const updated = await request<T>(`/${resource}/${id}`, {
@@ -100,7 +111,19 @@ export function useResource<T extends { id: string }>(
           ...data,
           id: `${resource}_local_${Date.now()}`,
         } as T
-        setItems((prev) => [record, ...prev])
+        setItems((prev) => {
+          const next = [record, ...prev]
+          saveDemoCollection(resource, next)
+          return next
+        })
+        appendDemoChange({
+          resourceType: resource,
+          resourceId: record.id,
+          changeType: 'create',
+          changedFields: Object.keys(data),
+          actorName: 'Dennis DiCapua',
+          createdAt: new Date().toISOString(),
+        })
         return record
       }
       const created = await request<T>(`/${resource}`, {
