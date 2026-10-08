@@ -313,3 +313,15 @@ export async function provisionApiKeySlot(slot: number, label?: string) {
     body: JSON.stringify({ label }),
   })
 }
+
+/** Per-user sidebar nav order (server). Falls back to localStorage in the UI. */
+export async function fetchNavOrder() {
+  return apiFetch<{ order: string[]; userId: string }>('/preferences/nav-order')
+}
+
+export async function saveNavOrder(order: string[]) {
+  return apiFetch<{ ok: boolean; order: string[]; userId: string }>('/preferences/nav-order', {
+    method: 'PUT',
+    body: JSON.stringify({ order }),
+  })
+}

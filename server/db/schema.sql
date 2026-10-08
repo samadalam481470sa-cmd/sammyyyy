@@ -228,6 +228,13 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Per-user UI preferences (sidebar order, etc.)
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  nav_order TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON opportunities(stage);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);

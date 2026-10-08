@@ -9,6 +9,7 @@ import { securityRouter } from './routes/security.ts'
 import { exportRouter } from './routes/export.ts'
 import { resourcesRouter } from './routes/resources.ts'
 import { aiRouter } from './routes/ai.ts'
+import { preferencesRouter } from './routes/preferences.ts'
 import './db/index.ts'
 
 const app = express()
@@ -50,6 +51,7 @@ app.use('/api/security', securityRouter)
 app.use('/api/export', exportRouter)
 app.use('/api/resources', resourcesRouter)
 app.use('/api/ai', aiRouter)
+app.use('/api/preferences', preferencesRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
