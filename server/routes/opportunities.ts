@@ -48,6 +48,76 @@ const updateSchema = z.object({
   diligenceNotes: z.string().max(5000).optional(),
 })
 
+const createSchema = updateSchema.required({
+  projectName: true,
+  entityName: true,
+})
+
+opportunitiesRouter.post('/', requireRole('admin', 'partner', 'analyst'), (req, res) => {
+  const parsed = createSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid create payload', details: parsed.error.flatten() })
+  }
+  const data = parsed.data
+  const maxRow = db
+    .prepare(`SELECT COALESCE(MAX(project_number), 0) AS m FROM opportunities`)
+    .get() as { m: number }
+  const projectNumber = maxRow.m + 1
+  const id = `opp_import_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+
+  db.prepare(
+    `INSERT INTO opportunities (
+      id, project_number, project_name, entity_name, type, status, stage,
+      deal_lead, source_type, source_name, specialty, geography,
+      nwp, net_revenue, pf_ebitda, next_action, next_action_date,
+      priority, last_activity_date, needs_attention, attention_reasons,
+      outstanding_items, diligence_notes
+    ) VALUES (
+      @id, @project_number, @project_name, @entity_name, @type, @status, @stage,
+      @deal_lead, @source_type, @source_name, @specialty, @geography,
+      @nwp, @net_revenue, @pf_ebitda, @next_action, @next_action_date,
+      @priority, datetime('now'), @needs_attention, @attention_reasons,
+      @outstanding_items, @diligence_notes
+    )`,
+  ).run({
+    id,
+    project_number: projectNumber,
+    project_name: data.projectName,
+    entity_name: data.entityName,
+    type: data.type ?? 'Platform Acquisition',
+    status: data.status ?? 'Pending',
+    stage: data.stage ?? 'Target Identified',
+    deal_lead: data.dealLead ?? '',
+    source_type: data.sourceType ?? 'Other',
+    source_name: data.sourceName ?? 'Excel import',
+    specialty: data.specialty ?? '',
+    geography: data.geography ?? '',
+    nwp: data.nwp ?? 0,
+    net_revenue: data.netRevenue ?? 0,
+    pf_ebitda: data.pfEbitda ?? 0,
+    next_action: data.nextAction ?? 'Review imported data',
+    next_action_date: data.nextActionDate ?? null,
+    priority: data.priority ?? 'B',
+    needs_attention: data.needsAttention ? 1 : 0,
+    attention_reasons: JSON.stringify(data.attentionReasons ?? []),
+    outstanding_items: JSON.stringify(data.outstandingItems ?? []),
+    diligence_notes: data.diligenceNotes ?? '',
+  })
+
+  const row = db.prepare(`SELECT * FROM opportunities WHERE id = ?`).get(id) as DbOpportunityRow
+  writeAudit(
+    req.auth!.userId,
+    req.auth!.userName,
+    'opportunity.create',
+    'opportunity',
+    id,
+    `Created ${data.projectName}`,
+    req,
+  )
+  recordChange(req, 'opportunity', id, 'create', null, row as unknown as Record<string, unknown>)
+  res.status(201).json(rowToOpportunity(row))
+})
+
 opportunitiesRouter.patch('/:id', requireRole('admin', 'partner', 'analyst'), (req, res) => {
   const parsed = updateSchema.safeParse(req.body)
   if (!parsed.success) {

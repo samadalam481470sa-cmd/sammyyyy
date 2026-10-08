@@ -41,6 +41,11 @@ authRouter.post('/demo', authRateLimit, lockoutGuard, (req, res) => {
       name: user.name,
       role: user.role,
       initials: user.initials,
+      authMethod: 'demo',
+      isManager: false,
+      apiKeyId: null,
+      apiKeySlot: null,
+      apiKeyLabel: null,
     },
     notice:
       'Demo authentication only. Production access will require one of five provisioned API keys.',
@@ -58,13 +63,93 @@ authRouter.post('/api-key', authRateLimit, lockoutGuard, (req, res) => {
     return res.status(400).json({ error: 'Invalid API key payload' })
   }
 
-  const key = db
+  const hashed = hashToken(parsed.data.apiKey)
+
+  // Managerial master key path (exactly one)
+  const manager = db
     .prepare(
-      `SELECT id, slot, label, status FROM api_keys WHERE key_hash = ? AND status = 'active'`,
+      `SELECT id, label, holder_name, status FROM manager_keys WHERE key_hash = ? AND status = 'active'`,
     )
-    .get(hashToken(parsed.data.apiKey)) as
-    | { id: string; slot: number; label: string; status: string }
+    .get(hashed) as
+    | { id: string; label: string; holder_name: string; status: string }
     | undefined
+
+  if (manager) {
+    clearAuthFailures(req.ip)
+    const user = db
+      .prepare(`SELECT id, email, name, role, initials FROM users WHERE id = 'user-manager'`)
+      .get() as { id: string; email: string; name: string; role: string; initials: string }
+
+    const token = createSessionToken()
+    const sessionId = `sess_mgr_${Date.now()}`
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+
+    db.prepare(
+      `INSERT INTO sessions (id, user_id, token_hash, auth_method, api_key_id, expires_at, ip_address, user_agent)
+       VALUES (?, ?, ?, 'manager_key', ?, ?, ?, ?)`,
+    ).run(
+      sessionId,
+      user.id,
+      hashToken(token),
+      manager.id,
+      expiresAt,
+      req.ip ?? null,
+      req.get('user-agent') ?? null,
+    )
+
+    db.prepare(`UPDATE manager_keys SET last_used_at = datetime('now') WHERE id = ?`).run(
+      manager.id,
+    )
+    writeAudit(
+      user.id,
+      user.name,
+      'auth.manager_signin',
+      'manager_key',
+      manager.id,
+      'Managerial master key sign-in',
+      req,
+    )
+
+    return res.json({
+      token,
+      expiresAt,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: 'admin',
+        initials: user.initials,
+        authMethod: 'manager_key',
+        isManager: true,
+        apiKeyId: manager.id,
+        apiKeySlot: null,
+        apiKeyLabel: manager.label,
+      },
+    })
+  }
+
+  // Look up by hash first so we can distinguish revoked vs unknown keys
+  const anyKey = db
+    .prepare(`SELECT id, slot, label, status FROM api_keys WHERE key_hash = ?`)
+    .get(hashed) as { id: string; slot: number; label: string; status: string } | undefined
+
+  if (anyKey && anyKey.status === 'revoked') {
+    recordAuthFailure(req.ip, req)
+    writeAudit(
+      null,
+      'anonymous',
+      'auth.api_key_revoked',
+      'api_key',
+      anyKey.id,
+      `Rejected login — slot ${anyKey.slot} was revoked by managerial key`,
+      req,
+    )
+    return res
+      .status(401)
+      .json({ error: 'This API key has been revoked by the managerial key. Access denied.' })
+  }
+
+  const key = anyKey?.status === 'active' ? anyKey : undefined
 
   if (!key) {
     recordAuthFailure(req.ip, req)
@@ -106,6 +191,11 @@ authRouter.post('/api-key', authRateLimit, lockoutGuard, (req, res) => {
       name: user.name,
       role: user.role,
       initials: user.initials,
+      authMethod: 'api_key',
+      isManager: false,
+      apiKeyId: key.id,
+      apiKeySlot: key.slot,
+      apiKeyLabel: key.label,
     },
     apiKeySlot: key.slot,
     apiKeyLabel: key.label,

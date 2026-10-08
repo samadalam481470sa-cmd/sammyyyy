@@ -6,8 +6,10 @@ export interface AuthContext {
   userId: string
   userName: string
   role: string
-  authMethod: 'demo' | 'api_key' | 'password'
+  authMethod: 'demo' | 'api_key' | 'password' | 'manager_key'
   apiKeyId?: string
+  apiKeySlot?: number
+  isManager?: boolean
   sessionId: string
 }
 
@@ -146,23 +148,70 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Session expired' })
     }
 
+    // If this session was created with a partner API key, confirm the key is still active.
+    // Managerial revoke must immediately block further use even if a cookie/token remains.
+    if (session.auth_method === 'api_key' && session.api_key_id) {
+      const linked = db
+        .prepare(`SELECT status, slot FROM api_keys WHERE id = ?`)
+        .get(session.api_key_id) as { status: string; slot: number } | undefined
+      if (!linked || linked.status !== 'active') {
+        db.prepare('DELETE FROM sessions WHERE id = ?').run(session.session_id)
+        writeAudit(
+          session.user_id,
+          session.user_name,
+          'auth.blocked_revoked_key',
+          'api_key',
+          session.api_key_id,
+          `Blocked session — key slot ${linked?.slot ?? '?'} is ${linked?.status ?? 'missing'}`,
+          req,
+        )
+        return res.status(401).json({ error: 'API key has been revoked. Sign in is no longer allowed.' })
+      }
+    }
+
+    const isManager = session.auth_method === 'manager_key'
     req.auth = {
       userId: session.user_id,
       userName: session.user_name,
-      role: session.role,
+      role: isManager ? 'admin' : session.role,
       authMethod: session.auth_method,
       apiKeyId: session.api_key_id ?? undefined,
+      isManager,
       sessionId: session.session_id,
     }
     return next()
   }
 
-  // Direct API key access (for programmatic clients — 5 reserved slots)
+  // Direct API key / manager key access
   if (isLockedOut(req.ip)) {
     return res
       .status(429)
       .json({ error: 'Too many failed attempts. This address is temporarily locked.' })
   }
+
+  const manager = db
+    .prepare(
+      `SELECT id, status FROM manager_keys WHERE key_hash = ? AND status = 'active'`,
+    )
+    .get(hashToken(token)) as { id: string; status: string } | undefined
+
+  if (manager) {
+    clearAuthFailures(req.ip)
+    db.prepare(`UPDATE manager_keys SET last_used_at = datetime('now') WHERE id = ?`).run(
+      manager.id,
+    )
+    req.auth = {
+      userId: 'user-manager',
+      userName: 'Managerial Access',
+      role: 'admin',
+      authMethod: 'manager_key',
+      apiKeyId: manager.id,
+      isManager: true,
+      sessionId: `mgr-${manager.id}`,
+    }
+    return next()
+  }
+
   const key = db
     .prepare(
       `SELECT id, slot, status, key_hash FROM api_keys WHERE key_hash = ? AND status = 'active'`,
@@ -180,14 +229,32 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
   db.prepare(`UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?`).run(key.id)
 
-  // API-key-only access maps to a service principal (Dennis one-stop view scope)
   req.auth = {
     userId: 'user-dennis',
     userName: 'API Key Access',
     role: 'partner',
     authMethod: 'api_key',
     apiKeyId: key.id,
+    apiKeySlot: key.slot,
     sessionId: `api-${key.id}`,
+  }
+  return next()
+}
+
+/** Managerial master key only — revoke/provision keys and kick sessions. */
+export function requireManager(req: Request, res: Response, next: NextFunction) {
+  if (!req.auth) return res.status(401).json({ error: 'Authentication required' })
+  if (!req.auth.isManager) {
+    writeAudit(
+      req.auth.userId,
+      req.auth.userName,
+      'auth.forbidden',
+      'route',
+      req.path,
+      'Managerial key required',
+      req,
+    )
+    return res.status(403).json({ error: 'Managerial master key required' })
   }
   return next()
 }

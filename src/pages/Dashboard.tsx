@@ -10,10 +10,15 @@ import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
+import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
 import { mockActivity, mockAlerts, mockPriorityTasks } from '@/data/mockTasks'
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
+import { getStoredSession } from '@/lib/api'
+import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import { mockContacts, mockTasksDb } from '@/data/mockModules'
+import type { ImportRow } from '@/lib/excelImport'
 import type { AcquisitionStage, DashboardFilters, Opportunity } from '@/types'
 import {
   computeDealsByStatus,
@@ -30,10 +35,11 @@ const DEFAULT_FILTERS: DashboardFilters = {
 }
 
 export function Dashboard() {
-  const { opportunities } = useData()
+  const { opportunities, createOpportunity, saveOpportunity } = useData()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [excelOpen, setExcelOpen] = useState(false)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -194,11 +200,17 @@ export function Dashboard() {
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
-                onAction={(action) =>
-                  showToast(
-                    `${action.replace(/-/g, ' ')} — prototype action (no backend yet)`,
-                  )
-                }
+                onAction={(action) => {
+                  if (action === 'import-excel') {
+                    setExcelOpen(true)
+                    return
+                  }
+                  if (action === 'new-opportunity') {
+                    showToast('Use Import Excel or Opportunities → create from a deal record')
+                    return
+                  }
+                  showToast(`${action.replace(/-/g, ' ')} — open the matching module to continue`)
+                }}
               />
               <NewportAI />
             </div>
@@ -207,6 +219,100 @@ export function Dashboard() {
           <p className="pb-4 text-center text-[11px] text-ink-subtle">{DEMO_DISCLAIMER}</p>
         </div>
       </main>
+
+      <ExcelImportModal
+        open={excelOpen}
+        onClose={() => setExcelOpen(false)}
+        opportunities={opportunities}
+        onCreateOpportunities={async (drafts) => {
+          for (const d of drafts) {
+            await createOpportunity(d)
+          }
+          showToast(`Imported ${drafts.length} opportunit${drafts.length === 1 ? 'y' : 'ies'}`)
+        }}
+        onUpdateOpportunity={async (id, patch) => {
+          await saveOpportunity(id, patch)
+          showToast('Opportunity autofilled from Excel')
+        }}
+        onImportTasks={async (rows: ImportRow[]) => {
+          if (getStoredSession()?.token === 'local-demo') {
+            const existing = loadDemoCollection('tasks', mockTasksDb)
+            const mapped = rows.map((r, i) => ({
+              id: `task_import_${Date.now()}_${i}`,
+              priority: String(r.priority ?? 'B'),
+              action: String(r.action ?? r.nextAction ?? r.name ?? `Imported task ${i + 1}`),
+              opportunityId: null,
+              projectName: String(r.projectName ?? ''),
+              owner: String(r.dealLead ?? r.owner ?? 'Dennis'),
+              dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
+              status: 'Open',
+              notes: String(r.notes ?? 'Excel import'),
+            }))
+            saveDemoCollection('tasks', [...mapped, ...existing])
+            return
+          }
+          const token = getStoredSession()?.token
+          for (const r of rows) {
+            await fetch('/api/resources/tasks', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                action: String(r.action ?? r.nextAction ?? r.name ?? 'Imported task'),
+                priority: String(r.priority ?? 'B'),
+                owner: String(r.dealLead ?? r.owner ?? ''),
+                projectName: String(r.projectName ?? ''),
+                dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
+                status: 'Open',
+                notes: String(r.notes ?? 'Excel import'),
+              }),
+            })
+          }
+        }}
+        onImportContacts={async (rows: ImportRow[]) => {
+          if (getStoredSession()?.token === 'local-demo') {
+            const existing = loadDemoCollection('contacts', mockContacts)
+            const mapped = rows.map((r, i) => ({
+              id: `con_import_${Date.now()}_${i}`,
+              name: String(r.name ?? r.entityName ?? `Contact ${i + 1}`),
+              title: String(r.title ?? ''),
+              company: String(r.company ?? r.entityName ?? ''),
+              category: 'Other',
+              email: String(r.email ?? ''),
+              phone: String(r.phone ?? ''),
+              opportunityId: null,
+              projectName: String(r.projectName ?? ''),
+              status: 'Active',
+              lastContactDate: null,
+              notes: String(r.notes ?? 'Excel import'),
+            }))
+            saveDemoCollection('contacts', [...mapped, ...existing])
+            return
+          }
+          const token = getStoredSession()?.token
+          for (const r of rows) {
+            await fetch('/api/resources/contacts', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                name: String(r.name ?? r.entityName ?? 'Imported contact'),
+                title: String(r.title ?? ''),
+                company: String(r.company ?? ''),
+                email: String(r.email ?? ''),
+                phone: String(r.phone ?? ''),
+                projectName: String(r.projectName ?? ''),
+                status: 'Active',
+                notes: String(r.notes ?? 'Excel import'),
+              }),
+            })
+          }
+        }}
+      />
 
       <OpportunityDrawer opportunity={selected} onClose={() => setSelected(null)} />
 

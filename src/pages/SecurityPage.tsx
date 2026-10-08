@@ -7,7 +7,10 @@ import {
   type ChangeHistoryEntry,
 } from '@/lib/api'
 import { loadDemoChangeHistory } from '@/lib/demoStore'
-import { History, KeyRound, ScrollText, Shield } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '@/auth/AuthContext'
+import { MANAGER_MASTER_KEY } from '@/lib/api'
+import { History, KeyRound, ScrollText, Shield, Ban, ShieldPlus } from 'lucide-react'
 
 const DEMO_SLOTS = [
   { slot: 1, label: 'Primary integration (demo)', key_prefix: 'nwp_demo_', status: 'active', last_used_at: null },
@@ -18,6 +21,7 @@ const DEMO_SLOTS = [
 ]
 
 export function SecurityPage() {
+  const { user } = useAuth()
   const [slots, setSlots] = useState<
     Array<{
       slot: number
@@ -110,6 +114,37 @@ export function SecurityPage() {
           <p className="lg:col-span-2 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention">
             {error}
           </p>
+        )}
+
+        {user?.isManager && (
+          <section className="lg:col-span-2 rounded-xl border border-amber-200 bg-amber-50/80 p-5">
+            <h2 className="font-brand text-lg font-semibold text-navy-900">
+              Managerial console
+            </h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              You hold the single master key. Use it to boot compromised access or issue new
+              partner keys.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                to="/security/keys"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-800"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Boot keys & logins
+              </Link>
+              <Link
+                to="/security/provision"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-900"
+              >
+                <ShieldPlus className="h-3.5 w-3.5" />
+                Provision new keys
+              </Link>
+            </div>
+            <p className="mt-3 font-mono text-[11px] break-all text-amber-950/80">
+              Your master key (store offline): {MANAGER_MASTER_KEY}
+            </p>
+          </section>
         )}
 
         <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)">

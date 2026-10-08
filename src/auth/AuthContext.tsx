@@ -35,13 +35,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await demoSignIn()
       setUser(data.user)
     } catch {
-      // Static hosting (no API server): fall back to a local demo session
-      const demoUser = {
+      const demoUser: AuthUser = {
         id: 'user-dennis',
         email: 'dennis@newportspecialty.demo',
         name: 'Dennis DiCapua',
         role: 'partner',
         initials: 'DD',
+        authMethod: 'demo',
+        isManager: false,
+        apiKeyId: null,
+        apiKeySlot: null,
+        apiKeyLabel: null,
       }
       storeSession('local-demo', demoUser)
       setUser(demoUser)
@@ -49,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signInWithApiKey = useCallback(async (apiKey: string) => {
-    const data = await apiKeySignIn(apiKey)
+    const data = await apiKeySignIn(apiKey.trim())
     setUser(data.user)
   }, [])
 

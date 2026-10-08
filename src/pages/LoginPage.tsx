@@ -104,7 +104,7 @@ export function LoginPage() {
               >
                 Enterprise API key
               </label>
-              <span className="text-[10px] text-ink-subtle">5 provisioned slots</span>
+              <span className="text-[10px] text-ink-subtle">5 slots + managerial</span>
             </div>
             <div className="relative">
               <KeyRound className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
@@ -128,8 +128,9 @@ export function LoginPage() {
               Authenticate
             </button>
             <p className="text-[11px] leading-relaxed text-ink-subtle">
-              Keys are issued and rotated exclusively by the Newport Information Security
-              team. Lost or compromised keys must be reported immediately for revocation.
+              Partner keys (5 slots) are issued by Information Security. The single
+              managerial master key can revoke slots, kick sessions, and provision new
+              access — held only by the designated owner.
             </p>
           </form>
 

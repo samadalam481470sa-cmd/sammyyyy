@@ -9,6 +9,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
+import { STATUS_CHART_COLORS } from '@/utils/badges'
 
 interface StatusDatum {
   status: OpportunityStatus | string
@@ -25,14 +26,7 @@ interface DashboardChartsProps {
   byStage: StageDatum[]
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Active: '#0b1f3a',
-  Pending: '#3d7eb8',
-  Inactive: '#8a93a3',
-  Declined: '#c8ced8',
-  Closed: '#5a6577',
-  Completed: '#1f6b4a',
-}
+const STATUS_COLORS: Record<string, string> = STATUS_CHART_COLORS
 
 const STAGE_COLOR = '#3d7eb8'
 

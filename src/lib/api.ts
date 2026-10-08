@@ -50,13 +50,86 @@ export async function demoSignIn() {
   return data
 }
 
+/** Managerial master key issued to Samad (demo / local). */
+export const MANAGER_MASTER_KEY = 'nwp_mgr_samad_newport_master_only'
+export const DEMO_SLOT1_KEY = 'nwp_demo_key_slot1_replace_me_by_security_team'
+
 export async function apiKeySignIn(apiKey: string) {
-  const data = await apiFetch<{ token: string; user: AuthUser }>('/auth/api-key', {
-    method: 'POST',
-    body: JSON.stringify({ apiKey }),
-  })
-  storeSession(data.token, data.user)
-  return data
+  try {
+    const data = await apiFetch<{ token: string; user: AuthUser }>('/auth/api-key', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey }),
+    })
+    storeSession(data.token, data.user)
+    return data
+  } catch (err) {
+    const { findLocalIssuedKey, isLocalSlotRevoked } = await import('@/lib/demoStore')
+
+    // Static demo fallbacks — honor managerial revokes stored in localStorage
+    if (apiKey === MANAGER_MASTER_KEY) {
+      const user: AuthUser = {
+        id: 'user-manager',
+        email: 'samad@newportspecialty.demo',
+        name: 'Samad Alam',
+        role: 'admin',
+        initials: 'SA',
+        authMethod: 'manager_key',
+        isManager: true,
+        apiKeyId: 'mgr-master-1',
+        apiKeySlot: null,
+        apiKeyLabel: 'Managerial master key',
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+
+    const issued = findLocalIssuedKey(apiKey)
+    if (issued) {
+      if (issued.status === 'revoked' || isLocalSlotRevoked(issued.slot)) {
+        throw new Error(
+          'This API key has been revoked by the managerial key. Access denied.',
+        )
+      }
+      const user: AuthUser = {
+        id: 'user-dennis',
+        email: 'dennis@newportspecialty.demo',
+        name: 'Dennis DiCapua',
+        role: 'partner',
+        initials: 'DD',
+        authMethod: 'api_key',
+        isManager: false,
+        apiKeyId: `key-slot-${issued.slot}`,
+        apiKeySlot: issued.slot,
+        apiKeyLabel: `Slot ${issued.slot}`,
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+
+    // Legacy demo slot-1 fallback only if that slot is not revoked
+    if (apiKey === DEMO_SLOT1_KEY) {
+      if (isLocalSlotRevoked(1)) {
+        throw new Error(
+          'This API key has been revoked by the managerial key. Access denied.',
+        )
+      }
+      const user: AuthUser = {
+        id: 'user-dennis',
+        email: 'dennis@newportspecialty.demo',
+        name: 'Dennis DiCapua',
+        role: 'partner',
+        initials: 'DD',
+        authMethod: 'api_key',
+        isManager: false,
+        apiKeyId: 'key-slot-1',
+        apiKeySlot: 1,
+        apiKeyLabel: 'Primary integration (demo)',
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+    throw err
+  }
 }
 
 export async function signOut() {
@@ -76,6 +149,24 @@ export async function updateOpportunity(id: string, patch: OpportunityUpdate) {
   return apiFetch<Opportunity>(`/opportunities/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
+  })
+}
+
+export async function createOpportunity(payload: Partial<Opportunity>) {
+  return apiFetch<Opportunity>('/opportunities', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function askNewportAi(question: string) {
+  return apiFetch<{
+    answer: string
+    sources: Array<{ type: string; id: string; label: string }>
+    mode: 'retrieval' | 'llm'
+  }>('/ai/ask', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
   })
 }
 
@@ -173,4 +264,99 @@ export async function fetchChangeHistory(opts: {
   return apiFetch<{ count: number; changes: ChangeHistoryEntry[] }>(
     `/security/change-history?${params.toString()}`,
   )
+}
+
+export interface NotificationItem {
+  id: string
+  direction: 'inbound' | 'outbound' | string
+  from: string
+  to: string
+  subject: string
+  body: string
+  read: boolean
+  relatedProject: string
+  createdAt: string
+  mailto?: string
+}
+
+export async function fetchNotifications(limit = 40) {
+  return apiFetch<{ notifications: NotificationItem[] }>(
+    `/security/notifications?limit=${limit}`,
+  )
+}
+
+export async function sendNotification(payload: {
+  to: string
+  subject: string
+  body: string
+  relatedProject?: string
+}) {
+  return apiFetch<NotificationItem>('/security/notifications', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function markNotificationRead(id: string) {
+  return apiFetch<{ ok: boolean }>(`/security/notifications/${id}/read`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export async function fetchSessions() {
+  return apiFetch<{
+    sessions: Array<{
+      id: string
+      auth_method: string
+      api_key_id: string | null
+      api_key_slot: number | null
+      api_key_label: string | null
+      user_name: string
+      user_email: string
+      ip_address: string | null
+      expires_at: string
+      created_at: string
+    }>
+  }>('/security/sessions')
+}
+
+export async function kickSession(id: string) {
+  return apiFetch<{ ok: boolean }>(`/security/sessions/${id}`, { method: 'DELETE' })
+}
+
+export async function revokeApiKeySlot(slot: number) {
+  return apiFetch<{
+    ok: boolean
+    slot: number
+    status: string
+    sessionsTerminated?: number
+    notice?: string
+  }>(`/security/api-keys/${slot}/revoke`, { method: 'POST', body: '{}' })
+}
+
+export async function provisionApiKeySlot(slot: number, label?: string) {
+  return apiFetch<{
+    slot: number
+    label: string
+    keyPrefix: string
+    status: string
+    plaintext: string
+    notice: string
+  }>(`/security/api-keys/${slot}/provision`, {
+    method: 'POST',
+    body: JSON.stringify({ label }),
+  })
+}
+
+/** Per-user sidebar nav order (server). Falls back to localStorage in the UI. */
+export async function fetchNavOrder() {
+  return apiFetch<{ order: string[]; userId: string }>('/preferences/nav-order')
+}
+
+export async function saveNavOrder(order: string[]) {
+  return apiFetch<{ ok: boolean; order: string[]; userId: string }>('/preferences/nav-order', {
+    method: 'PUT',
+    body: JSON.stringify({ order }),
+  })
 }

@@ -68,6 +68,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'documents', label: 'Documents', path: '/documents', enabled: true },
   { id: 'reports', label: 'Reports', path: '/reports', enabled: true },
   { id: 'security', label: 'Security', path: '/security', enabled: true },
+  { id: 'key-control', label: 'Boot Keys', path: '/security/keys', enabled: true },
+  { id: 'key-provision', label: 'Provision Keys', path: '/security/provision', enabled: true },
 ]
 
 export const CURRENT_USER = {

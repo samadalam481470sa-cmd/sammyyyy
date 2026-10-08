@@ -3,6 +3,7 @@ import { useData } from '@/data/DataContext'
 import { OpportunityEditor } from '@/components/shared/OpportunityEditor'
 import { OPPORTUNITY_STATUSES } from '@/data/constants'
 import { formatCurrency } from '@/utils/dashboard'
+import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 import type { OpportunityStatus } from '@/types'
 
 export function OpportunitiesPage() {
@@ -92,11 +93,11 @@ export function OpportunitiesPage() {
                     <td className="px-3 py-3.5 font-medium text-ink">{opp.projectName}</td>
                     <td className="px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
                     <td className="px-3 py-3.5">
-                      <span className="rounded-md bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-navy-800">
-                        {opp.status}
-                      </span>
+                      <span className={badgeClass(statusBadge(opp.status))}>{opp.status}</span>
                     </td>
-                    <td className="px-3 py-3.5 text-ink">{opp.stage}</td>
+                    <td className="px-3 py-3.5">
+                      <span className={badgeClass(stageBadge(opp.stage))}>{opp.stage}</span>
+                    </td>
                     <td className="px-5 py-3.5 text-right tabular-nums">
                       {formatCurrency(opp.nwp)}
                     </td>

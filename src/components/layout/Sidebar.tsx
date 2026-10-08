@@ -1,4 +1,11 @@
-import { NavLink } from 'react-router-dom'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Briefcase,
@@ -11,13 +18,22 @@ import {
   BarChart3,
   FolderKanban,
   ShieldCheck,
+  Ban,
+  KeyRound,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  GripVertical,
 } from 'lucide-react'
-import { NAV_ITEMS } from '@/data/constants'
+import { NAV_ITEMS, type NavItem } from '@/data/constants'
 import { useAuth } from '@/auth/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { fetchNavOrder, getStoredSession, saveNavOrder } from '@/lib/api'
+import {
+  applyNavOrder,
+  loadLocalNavOrder,
+  moveNavId,
+  saveLocalNavOrder,
+} from '@/lib/navOrder'
 import type { LucideIcon } from 'lucide-react'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -32,6 +48,8 @@ const ICONS: Record<string, LucideIcon> = {
   documents: FileText,
   reports: BarChart3,
   security: ShieldCheck,
+  'key-control': Ban,
+  'key-provision': KeyRound,
 }
 
 interface SidebarProps {
@@ -39,9 +57,108 @@ interface SidebarProps {
   onToggle: () => void
 }
 
+function visibleNavItems(isManager: boolean | undefined): NavItem[] {
+  return NAV_ITEMS.filter((item) => {
+    if (item.id === 'key-control' || item.id === 'key-provision') {
+      return Boolean(isManager)
+    }
+    return item.enabled
+  })
+}
+
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut, user } = useAuth()
   const navigate = useNavigate()
+  const [orderIds, setOrderIds] = useState<string[]>(() =>
+    visibleNavItems(user?.isManager).map((item) => item.id),
+  )
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+  const didDragRef = useRef(false)
+
+  const baseItems = useMemo(() => visibleNavItems(user?.isManager), [user?.isManager])
+
+  // Load this user's saved order (local first, then server when available)
+  useEffect(() => {
+    if (!user?.id) return
+    const defaults = visibleNavItems(user.isManager).map((item) => item.id)
+    const local = loadLocalNavOrder(user.id)
+    setOrderIds(local?.length ? applyNavOrder(
+      visibleNavItems(user.isManager),
+      local,
+    ).map((i) => i.id) : defaults)
+
+    const localDemo = getStoredSession()?.token === 'local-demo'
+    if (localDemo) return
+
+    void fetchNavOrder()
+      .then((data) => {
+        if (!data.order?.length) return
+        saveLocalNavOrder(user.id, data.order)
+        setOrderIds(
+          applyNavOrder(visibleNavItems(user.isManager), data.order).map((i) => i.id),
+        )
+      })
+      .catch(() => {
+        // offline / unauthorized — keep local order
+      })
+  }, [user?.id, user?.isManager])
+
+  const items = useMemo(
+    () => applyNavOrder(baseItems, orderIds),
+    [baseItems, orderIds],
+  )
+
+  const persistOrder = (nextIds: string[]) => {
+    setOrderIds(nextIds)
+    if (!user?.id) return
+    saveLocalNavOrder(user.id, nextIds)
+    if (getStoredSession()?.token === 'local-demo') return
+    void saveNavOrder(nextIds).catch(() => {
+      // local already saved
+    })
+  }
+
+  const onDragStart = (index: number) => (e: DragEvent) => {
+    didDragRef.current = false
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+    // Improve drag ghost in some browsers
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.55'
+    }
+  }
+
+  const onDragEnd = (e: DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = ''
+    }
+    setDragIndex(null)
+    setOverIndex(null)
+  }
+
+  const onDragOver = (index: number) => (e: DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (overIndex !== index) setOverIndex(index)
+  }
+
+  const onDrop = (toIndex: number) => (e: DragEvent) => {
+    e.preventDefault()
+    const fromRaw = e.dataTransfer.getData('text/plain')
+    const fromIndex = Number(fromRaw)
+    if (!Number.isInteger(fromIndex) || fromIndex === toIndex) {
+      setDragIndex(null)
+      setOverIndex(null)
+      return
+    }
+    didDragRef.current = true
+    const currentIds = items.map((item) => item.id)
+    persistOrder(moveNavId(currentIds, fromIndex, toIndex))
+    setDragIndex(null)
+    setOverIndex(null)
+  }
 
   return (
     <aside
@@ -65,18 +182,41 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       </div>
 
-      <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3">
+      <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
+        {!collapsed && (
+          <p className="mb-2 px-3 text-[10px] tracking-[0.08em] text-white/35 uppercase">
+            Hold & drag to reorder · saved for you
+          </p>
+        )}
         <ul className="space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {items.map((item, index) => {
             const Icon = ICONS[item.id] ?? Briefcase
+            const isDragging = dragIndex === index
+            const isOver = overIndex === index && dragIndex !== null && dragIndex !== index
             return (
-              <li key={item.id}>
+              <li
+                key={item.id}
+                draggable
+                onDragStart={onDragStart(index)}
+                onDragEnd={onDragEnd}
+                onDragOver={onDragOver(index)}
+                onDrop={onDrop(index)}
+                className={`rounded-lg transition-[box-shadow,transform,opacity] ${
+                  isDragging ? 'opacity-50' : ''
+                } ${isOver ? 'ring-1 ring-accent/60 ring-offset-1 ring-offset-navy-900' : ''}`}
+              >
                 <NavLink
                   to={item.path}
                   end={item.path === '/'}
                   title={collapsed ? item.label : undefined}
+                  onClick={(e) => {
+                    if (didDragRef.current) {
+                      e.preventDefault()
+                      didDragRef.current = false
+                    }
+                  }}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] transition-colors ${
+                    `group flex items-center gap-2 rounded-lg px-2 py-2.5 text-[13px] transition-colors ${
                       collapsed ? 'justify-center px-2' : ''
                     } ${
                       isActive
@@ -85,6 +225,15 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     }`
                   }
                 >
+                  {!collapsed && (
+                    <span
+                      className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-white/30 active:cursor-grabbing group-hover:text-white/55"
+                      aria-hidden
+                      title="Drag to reorder"
+                    >
+                      <GripVertical className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </span>
+                  )}
                   <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </NavLink>
