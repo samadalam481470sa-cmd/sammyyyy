@@ -97,15 +97,12 @@ export function LoginPage() {
           </div>
 
           <form onSubmit={(e) => void onApiKey(e)} className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <label
-                htmlFor="api-key"
-                className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
-              >
-                Enterprise API key
-              </label>
-              <span className="text-[10px] text-ink-subtle">5 slots + managerial</span>
-            </div>
+            <label
+              htmlFor="api-key"
+              className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
+            >
+              Enterprise API key
+            </label>
             <div className="relative">
               <KeyRound className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
               <input
