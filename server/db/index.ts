@@ -25,14 +25,23 @@ export const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
+;(() => {
+  const existing = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meetings'`)
+    .get() as { name: string } | undefined
+  if (!existing) return
+  const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'owner_key')) {
+    db.exec(`ALTER TABLE meetings ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''`)
+  }
+})()
+
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
 ;(() => {
   const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
-  if (cols.length && !cols.some((c) => c.name === 'owner_key')) {
-    db.exec(`ALTER TABLE meetings ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''`)
-  }
+  if (!cols.some((c) => c.name === 'owner_key')) return
   db.exec(`CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key)`)
   db.prepare(`UPDATE meetings SET owner_key = 'key:demo' WHERE owner_key = ''`).run()
 })()

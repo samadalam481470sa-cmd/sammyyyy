@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { ownerKeyFromAuth } from '../../src/lib/ownerKey.ts'
 import { db, hashToken } from '../db/index.ts'
 
@@ -113,7 +113,8 @@ export const meetingsWriteLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many meeting writes. Try again in a minute.' },
-  keyGenerator: (req) => `${req.auth?.sessionId || req.ip || 'anon'}:meetings-write`,
+  keyGenerator: (req) =>
+    `${req.auth?.sessionId || ipKeyGenerator(req.ip || '0.0.0.0')}:meetings-write`,
 })
 
 export const calendarWriteLimit = rateLimit({
@@ -122,7 +123,8 @@ export const calendarWriteLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many calendar writes. Try again in a minute.' },
-  keyGenerator: (req) => `${req.auth?.sessionId || req.ip || 'anon'}:calendar-write`,
+  keyGenerator: (req) =>
+    `${req.auth?.sessionId || ipKeyGenerator(req.ip || '0.0.0.0')}:calendar-write`,
 })
 
 function getBearerOrApiKey(req: Request): string | null {

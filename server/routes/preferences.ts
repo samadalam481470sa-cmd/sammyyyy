@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { sanitizeCalendarEvents } from '../../src/lib/meetingSecurity.ts'
+import { isIsoDate, sanitizeCalendarEvents } from '../../src/lib/meetingSecurity.ts'
 import { db } from '../db/index.ts'
 import { calendarWriteLimit, ownerKeyFromAuth, requireAuth } from '../middleware/security.ts'
 
@@ -57,7 +57,7 @@ const calendarSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1).max(80),
-        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        date: z.string().refine(isIsoDate, 'Invalid calendar date'),
         time: z
           .string()
           .regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/)
@@ -94,6 +94,9 @@ preferencesRouter.put('/calendar', calendarWriteLimit, (req, res) => {
     return res.status(400).json({ error: 'Invalid calendar payload' })
   }
   const events = sanitizeCalendarEvents(parsed.data.events)
+  if (events.length !== parsed.data.events.length) {
+    return res.status(400).json({ error: 'Invalid calendar payload' })
+  }
   const ownerKey = ownerKeyFromAuth(req.auth)
   db.prepare(
     `INSERT INTO key_calendars (owner_key, events_json, updated_at)
