@@ -10,9 +10,10 @@ export function LoginPage() {
   const shieldRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!authReady || isAuthenticated) return
     if (!shieldRef.current) return
     return attachLoginShield(shieldRef.current)
-  }, [])
+  }, [authReady, isAuthenticated])
   const navigate = useNavigate()
   const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState<string | null>(null)

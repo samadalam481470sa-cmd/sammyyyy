@@ -29,12 +29,12 @@ export function attachLoginShield(root: HTMLElement): () => void {
     e.preventDefault()
   }
 
-  root.addEventListener('contextmenu', onContext)
+  window.addEventListener('contextmenu', onContext, true)
   window.addEventListener('keydown', onKey, true)
   root.addEventListener('dragstart', onDrag)
 
   return () => {
-    root.removeEventListener('contextmenu', onContext)
+    window.removeEventListener('contextmenu', onContext, true)
     window.removeEventListener('keydown', onKey, true)
     root.removeEventListener('dragstart', onDrag)
   }
