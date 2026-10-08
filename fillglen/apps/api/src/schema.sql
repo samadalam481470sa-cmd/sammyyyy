@@ -100,3 +100,58 @@ CREATE TABLE ai_usage (
   day DATE NOT NULL,
   cached BOOLEAN NOT NULL DEFAULT false
 );
+
+-- 24/7 local finder (server-side). AI never inserts rows here.
+CREATE TABLE listings (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  location_text TEXT NOT NULL,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  work_mode TEXT NOT NULL,
+  description TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source TEXT NOT NULL,
+  sources JSONB NOT NULL,
+  first_seen_at TIMESTAMPTZ NOT NULL,
+  last_checked_at TIMESTAMPTZ NOT NULL,
+  posted_at TIMESTAMPTZ,
+  status TEXT NOT NULL
+);
+
+CREATE TABLE employers (
+  company TEXT NOT NULL,
+  metro TEXT NOT NULL,
+  careers_url TEXT NOT NULL,
+  board TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  source_kind TEXT NOT NULL
+);
+
+CREATE TABLE score_cache (
+  key TEXT PRIMARY KEY,
+  listing_id TEXT NOT NULL,
+  card JSONB NOT NULL,
+  at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE listing_feedback (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  listing_id TEXT,
+  company TEXT,
+  sentiment TEXT NOT NULL,
+  reason TEXT,
+  at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE finder_alerts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  listing_id TEXT NOT NULL,
+  score INT NOT NULL,
+  why TEXT NOT NULL,
+  at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  timing TEXT NOT NULL
+);

@@ -11,6 +11,7 @@ Fillglen is a job-application assistant (Chrome extension, web dashboard, and AP
 - Saved answers you write for recurring questions.
 - Self-identification answers. Each field defaults to “Decline to self-identify” and is encrypted at rest.
 - Job posts you start filling, including a copy of the description at that moment, application status, and answers you send.
+- Local job-search settings (city, radius, titles, niche) and thumbs-up/down on matches. The 24/7 finder stores public posting URLs, sources, and seen dates — not invented jobs.
 - Optional, consent-only anonymous counts of fill success per job board. Counts only — never answers.
 
 ## How we use it
@@ -22,7 +23,8 @@ To fill supported application forms, show the live question window, draft answer
 - Click the final Submit / Apply button.
 - Invent jobs, skills, numbers, or degrees.
 - Run on LinkedIn Easy Apply.
-- Scrape LinkedIn or Indeed.
+- Scrape LinkedIn, Indeed, or Glassdoor.
+- Invent job listings. The finder only reads public APIs and feeds.
 - Sell or share your data.
 - Use personal data for unrelated advertising.
 
@@ -32,7 +34,7 @@ Pause live filling for a site from the live window. Export all data or delete th
 
 ## Security
 
-HTTPS in production. Session tokens are stored hashed. Rate limits and an audit log sit on the API. Host permissions on the extension are limited to Greenhouse, Lever, Ashby, SmartRecruiters, iCIMS, and Workday.
+HTTPS in production. Session tokens are stored hashed. Rate limits and an audit log sit on the API. Host permissions on the extension are limited to supported ATS hosts plus the local Fillglen API used to display match counts. The extension does not crawl the web for jobs.
 
 ## Contact
 

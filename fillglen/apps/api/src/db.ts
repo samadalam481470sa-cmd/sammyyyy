@@ -16,6 +16,11 @@ interface Store {
   searches: Row[];
   audit: Row[];
   aiUsage: Row[];
+  listings: Row[];
+  employers: Row[];
+  scoreCache: Row[];
+  feedback: Row[];
+  alerts: Row[];
 }
 
 const DATA = process.env.FILLGLEN_DATA || path.join(process.cwd(), ".data", "fillglen.json");
@@ -33,6 +38,11 @@ function empty(): Store {
     searches: [],
     audit: [],
     aiUsage: [],
+    listings: [],
+    employers: [],
+    scoreCache: [],
+    feedback: [],
+    alerts: [],
   };
 }
 

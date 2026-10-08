@@ -14,6 +14,8 @@ import {
 } from "@fillglen/core";
 import { db, decryptField, encryptField, hashToken, id, loadDb, saveDb } from "./db.js";
 import { fetchPublicJobs } from "./jobs.js";
+import { mountFinder } from "./finder/routes.js";
+import { cycle as finderCycle } from "./finder/worker.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const SECRET = process.env.FILLGLEN_SECRET || "dev-only-change-me";
@@ -24,7 +26,12 @@ loadDb();
 
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: CORS, credentials: true }));
+app.use(
+  cors({
+    origin: [CORS, "http://127.0.0.1:5173", "http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "2mb" }));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
@@ -201,6 +208,8 @@ app.post("/v1/ai/draft", auth, async (req, res) => {
   res.json(draft);
 });
 
+mountFinder(app, auth);
+
 app.get("/v1/jobs/public", auth, async (req, res) => {
   const q = String(req.query.q || "");
   const location = String(req.query.location || "");
@@ -228,7 +237,7 @@ app.get("/v1/export", auth, (req, res) => {
 
 app.delete("/v1/account", auth, (req, res) => {
   const userId = (req as express.Request & { userId: string }).userId;
-  for (const table of ["sessions", "profiles", "answers", "jobs", "applications", "documents", "searches", "aiUsage"] as const) {
+  for (const table of ["sessions", "profiles", "answers", "jobs", "applications", "documents", "searches", "aiUsage", "feedback", "alerts"] as const) {
     db.remove(table, (r) => r.userId === userId);
   }
   db.remove("users", (u) => u.id === userId);
@@ -247,6 +256,13 @@ if (isDirect) {
   app.listen(PORT, () => {
     console.log(`Fillglen API on http://localhost:${PORT}`);
   });
+  if (process.env.FINDER_SCHEDULE !== "0") {
+    const ms = Number(process.env.FINDER_INTERVAL_MS || 60 * 60 * 1000);
+    if (process.env.RUN_FINDER_ON_START !== "false") {
+      finderCycle().catch((err) => console.error("finder start", err));
+    }
+    setInterval(() => finderCycle().catch((err) => console.error("finder", err)), ms);
+  }
 }
 
 export { app };

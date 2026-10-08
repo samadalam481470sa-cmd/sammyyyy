@@ -28,6 +28,8 @@ export default defineManifest({
   },
   permissions: ["storage", "sidePanel", "scripting", "tabs", "windows", "webNavigation"],
   host_permissions: [
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*",
     "https://*.greenhouse.io/*",
     "https://*.lever.co/*",
     "https://*.ashbyhq.com/*",

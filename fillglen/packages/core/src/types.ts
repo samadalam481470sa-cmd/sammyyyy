@@ -95,6 +95,10 @@ export interface JobMeta {
   stepLabel?: string;
   stepIndex?: number;
   stepTotal?: number;
+  /** Score from the 24/7 local finder when this posting came from that feed. */
+  feedScore?: number;
+  feedWhy?: string;
+  feedSource?: string;
 }
 
 export interface ScanSnapshot {

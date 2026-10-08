@@ -167,13 +167,16 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function JobHeader({ job, match }: { job: ScanSnapshot["job"]; match?: number }) {
+  const feed = job.feedScore != null ? job.feedScore : match;
   return (
     <section className="job">
       <h1>{job.title || "Application"}</h1>
       <p>
         {job.company || "Company"} · {job.board}
-        {match != null ? ` · Match ${match}` : ""}
+        {job.feedSource ? ` · ${job.feedSource}` : ""}
+        {feed != null ? ` · Match ${feed}` : ""}
       </p>
+      {job.feedWhy ? <p className="hint">{job.feedWhy}</p> : null}
     </section>
   );
 }

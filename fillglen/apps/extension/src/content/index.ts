@@ -2,6 +2,7 @@ import {
   adapterFor,
   diffQuestions,
   EMPTY_PROFILE,
+  feedMetaForUrl,
   planPage,
   shouldBlockPage,
   type Profile,
@@ -61,7 +62,10 @@ function boot() {
     }
   }
 
-  function snapshot(questions: Question[]): ScanSnapshot {
+  function snapshot(
+    questions: Question[],
+    finderMatches?: { lookup?: { url: string; score: number; why?: string; source?: string }[]; top?: { url: string; score: number; why?: string; source?: string }[] }
+  ): ScanSnapshot {
     const adapter = adapterFor(url);
     const step = adapter?.id === "workday" ? readWorkdayStep() : undefined;
     const heading = document.querySelector("h1, h2")?.textContent?.trim() || document.title;
@@ -84,6 +88,9 @@ function boot() {
       job.stepIndex = step.index;
       job.stepTotal = step.total;
     }
+    const lookup = [...(finderMatches?.lookup || []), ...(finderMatches?.top || [])];
+    const feed = feedMetaForUrl(url, lookup);
+    if (feed) Object.assign(job, feed);
     return { job, questions, blockedReason: blocked || undefined };
   }
 
@@ -92,7 +99,7 @@ function boot() {
       if (window === window.top) post({ type: "scan", snapshot: snapshot([]) });
       return;
     }
-    const stored = await chrome.storage.local.get(["profile", "pausedOrigins"]);
+    const stored = await chrome.storage.local.get(["profile", "pausedOrigins", "finderMatches"]);
     const origin = location.origin;
     paused = ((stored.pausedOrigins as string[]) || []).includes(origin);
     if (paused) return;
@@ -100,7 +107,7 @@ function boot() {
     const questions = scanDocument(document, frameId, profile);
     if (reason === "full" || last.length === 0) {
       last = questions;
-      post({ type: "scan", snapshot: snapshot(questions) });
+      post({ type: "scan", snapshot: snapshot(questions, stored.finderMatches as Parameters<typeof snapshot>[1]) });
       if (window === window.top && questions.length > 0) {
         const plans = planPage(questions, profile).filter((p) => p.value);
         for (const plan of plans) applyOne(plan.questionId, plan.value);

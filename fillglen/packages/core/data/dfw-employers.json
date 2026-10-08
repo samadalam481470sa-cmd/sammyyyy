@@ -1,0 +1,78 @@
+{
+  "metro": "dfw",
+  "notes": "Seed mapped from public ATS feeds and local employer directories. Coverage is mappedCount/seedCount — not a claim of every job in DFW.",
+  "employers": [
+    {
+      "company": "Match Group",
+      "metro": "dfw",
+      "careersUrl": "https://www.greenhouse.io/",
+      "board": "greenhouse",
+      "slug": "tinder",
+      "sourceKind": "chamber-and-journal",
+      "hqHint": "Dallas, TX"
+    },
+    {
+      "company": "Capital One",
+      "metro": "dfw",
+      "careersUrl": "https://www.capitalonecareers.com/",
+      "board": "greenhouse",
+      "slug": "capitalone",
+      "sourceKind": "career-fair",
+      "hqHint": "Plano, TX"
+    },
+    {
+      "company": "CrowdStrike",
+      "metro": "dfw",
+      "careersUrl": "https://www.crowdstrike.com/careers/",
+      "board": "greenhouse",
+      "slug": "crowdstrike",
+      "sourceKind": "industry-association",
+      "hqHint": "Remote / Texas"
+    },
+    {
+      "company": "Cloudflare",
+      "metro": "dfw",
+      "careersUrl": "https://www.cloudflare.com/careers/",
+      "board": "greenhouse",
+      "slug": "cloudflare",
+      "sourceKind": "industry-association",
+      "hqHint": "Austin / remote"
+    },
+    {
+      "company": "Stripe",
+      "metro": "austin",
+      "careersUrl": "https://stripe.com/jobs",
+      "board": "greenhouse",
+      "slug": "stripe",
+      "sourceKind": "career-fair",
+      "hqHint": "Southlake / Austin presence"
+    },
+    {
+      "company": "Bumble",
+      "metro": "austin",
+      "careersUrl": "https://bumble.com/careers",
+      "board": "greenhouse",
+      "slug": "bumbleinc",
+      "sourceKind": "journal",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "American Airlines",
+      "metro": "dfw",
+      "careersUrl": "https://jobs.aa.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Fort Worth, TX"
+    },
+    {
+      "company": "Texas Instruments",
+      "metro": "dfw",
+      "careersUrl": "https://careers.ti.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Dallas, TX"
+    }
+  ]
+}

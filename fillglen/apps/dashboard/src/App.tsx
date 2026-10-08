@@ -10,9 +10,13 @@ import Settings from "./pages/Settings";
 import Privacy from "./pages/Privacy";
 import LiveDemo from "./pages/LiveDemo";
 import SignIn from "./pages/SignIn";
+import LocalJobs from "./pages/LocalJobs";
+import SavedSearches from "./pages/SavedSearches";
 
 const links = [
   ["/", "Home"],
+  ["/local", "Local jobs"],
+  ["/searches", "Saved searches"],
   ["/tracker", "Tracker"],
   ["/resumes", "Resumes"],
   ["/answers", "Answers"],
@@ -20,6 +24,7 @@ const links = [
   ["/board", "Job board"],
   ["/live", "Live window"],
   ["/settings", "Settings"],
+  ["/signin", "Sign in"],
 ];
 
 export default function App() {
@@ -41,6 +46,8 @@ export default function App() {
       <main className="px-6 py-6 max-w-6xl mx-auto">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/local" element={<LocalJobs />} />
+          <Route path="/searches" element={<SavedSearches />} />
           <Route path="/tracker" element={<Tracker />} />
           <Route path="/tracker/:id" element={<JobDetail />} />
           <Route path="/resumes" element={<Resumes />} />

@@ -1,0 +1,53 @@
+{
+  "dfw": {
+    "id": "dfw",
+    "name": "Dallas–Fort Worth",
+    "center": { "lat": 32.8998, "lng": -97.0403, "label": "DFW" },
+    "places": {
+      "dallas": { "lat": 32.7767, "lng": -96.797 },
+      "fort worth": { "lat": 32.7555, "lng": -97.3308 },
+      "plano": { "lat": 33.0198, "lng": -96.6989 },
+      "richardson": { "lat": 32.9482, "lng": -96.7297 },
+      "irving": { "lat": 32.814, "lng": -96.9489 },
+      "arlington": { "lat": 32.7357, "lng": -97.1081 },
+      "frisco": { "lat": 33.1507, "lng": -96.8236 },
+      "mckinney": { "lat": 33.1972, "lng": -96.6398 },
+      "carrollton": { "lat": 32.9756, "lng": -96.8897 },
+      "addison": { "lat": 32.9618, "lng": -96.8292 },
+      "grapevine": { "lat": 32.934, "lng": -97.078 },
+      "southlake": { "lat": 32.9412, "lng": -97.1342 },
+      "denton": { "lat": 33.2148, "lng": -97.1331 },
+      "garland": { "lat": 32.9126, "lng": -96.6389 },
+      "mesquite": { "lat": 32.7668, "lng": -96.5992 },
+      "grand prairie": { "lat": 32.746, "lng": -96.9978 },
+      "allen": { "lat": 33.1032, "lng": -96.6706 },
+      "coppell": { "lat": 32.9546, "lng": -97.015 },
+      "lewisville": { "lat": 33.0462, "lng": -96.9942 },
+      "the colony": { "lat": 33.089, "lng": -96.8864 },
+      "farmers branch": { "lat": 32.9265, "lng": -96.8961 },
+      "university park": { "lat": 32.8498, "lng": -96.797 },
+      "highland park": { "lat": 32.8332, "lng": -96.7919 },
+      "mansfield": { "lat": 32.5632, "lng": -97.1417 },
+      "euless": { "lat": 32.837, "lng": -97.082 },
+      "bedford": { "lat": 32.844, "lng": -97.1431 },
+      "hurst": { "lat": 32.8235, "lng": -97.1706 },
+      "keller": { "lat": 32.9347, "lng": -97.2297 },
+      "flower mound": { "lat": 33.0146, "lng": -97.097 },
+      "dfw": { "lat": 32.8998, "lng": -97.0403 },
+      "dallas-fort worth": { "lat": 32.8998, "lng": -97.0403 },
+      "dallas-fort worth metroplex": { "lat": 32.8998, "lng": -97.0403 },
+      "metroplex": { "lat": 32.8998, "lng": -97.0403 }
+    }
+  },
+  "austin": {
+    "id": "austin",
+    "name": "Austin",
+    "center": { "lat": 30.2672, "lng": -97.7431, "label": "Austin" },
+    "places": {
+      "austin": { "lat": 30.2672, "lng": -97.7431 },
+      "round rock": { "lat": 30.5083, "lng": -97.6789 },
+      "cedar park": { "lat": 30.5052, "lng": -97.8203 },
+      "pflugerville": { "lat": 30.4394, "lng": -97.62 }
+    }
+  }
+}

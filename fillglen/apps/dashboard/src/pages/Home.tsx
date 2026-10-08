@@ -5,9 +5,13 @@ import { api, token } from "../api";
 
 export default function Home() {
   const [data, setData] = useState<{ applications: { status: string; createdAt: string }[] }>({ applications: [] });
+  const [localCount, setLocalCount] = useState(0);
   useEffect(() => {
     if (!token()) return;
     api("/v1/applications").then(setData).catch(() => {});
+    api("/v1/finder/matches")
+      .then((r) => setLocalCount(r.count || 0))
+      .catch(() => {});
   }, []);
   const week = data.applications.filter((a) => Date.now() - new Date(a.createdAt).getTime() < 7 * 86400000).length;
   const applied = data.applications.filter((a) => a.status === "applied").length;
@@ -26,10 +30,11 @@ export default function Home() {
           to sync. The extension still works offline.
         </p>
       ) : null}
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card label="Applications this week" value={week} />
         <Card label="Marked applied" value={applied} />
         <Card label="Response rate" value={applied ? `${Math.round((applied / Math.max(data.applications.length, 1)) * 100)}%` : "—"} />
+        <Card label="New local matches" value={localCount} />
       </div>
       <div className="h-56 bg-[#fffbf5] border border-[#d9d0c4] rounded-xl p-3">
         <ResponsiveContainer width="100%" height="100%">

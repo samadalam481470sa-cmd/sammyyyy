@@ -8,6 +8,7 @@
     "test": "npm test --workspaces --if-present",
     "test:core": "npm test -w @fillglen/core",
     "dev:api": "npm run dev -w @fillglen/api",
+    "finder": "npm run finder -w @fillglen/api",
     "dev:dashboard": "npm run dev -w @fillglen/dashboard",
     "dev:extension": "npm run dev -w @fillglen/extension",
     "build": "npm run build --workspaces --if-present",

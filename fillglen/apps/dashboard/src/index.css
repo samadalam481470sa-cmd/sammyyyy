@@ -4,3 +4,19 @@
 
 body { margin: 0; }
 a { color: inherit; }
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+input, select, textarea {
+  border: 1px solid #d9d0c4;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: #fff;
+}
+button {
+  cursor: pointer;
+}

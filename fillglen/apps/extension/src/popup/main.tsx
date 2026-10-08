@@ -4,14 +4,31 @@ import { EMPTY_PROFILE, parseResumeText, type Profile } from "@fillglen/core";
 import { Logo } from "../panel/QuestionWindow";
 import "../panel/styles.css";
 
+type Match = { title: string; company: string; url: string; score: number; source: string; why?: string };
+
 function Popup() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [paste, setPaste] = useState("");
   const [status, setStatus] = useState("Paste a resume, then confirm the fields.");
+  const [matches, setMatches] = useState<{ count: number; top: Match[] }>({ count: 0, top: [] });
 
   useEffect(() => {
-    chrome.storage.local.get(["profile"], (r) => {
+    chrome.storage.local.get(["profile", "apiBase", "sessionToken", "finderMatches"], (r) => {
       if (r.profile) setProfile(r.profile);
+      if (r.finderMatches) setMatches(r.finderMatches);
+      const base = r.apiBase || "http://127.0.0.1:8787";
+      if (r.sessionToken) {
+        fetch(`${base}/v1/finder/matches`, { headers: { authorization: `Bearer ${r.sessionToken}` } })
+          .then((res) => res.json())
+          .then((body) => {
+            setMatches(body);
+            chrome.storage.local.set({ finderMatches: body });
+            const n = body.count ? String(body.count) : "";
+            chrome.action.setBadgeText({ text: n });
+            chrome.action.setBadgeBackgroundColor({ color: "#1b3a2f" });
+          })
+          .catch(() => {});
+      }
     });
   }, []);
 
@@ -70,6 +87,21 @@ function Popup() {
           onChange={(e) => save({ ...profile, contact: { ...profile.contact, email: e.target.value } })}
         />
       </label>
+      <p className="meta">
+        New local matches: {matches.count}. Search runs on the server, not in this popup.
+      </p>
+      <ol className="qlist">
+        {(matches.top || []).map((m) => (
+          <li key={m.url} className="qrow">
+            <a href={m.url} target="_blank" rel="noreferrer">
+              {m.title}
+            </a>
+            <div className="meta">
+              {m.company} · {m.source} · {m.score}
+            </div>
+          </li>
+        ))}
+      </ol>
       <p className="meta">LinkedIn Easy Apply is blocked. You always click Submit.</p>
     </div>
   );

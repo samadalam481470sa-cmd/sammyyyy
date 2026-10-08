@@ -10,4 +10,5 @@ export * from "./tailor.js";
 export * from "./ai.js";
 export * from "./adapters.js";
 export * from "./parseResume.js";
+export * from "./finder.js";
 export { planPage, planFill, valueForType } from "./resolve.js";

@@ -7,6 +7,8 @@ import path from "node:path";
 
 process.env.FILLGLEN_DATA = path.join(mkdtempSync(path.join(os.tmpdir(), "fg-")), "db.json");
 process.env.FILLGLEN_SECRET = "test-secret";
+process.env.FINDER_SCHEDULE = "0";
+process.env.FILLGLEN_AI_PROVIDER = "none";
 
 const { app } = await import("../src/server.ts");
 const server = http.createServer(app);
@@ -59,6 +61,44 @@ describe("Fillglen API", () => {
       body: JSON.stringify({ description: "Required: TypeScript" }),
     });
     assert.match(r.body.explanation, /not a prediction/i);
+  });
+  it("local finder scores a real sourced listing and refuses invented rows", async () => {
+    const { upsertListing } = await import("../src/finder/pipeline.ts");
+    upsertListing({
+      id: "gh-test-1",
+      title: "IT Systems Analyst",
+      company: "North Texas Mutual",
+      locationText: "Carrollton, TX",
+      lat: 32.9756,
+      lng: -96.8897,
+      workMode: "onsite",
+      description: "Entry level systems analyst. Cybersecurity compliance.",
+      url: "https://boards.greenhouse.io/northtexmutual/jobs/123",
+      source: "greenhouse",
+      sources: [{ source: "greenhouse", url: "https://boards.greenhouse.io/northtexmutual/jobs/123" }],
+      firstSeenAt: "2026-10-01T00:00:00.000Z",
+      lastCheckedAt: "2026-10-08T00:00:00.000Z",
+      status: "open",
+    });
+    const jobs = await json(`${base}/v1/finder/jobs`, { headers: { authorization: `Bearer ${token}` } });
+    assert.ok(jobs.body.jobs.length >= 1);
+    assert.ok(jobs.body.jobs[0].url);
+    assert.ok(jobs.body.jobs[0].source);
+    assert.ok(jobs.body.jobs[0].firstSeenAt);
+    assert.ok(jobs.body.coverage.note);
+    const mcp = await json(`${base}/v1/mcp/search_local_jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ query: "cybersecurity", city: "Carrollton, TX", radiusMiles: 20 }),
+    });
+    assert.ok(mcp.body.listings.some((l: { url: string }) => l.url.includes("greenhouse")));
+    const mapped = await json(`${base}/v1/finder/employers`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ company: "Acme", careersUrl: "https://jobs.lever.co/acme" }),
+    });
+    assert.equal(mapped.body.board, "lever");
+    assert.equal(mapped.body.slug, "acme");
   });
   it("export and delete account", async () => {
     const exp = await json(`${base}/v1/export`, { headers: { authorization: `Bearer ${token}` } });
