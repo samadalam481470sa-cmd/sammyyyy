@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -15,10 +16,13 @@ import {
   storeSession,
   signOut as apiSignOut,
 } from '@/lib/api'
+import { DEMO_FINGERPRINT } from '@/lib/credentialHashes'
+import { LOCAL_TOKEN, readProofBlob, verifySessionProof } from '@/lib/sessionProof'
 
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
+  authReady: boolean
   signInDemo: () => Promise<void>
   signInWithApiKey: (apiKey: string) => Promise<void>
   signOut: () => Promise<void>
@@ -27,8 +31,37 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const initial = getStoredSession()
-  const [user, setUser] = useState<AuthUser | null>(initial?.user ?? null)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [authReady, setAuthReady] = useState(false)
+
+  const hydrate = useCallback(async () => {
+    const stored = getStoredSession()
+    if (!stored) {
+      setUser(null)
+      return
+    }
+    const ok = await verifySessionProof(stored.token, stored.user, readProofBlob())
+    if (!ok) {
+      clearSession()
+      setUser(null)
+      return
+    }
+    setUser(stored.user)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void hydrate().finally(() => {
+      if (!cancelled) setAuthReady(true)
+    })
+    const id = window.setInterval(() => {
+      void hydrate()
+    }, 20_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
+  }, [hydrate])
 
   const signInDemo = useCallback(async () => {
     try {
@@ -47,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         apiKeySlot: null,
         apiKeyLabel: null,
       }
-      storeSession('local-demo', demoUser)
+      await storeSession(LOCAL_TOKEN, demoUser, DEMO_FINGERPRINT)
       setUser(demoUser)
     }
   }, [])
@@ -67,11 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isAuthenticated: Boolean(user),
+      authReady,
       signInDemo,
       signInWithApiKey,
       signOut,
     }),
-    [user, signInDemo, signInWithApiKey, signOut],
+    [user, authReady, signInDemo, signInWithApiKey, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -82,7 +82,7 @@ export function KeyProvisionPage() {
           : s,
       )
       saveDemoCollection('api_key_slots', next)
-      registerLocalIssuedKey(selectedSlot, plaintext)
+      await registerLocalIssuedKey(selectedSlot, plaintext)
       setSlots(next)
       setIssued(plaintext)
       setMessage('Key issued (local demo). Copy it now — it will not be shown again.')

@@ -111,14 +111,19 @@ export function loadAllKeyChangeHistory(): DemoChange[] {
   return loadDemoCollection<DemoChange>('change_history', [])
 }
 
-/** Issued local-demo API keys (plaintext → slot) so revoke can block login. */
-export type LocalIssuedKey = { slot: number; plaintext: string; status: 'active' | 'revoked' }
+/** Issued local-demo API keys (hash → slot). Plaintext is optional leftover from older demos. */
+export type LocalIssuedKey = {
+  slot: number
+  plaintext?: string
+  keyHash?: string
+  status: 'active' | 'revoked'
+}
 
 export function loadLocalIssuedKeys(): LocalIssuedKey[] {
   return loadDemoCollection<LocalIssuedKey>('issued_api_keys', [
     {
       slot: 1,
-      plaintext: 'nwp_demo_key_slot1_replace_me_by_security_team',
+      keyHash: '2629c112620dfbb298f34dde60c3d45b3526526a244cf9eb22a2f5ccf826491e',
       status: 'active',
     },
   ])
@@ -134,14 +139,20 @@ export function revokeLocalIssuedKey(slot: number): void {
   )
   // Ensure slot exists even if never provisioned in this browser
   if (!next.some((k) => k.slot === slot)) {
-    next.push({ slot, plaintext: '', status: 'revoked' })
+    next.push({ slot, status: 'revoked' })
   }
   saveLocalIssuedKeys(next)
 }
 
-export function registerLocalIssuedKey(slot: number, plaintext: string): void {
+export async function registerLocalIssuedKey(slot: number, plaintext: string): Promise<void> {
+  const { sha256Hex } = await import('@/lib/sha256')
+  const keyHash = await sha256Hex(plaintext.trim())
   const others = loadLocalIssuedKeys().filter((k) => k.slot !== slot)
-  saveLocalIssuedKeys([...others, { slot, plaintext, status: 'active' }])
+  saveLocalIssuedKeys([...others, { slot, keyHash, status: 'active' }])
+}
+
+export function findLocalIssuedKeyByHash(keyHash: string): LocalIssuedKey | undefined {
+  return loadLocalIssuedKeys().find((k) => k.keyHash === keyHash)
 }
 
 export function findLocalIssuedKey(plaintext: string): LocalIssuedKey | undefined {

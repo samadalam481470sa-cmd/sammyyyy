@@ -1,9 +1,29 @@
 import type { AuthUser, Opportunity, OpportunityUpdate } from '@/types'
-
-const TOKEN_KEY = 'newport_crm_session_token'
-const USER_KEY = 'newport_crm_session_user'
+import { MANAGER_KEY_HASH, SLOT1_KEY_HASH, DEMO_FINGERPRINT } from '@/lib/credentialHashes'
+import {
+  LOCAL_TOKEN,
+  TOKEN_KEY,
+  USER_KEY,
+  clearProof,
+  createSessionProof,
+  persistProof,
+  readProofBlob,
+} from '@/lib/sessionProof'
+import { sha256Hex } from '@/lib/sha256'
 
 const API_BASE = '/api'
+
+function lockUserToProof(user: AuthUser, proof: { isManager: boolean; apiKeySlot: number | null; authMethod?: AuthUser['authMethod'] }): AuthUser {
+  const role =
+    proof.isManager ? 'admin' : user.role === 'admin' ? 'partner' : user.role
+  return {
+    ...user,
+    isManager: proof.isManager,
+    apiKeySlot: proof.apiKeySlot,
+    authMethod: proof.authMethod ?? user.authMethod,
+    role,
+  }
+}
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = sessionStorage.getItem(TOKEN_KEY)
@@ -23,22 +43,37 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function getStoredSession(): { token: string; user: AuthUser } | null {
   const token = sessionStorage.getItem(TOKEN_KEY)
   const raw = sessionStorage.getItem(USER_KEY)
-  if (!token || !raw) return null
+  const proof = readProofBlob()
+  if (!token || !raw || !proof) return null
+  if (proof.token !== token || proof.expiresAt < Date.now()) {
+    clearSession()
+    return null
+  }
   try {
-    return { token, user: JSON.parse(raw) as AuthUser }
+    const parsed = JSON.parse(raw) as AuthUser
+    const user = lockUserToProof(parsed, proof)
+    return { token, user }
   } catch {
     return null
   }
 }
 
-export function storeSession(token: string, user: AuthUser) {
+export async function storeSession(token: string, user: AuthUser, fingerprint: string) {
+  const locked = lockUserToProof(user, {
+    isManager: Boolean(user.isManager || user.authMethod === 'manager_key'),
+    apiKeySlot: user.isManager ? null : (user.apiKeySlot ?? null),
+    authMethod: user.authMethod,
+  })
+  const proof = await createSessionProof({ token, user: locked, fingerprint })
   sessionStorage.setItem(TOKEN_KEY, token)
-  sessionStorage.setItem(USER_KEY, JSON.stringify(user))
+  sessionStorage.setItem(USER_KEY, JSON.stringify(locked))
+  persistProof(proof)
 }
 
 export function clearSession() {
   sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(USER_KEY)
+  clearProof()
 }
 
 export async function demoSignIn() {
@@ -46,27 +81,23 @@ export async function demoSignIn() {
     method: 'POST',
     body: '{}',
   })
-  storeSession(data.token, data.user)
+  await storeSession(data.token, data.user, DEMO_FINGERPRINT)
   return data
 }
 
-/** Managerial master key issued to Samad (demo / local). */
-export const MANAGER_MASTER_KEY = 'nwp_mgr_samad_newport_master_only'
-export const DEMO_SLOT1_KEY = 'nwp_demo_key_slot1_replace_me_by_security_team'
-
 export async function apiKeySignIn(apiKey: string) {
+  const fingerprint = await sha256Hex(apiKey.trim())
   try {
     const data = await apiFetch<{ token: string; user: AuthUser }>('/auth/api-key', {
       method: 'POST',
       body: JSON.stringify({ apiKey }),
     })
-    storeSession(data.token, data.user)
+    await storeSession(data.token, data.user, fingerprint)
     return data
   } catch (err) {
-    const { findLocalIssuedKey, isLocalSlotRevoked } = await import('@/lib/demoStore')
+    const { findLocalIssuedKeyByHash, isLocalSlotRevoked } = await import('@/lib/demoStore')
 
-    // Static demo fallbacks — honor managerial revokes stored in localStorage
-    if (apiKey === MANAGER_MASTER_KEY) {
+    if (fingerprint === MANAGER_KEY_HASH) {
       const user: AuthUser = {
         id: 'user-manager',
         email: 'samad@newportspecialty.demo',
@@ -79,11 +110,11 @@ export async function apiKeySignIn(apiKey: string) {
         apiKeySlot: null,
         apiKeyLabel: 'Managerial master key',
       }
-      storeSession('local-demo', user)
-      return { token: 'local-demo', user }
+      await storeSession(LOCAL_TOKEN, user, fingerprint)
+      return { token: LOCAL_TOKEN, user }
     }
 
-    const issued = findLocalIssuedKey(apiKey)
+    const issued = findLocalIssuedKeyByHash(fingerprint)
     if (issued) {
       if (issued.status === 'revoked' || isLocalSlotRevoked(issued.slot)) {
         throw new Error(
@@ -102,12 +133,11 @@ export async function apiKeySignIn(apiKey: string) {
         apiKeySlot: issued.slot,
         apiKeyLabel: `Slot ${issued.slot}`,
       }
-      storeSession('local-demo', user)
-      return { token: 'local-demo', user }
+      await storeSession(LOCAL_TOKEN, user, fingerprint)
+      return { token: LOCAL_TOKEN, user }
     }
 
-    // Legacy demo slot-1 fallback only if that slot is not revoked
-    if (apiKey === DEMO_SLOT1_KEY) {
+    if (fingerprint === SLOT1_KEY_HASH) {
       if (isLocalSlotRevoked(1)) {
         throw new Error(
           'This API key has been revoked by the managerial key. Access denied.',
@@ -125,8 +155,8 @@ export async function apiKeySignIn(apiKey: string) {
         apiKeySlot: 1,
         apiKeyLabel: 'Primary integration (demo)',
       }
-      storeSession('local-demo', user)
-      return { token: 'local-demo', user }
+      await storeSession(LOCAL_TOKEN, user, fingerprint)
+      return { token: LOCAL_TOKEN, user }
     }
     throw err
   }

@@ -19,21 +19,44 @@ app.set('trust proxy', 1)
 
 app.use(
   helmet({
-    // API serves JSON only; default-src 'none' blocks any attempt to render it
     contentSecurityPolicy: {
       directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
     },
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    referrerPolicy: { policy: 'no-referrer' },
   }),
 )
+const allowedOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  'https://samadalam481470sa-cmd.github.io',
+])
 app.use(
   cors({
-    origin: true,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true)
+      if (allowedOrigins.has(origin)) return cb(null, true)
+      try {
+        const url = new URL(origin)
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return cb(null, true)
+      } catch {
+        return cb(new Error('Not allowed by CORS'))
+      }
+      return cb(new Error('Not allowed by CORS'))
+    },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Request-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Requested-With', 'X-Request-Id'],
   }),
 )
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '256kb' }))
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.removeHeader('X-Powered-By')
+  next()
+})
 app.use(apiRateLimit)
 
 app.get('/api/health', (_req, res) => {

@@ -164,8 +164,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       return
     }
     didDragRef.current = true
-    const currentIds = items.map((item) => item.id)
-    persistOrder(moveNavId(currentIds, fromIndex, toIndex))
+    const movableIds = items.filter((item) => item.id !== 'dashboard').map((item) => item.id)
+    persistOrder(['dashboard', ...moveNavId(movableIds, fromIndex, toIndex)])
     setDragIndex(null)
     setOverIndex(null)
   }
@@ -194,18 +194,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
         <ul className="space-y-0.5">
-          {items.map((item, index) => {
+          {items.map((item) => {
             const Icon = ICONS[item.id] ?? Briefcase
-            const isDragging = dragIndex === index
-            const isOver = overIndex === index && dragIndex !== null && dragIndex !== index
+            const pinned = item.id === 'dashboard'
+            const movableIndex = items.filter((entry) => entry.id !== 'dashboard').findIndex((entry) => entry.id === item.id)
+            const isDragging = !pinned && dragIndex === movableIndex
+            const isOver = !pinned && overIndex === movableIndex && dragIndex !== null && dragIndex !== movableIndex
             return (
               <li
                 key={item.id}
-                draggable
-                onDragStart={onDragStart(index)}
-                onDragEnd={onDragEnd}
-                onDragOver={onDragOver(index)}
-                onDrop={onDrop(index)}
+                draggable={!pinned}
+                onDragStart={pinned ? undefined : onDragStart(movableIndex)}
+                onDragEnd={pinned ? undefined : onDragEnd}
+                onDragOver={pinned ? undefined : onDragOver(movableIndex)}
+                onDrop={pinned ? undefined : onDrop(movableIndex)}
                 className={`rounded-lg transition-[box-shadow,transform,opacity] ${
                   isDragging ? 'opacity-50' : ''
                 } ${isOver ? 'ring-1 ring-accent/60 ring-offset-1 ring-offset-navy-900' : ''}`}
@@ -230,7 +232,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     }`
                   }
                 >
-                  {!collapsed && (
+                  {!collapsed && !pinned && (
                     <span
                       className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-white/30 active:cursor-grabbing group-hover:text-white/55"
                       aria-hidden
@@ -239,6 +241,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       <GripVertical className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </span>
                   )}
+                  {!collapsed && pinned && <span className="w-4 shrink-0" aria-hidden />}
                   <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </NavLink>

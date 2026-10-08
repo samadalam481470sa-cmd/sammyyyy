@@ -24,6 +24,10 @@ fs.mkdirSync(dataDir, { recursive: true })
 export const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
+db.pragma('secure_delete = ON')
+db.pragma('trusted_schema = OFF')
+db.pragma('cell_size_check = ON')
+db.pragma('busy_timeout = 4000')
 
 ;(() => {
   const existing = db

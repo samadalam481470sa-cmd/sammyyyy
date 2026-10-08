@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Download, FileJson, DatabaseBackup } from 'lucide-react'
+import { useAuth } from '@/auth/AuthContext'
 import { useData } from '@/data/DataContext'
 import { useResource } from '@/hooks/useResource'
 import { mockPortfolio, type PortfolioRecord } from '@/data/mockModules'
@@ -47,6 +48,7 @@ function ReportTooltip({
 }
 
 export function ReportsPage() {
+  const { user } = useAuth()
   const { opportunities } = useData()
   const portfolio = useResource<PortfolioRecord>('portfolio', mockPortfolio)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
@@ -133,6 +135,7 @@ export function ReportsPage() {
           >
             <FileJson className="h-4 w-4 text-accent" /> JSON
           </button>
+          {user?.isManager && (
           <button
             type="button"
             onClick={() => void runExport(downloadDatabaseFile, 'Database file')}
@@ -140,6 +143,7 @@ export function ReportsPage() {
           >
             <DatabaseBackup className="h-4 w-4" /> Full database
           </button>
+          )}
         </div>
       </header>
 

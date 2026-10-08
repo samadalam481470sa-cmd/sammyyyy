@@ -9,7 +9,6 @@ import {
 import { loadAllKeyChangeHistory } from '@/lib/demoStore'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
-import { MANAGER_MASTER_KEY } from '@/lib/api'
 import { History, KeyRound, ScrollText, Shield, Ban, ShieldPlus } from 'lucide-react'
 
 const DEMO_SLOTS = [
@@ -156,8 +155,8 @@ export function SecurityPage() {
                 Provision new keys
               </Link>
             </div>
-            <p className="mt-3 font-mono text-[11px] break-all text-amber-950/80">
-              Your master key (store offline): {MANAGER_MASTER_KEY}
+            <p className="mt-3 text-[11px] text-amber-950/80">
+              The master key is never written to the page. Store it offline only.
             </p>
           </section>
         )}

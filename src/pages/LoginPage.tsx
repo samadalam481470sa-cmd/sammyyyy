@@ -1,16 +1,24 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { KeyRound, ShieldCheck, Lock, Fingerprint, FileClock, Timer } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
+import { attachLoginShield } from '@/lib/loginGuard'
 import newportLogo from '@/assets/newport-logo.png'
 
 export function LoginPage() {
-  const { isAuthenticated, signInDemo, signInWithApiKey } = useAuth()
+  const { isAuthenticated, authReady, signInDemo, signInWithApiKey } = useAuth()
+  const shieldRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!shieldRef.current) return
+    return attachLoginShield(shieldRef.current)
+  }, [])
   const navigate = useNavigate()
   const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  if (!authReady) return <div className="min-h-full bg-navy-950" aria-busy="true" />
   if (isAuthenticated) return <Navigate to="/" replace />
 
   const onDemo = async () => {
@@ -41,7 +49,15 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4 py-5">
+    <div
+      ref={shieldRef}
+      className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4 py-5"
+      onCopy={(e) => {
+        const target = e.target
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
+        e.preventDefault()
+      }}
+    >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(61,126,184,0.18),_transparent_55%)]" />
 
       <div className="relative w-full max-w-[22rem] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">

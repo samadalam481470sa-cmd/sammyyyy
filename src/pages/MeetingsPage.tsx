@@ -18,6 +18,7 @@ import { SoftPhone } from '@/components/meetings/SoftPhone'
 import { CallStage } from '@/components/meetings/CallStage'
 import { TranscriptPanel } from '@/components/meetings/TranscriptPanel'
 import { MeetingCalendar } from '@/components/meetings/MeetingCalendar'
+import { TeamHuddle } from '@/components/meetings/TeamHuddle'
 import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay } from '@/lib/meetingLinks'
 import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import {
@@ -788,6 +789,7 @@ export function MeetingsPage() {
             ))}
           </ul>
         </aside>
+        <TeamHuddle />
         </div>
 
         <section className="flex min-w-0 flex-col gap-4">
