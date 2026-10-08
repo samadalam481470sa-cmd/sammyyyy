@@ -21,11 +21,78 @@ declare global {
 
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Try again later.' },
 })
+
+// ---------------------------------------------------------------------------
+// Brute-force lockout: 5 failed credential attempts per IP → 30-minute lock.
+// Kept in memory (resets on restart); rate limiting still applies regardless.
+// ---------------------------------------------------------------------------
+const MAX_FAILED_ATTEMPTS = 5
+const FAILURE_WINDOW_MS = 15 * 60 * 1000
+const LOCKOUT_MS = 30 * 60 * 1000
+
+interface FailureRecord {
+  count: number
+  firstFailureAt: number
+  lockedUntil: number | null
+}
+
+const failuresByIp = new Map<string, FailureRecord>()
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, rec] of failuresByIp) {
+    const lockExpired = rec.lockedUntil !== null && rec.lockedUntil < now
+    const windowExpired = rec.lockedUntil === null && now - rec.firstFailureAt > FAILURE_WINDOW_MS
+    if (lockExpired || windowExpired) failuresByIp.delete(ip)
+  }
+}, 60 * 1000).unref()
+
+export function isLockedOut(ip: string | undefined): boolean {
+  if (!ip) return false
+  const rec = failuresByIp.get(ip)
+  return !!rec?.lockedUntil && rec.lockedUntil > Date.now()
+}
+
+export function recordAuthFailure(ip: string | undefined, req?: Request): void {
+  if (!ip) return
+  const now = Date.now()
+  const rec = failuresByIp.get(ip)
+  if (!rec || now - rec.firstFailureAt > FAILURE_WINDOW_MS) {
+    failuresByIp.set(ip, { count: 1, firstFailureAt: now, lockedUntil: null })
+    return
+  }
+  rec.count += 1
+  if (rec.count >= MAX_FAILED_ATTEMPTS && !rec.lockedUntil) {
+    rec.lockedUntil = now + LOCKOUT_MS
+    writeAudit(
+      null,
+      'system',
+      'auth.lockout',
+      'ip_address',
+      ip,
+      `IP locked for 30 minutes after ${rec.count} failed attempts`,
+      req,
+    )
+  }
+}
+
+export function clearAuthFailures(ip: string | undefined): void {
+  if (ip) failuresByIp.delete(ip)
+}
+
+export function lockoutGuard(req: Request, res: Response, next: NextFunction) {
+  if (isLockedOut(req.ip)) {
+    return res
+      .status(429)
+      .json({ error: 'Too many failed attempts. This address is temporarily locked.' })
+  }
+  return next()
+}
 
 export const apiRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -91,6 +158,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   // Direct API key access (for programmatic clients — 5 reserved slots)
+  if (isLockedOut(req.ip)) {
+    return res
+      .status(429)
+      .json({ error: 'Too many failed attempts. This address is temporarily locked.' })
+  }
   const key = db
     .prepare(
       `SELECT id, slot, status, key_hash FROM api_keys WHERE key_hash = ? AND status = 'active'`,
@@ -100,9 +172,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     | undefined
 
   if (!key) {
+    recordAuthFailure(req.ip, req)
     writeAudit(null, 'anonymous', 'auth.failed', 'api_key', null, 'Invalid API key', req)
     return res.status(401).json({ error: 'Invalid API key' })
   }
+  clearAuthFailures(req.ip)
 
   db.prepare(`UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?`).run(key.id)
 

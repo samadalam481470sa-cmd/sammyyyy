@@ -1,11 +1,22 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { db, createSessionToken, hashToken } from '../db/index.ts'
-import { authRateLimit, writeAudit } from '../middleware/security.ts'
+import {
+  authRateLimit,
+  lockoutGuard,
+  recordAuthFailure,
+  clearAuthFailures,
+  writeAudit,
+} from '../middleware/security.ts'
 
 export const authRouter = Router()
 
-authRouter.post('/demo', authRateLimit, (req, res) => {
+function sweepExpiredSessions() {
+  db.prepare(`DELETE FROM sessions WHERE datetime(expires_at) < datetime('now')`).run()
+}
+
+authRouter.post('/demo', authRateLimit, lockoutGuard, (req, res) => {
+  sweepExpiredSessions()
   const user = db
     .prepare(`SELECT id, email, name, role, initials FROM users WHERE id = 'user-dennis'`)
     .get() as { id: string; email: string; name: string; role: string; initials: string }
@@ -40,7 +51,8 @@ const apiKeySchema = z.object({
   apiKey: z.string().min(16).max(200),
 })
 
-authRouter.post('/api-key', authRateLimit, (req, res) => {
+authRouter.post('/api-key', authRateLimit, lockoutGuard, (req, res) => {
+  sweepExpiredSessions()
   const parsed = apiKeySchema.safeParse(req.body)
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid API key payload' })
@@ -55,9 +67,11 @@ authRouter.post('/api-key', authRateLimit, (req, res) => {
     | undefined
 
   if (!key) {
+    recordAuthFailure(req.ip, req)
     writeAudit(null, 'anonymous', 'auth.api_key_failed', 'api_key', null, 'Rejected API key', req)
     return res.status(401).json({ error: 'Invalid or inactive API key' })
   }
+  clearAuthFailures(req.ip)
 
   const user = db
     .prepare(`SELECT id, email, name, role, initials FROM users WHERE id = 'user-dennis'`)

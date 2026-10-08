@@ -17,7 +17,10 @@ app.set('trust proxy', 1)
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    // API serves JSON only; default-src 'none' blocks any attempt to render it
+    contentSecurityPolicy: {
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   }),
 )

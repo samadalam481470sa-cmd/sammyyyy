@@ -28,7 +28,8 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          GH_PAGES: '1'
+          STATIC_DEMO: '1'
+          VITE_STATIC_DEMO: '1'
       - run: cp dist/index.html dist/404.html
       - uses: actions/configure-pages@v5
         with:
