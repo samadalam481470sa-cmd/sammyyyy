@@ -25,6 +25,7 @@ import {
   PanelLeftOpen,
   GripVertical,
   Video,
+  Settings,
 } from 'lucide-react'
 import { NAV_ITEMS, type NavItem } from '@/data/constants'
 import { useAuth } from '@/auth/AuthContext'
@@ -36,6 +37,7 @@ import {
   moveNavId,
   saveLocalNavOrder,
 } from '@/lib/navOrder'
+import { sessionOwnerKey } from '@/lib/ownerKey'
 import type { LucideIcon } from 'lucide-react'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -72,6 +74,7 @@ function visibleNavItems(isManager: boolean | undefined): NavItem[] {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut, user } = useAuth()
   const navigate = useNavigate()
+  const owner = sessionOwnerKey(user)
   const [orderIds, setOrderIds] = useState<string[]>(() =>
     visibleNavItems(user?.isManager).map((item) => item.id),
   )
@@ -85,11 +88,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   useEffect(() => {
     if (!user?.id) return
     const defaults = visibleNavItems(user.isManager).map((item) => item.id)
-    const local = loadLocalNavOrder(user.id)
+    const local = loadLocalNavOrder(owner)
     const initial = mergeNavOrderWithDefaults(defaults, local)
     setOrderIds(initial)
     if (local && initial.join('|') !== local.join('|')) {
-      saveLocalNavOrder(user.id, initial)
+      saveLocalNavOrder(owner, initial)
     }
 
     const localDemo = getStoredSession()?.token === 'local-demo'
@@ -99,7 +102,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       .then((data) => {
         if (!data.order?.length) return
         const merged = mergeNavOrderWithDefaults(defaults, data.order)
-        saveLocalNavOrder(user.id, merged)
+        saveLocalNavOrder(owner, merged)
         setOrderIds(merged)
         // Persist corrected Dashboard-first order when server had a broken layout
         if (merged.join('|') !== data.order.join('|')) {
@@ -109,7 +112,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       .catch(() => {
         // offline / unauthorized — keep local order
       })
-  }, [user?.id, user?.isManager])
+  }, [user?.id, user?.isManager, owner])
 
   const items = useMemo(
     () => applyNavOrder(baseItems, orderIds),
@@ -119,7 +122,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const persistOrder = (nextIds: string[]) => {
     setOrderIds(nextIds)
     if (!user?.id) return
-    saveLocalNavOrder(user.id, nextIds)
+    saveLocalNavOrder(owner, nextIds)
     if (getStoredSession()?.token === 'local-demo') return
     void saveNavOrder(nextIds).catch(() => {
       // local already saved
@@ -249,6 +252,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {!collapsed && user && (
           <p className="mb-1 truncate px-3 text-[11px] text-white/40">{user.name}</p>
         )}
+        <NavLink
+          to="/settings"
+          title={collapsed ? 'Settings' : undefined}
+          className={({ isActive }) =>
+            `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] transition-colors ${
+              collapsed ? 'justify-center px-2' : ''
+            } ${
+              isActive
+                ? 'bg-accent/20 font-semibold text-white'
+                : 'text-white/55 hover:bg-white/5 hover:text-white'
+            }`
+          }
+        >
+          <Settings className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+          {!collapsed && <span>Settings</span>}
+        </NavLink>
         <button
           type="button"
           onClick={() => {

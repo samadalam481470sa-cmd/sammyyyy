@@ -16,7 +16,9 @@ import { mockActivity, mockAlerts, mockPriorityTasks } from '@/data/mockTasks'
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
 import { getStoredSession } from '@/lib/api'
-import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { sessionOwnerKey } from '@/lib/ownerKey'
+import { useAuth } from '@/auth/AuthContext'
 import { mockContacts, mockTasksDb } from '@/data/mockModules'
 import type { ImportRow } from '@/lib/excelImport'
 import type { AcquisitionStage, DashboardFilters, Opportunity } from '@/types'
@@ -36,6 +38,8 @@ const DEFAULT_FILTERS: DashboardFilters = {
 
 export function Dashboard() {
   const { opportunities, createOpportunity, saveOpportunity } = useData()
+  const { user } = useAuth()
+  const owner = sessionOwnerKey(user)
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -236,7 +240,7 @@ export function Dashboard() {
         }}
         onImportTasks={async (rows: ImportRow[]) => {
           if (getStoredSession()?.token === 'local-demo') {
-            const existing = loadDemoCollection('tasks', mockTasksDb)
+            const existing = loadOwnedCollection('tasks', owner, mockTasksDb)
             const mapped = rows.map((r, i) => ({
               id: `task_import_${Date.now()}_${i}`,
               priority: String(r.priority ?? 'B'),
@@ -248,7 +252,7 @@ export function Dashboard() {
               status: 'Open',
               notes: String(r.notes ?? 'Excel import'),
             }))
-            saveDemoCollection('tasks', [...mapped, ...existing])
+            saveOwnedCollection('tasks', owner, [...mapped, ...existing])
             return
           }
           const token = getStoredSession()?.token
@@ -273,7 +277,7 @@ export function Dashboard() {
         }}
         onImportContacts={async (rows: ImportRow[]) => {
           if (getStoredSession()?.token === 'local-demo') {
-            const existing = loadDemoCollection('contacts', mockContacts)
+            const existing = loadOwnedCollection('contacts', owner, mockContacts)
             const mapped = rows.map((r, i) => ({
               id: `con_import_${Date.now()}_${i}`,
               name: String(r.name ?? r.entityName ?? `Contact ${i + 1}`),
@@ -288,7 +292,7 @@ export function Dashboard() {
               lastContactDate: null,
               notes: String(r.notes ?? 'Excel import'),
             }))
-            saveDemoCollection('contacts', [...mapped, ...existing])
+            saveOwnedCollection('contacts', owner, [...mapped, ...existing])
             return
           }
           const token = getStoredSession()?.token

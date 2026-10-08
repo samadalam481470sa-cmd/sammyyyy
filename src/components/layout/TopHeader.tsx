@@ -38,7 +38,7 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
               {greeting}, {firstName}
             </h1>
             <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-ink-muted">
-              Institutional deal command — status, diligence, and outstanding work in one screen.
+              Here's what's happening across Newport's acquisition pipeline.
             </p>
           </div>
 

@@ -3,7 +3,9 @@ import { Sparkles, Send, Loader2 } from 'lucide-react'
 import { askNewportAi, getStoredSession } from '@/lib/api'
 import { answerFromKnowledge, type AiAnswer } from '@/lib/aiAssistant'
 import { useData } from '@/data/DataContext'
-import { loadDemoCollection } from '@/lib/demoStore'
+import { loadOwnedCollection } from '@/lib/demoStore'
+import { sessionOwnerKey } from '@/lib/ownerKey'
+import { useAuth } from '@/auth/AuthContext'
 import { mockTasksDb, mockContacts, mockDocuments, mockSources, mockCarriers, mockPortfolio } from '@/data/mockModules'
 
 const SUGGESTED_PROMPTS = [
@@ -21,6 +23,8 @@ const SUGGESTED_PROMPTS = [
  */
 export function NewportAI() {
   const { opportunities } = useData()
+  const { user } = useAuth()
+  const owner = sessionOwnerKey(user)
   const [input, setInput] = useState('')
   const [answer, setAnswer] = useState<AiAnswer | null>(null)
   const [busy, setBusy] = useState(false)
@@ -29,20 +33,22 @@ export function NewportAI() {
   const runLocal = (question: string): AiAnswer =>
     answerFromKnowledge(question, {
       opportunities,
-      tasks: loadDemoCollection('tasks', mockTasksDb) as unknown as Array<Record<string, unknown>>,
-      contacts: loadDemoCollection('contacts', mockContacts) as unknown as Array<
+      tasks: loadOwnedCollection('tasks', owner, mockTasksDb) as unknown as Array<
         Record<string, unknown>
       >,
-      documents: loadDemoCollection('documents', mockDocuments) as unknown as Array<
+      contacts: loadOwnedCollection('contacts', owner, mockContacts) as unknown as Array<
         Record<string, unknown>
       >,
-      sources: loadDemoCollection('sources', mockSources) as unknown as Array<
+      documents: loadOwnedCollection('documents', owner, mockDocuments) as unknown as Array<
         Record<string, unknown>
       >,
-      carriers: loadDemoCollection('carriers', mockCarriers) as unknown as Array<
+      sources: loadOwnedCollection('sources', owner, mockSources) as unknown as Array<
         Record<string, unknown>
       >,
-      portfolio: loadDemoCollection('portfolio', mockPortfolio) as unknown as Array<
+      carriers: loadOwnedCollection('carriers', owner, mockCarriers) as unknown as Array<
+        Record<string, unknown>
+      >,
+      portfolio: loadOwnedCollection('portfolio', owner, mockPortfolio) as unknown as Array<
         Record<string, unknown>
       >,
     })
@@ -96,7 +102,7 @@ export function NewportAI() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about deals, diligence, relationships, documents…"
+          placeholder="Ask about your acquisition pipeline..."
           className="h-11 w-full rounded-lg border border-white/10 bg-white/10 pr-11 pl-3.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-accent focus:ring-2 focus:ring-accent/30"
           aria-label="Ask Newport AI"
           disabled={busy}

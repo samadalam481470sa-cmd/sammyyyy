@@ -1,5 +1,6 @@
 export interface OwnerAuth {
   userId?: string
+  id?: string
   authMethod?: string | null
   apiKeySlot?: number | null
   apiKeyId?: string | null
@@ -14,4 +15,16 @@ export function ownerKeyFromAuth(auth: OwnerAuth | null | undefined): string {
   if (auth.apiKeyId) return `key:${auth.apiKeyId}`
   if (auth.authMethod === 'demo') return 'key:demo'
   return auth.userId ? `user:${auth.userId}` : 'anonymous'
+}
+
+/** Owner key from the signed-in CRM user (slot / manager / demo). */
+export function sessionOwnerKey(user: OwnerAuth | null | undefined): string {
+  if (!user) return 'anonymous'
+  return ownerKeyFromAuth({
+    userId: user.userId ?? user.id,
+    authMethod: user.authMethod,
+    apiKeySlot: user.apiKeySlot,
+    apiKeyId: user.apiKeyId,
+    isManager: user.isManager,
+  })
 }

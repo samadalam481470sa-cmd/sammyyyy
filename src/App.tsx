@@ -18,6 +18,7 @@ import { ReportsPage } from '@/pages/ReportsPage'
 import { KeyControlPage } from '@/pages/KeyControlPage'
 import { KeyProvisionPage } from '@/pages/KeyProvisionPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 
 // Hash routing keeps the static demo working from any CDN subpath
 const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="meetings" element={<MeetingsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="security" element={<SecurityPage />} />
               <Route path="security/keys" element={<KeyControlPage />} />
               <Route path="security/provision" element={<KeyProvisionPage />} />

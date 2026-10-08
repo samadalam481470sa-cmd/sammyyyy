@@ -6,7 +6,7 @@ import {
   getStoredSession,
   type ChangeHistoryEntry,
 } from '@/lib/api'
-import { loadDemoChangeHistory } from '@/lib/demoStore'
+import { loadAllKeyChangeHistory } from '@/lib/demoStore'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { MANAGER_MASTER_KEY } from '@/lib/api'
@@ -49,11 +49,16 @@ export function SecurityPage() {
       if (getStoredSession()?.token === 'local-demo') {
         setSlots(DEMO_SLOTS)
         setLogs([])
-        const local = loadDemoChangeHistory().map((c, i) => ({
+        if (!user?.isManager) {
+          setChanges([])
+          setError(null)
+          return
+        }
+        const local = loadAllKeyChangeHistory().map((c, i) => ({
           id: `local_${i}_${c.createdAt}`,
           actorName: c.actorName,
-          apiKeySlot: null,
-          authMethod: 'demo',
+          apiKeySlot: c.apiKeySlot ?? null,
+          authMethod: c.authMethod ?? 'demo',
           resourceType: c.resourceType,
           resourceId: c.resourceId,
           changeType: c.changeType,
@@ -62,7 +67,11 @@ export function SecurityPage() {
           after: null,
           createdAt: c.createdAt,
         }))
-        setChanges(local.slice(0, 80))
+        setChanges(
+          local
+            .filter((c) => (slotFilter ? c.apiKeySlot === slotFilter : true))
+            .slice(0, 80),
+        )
         setError(null)
         return
       }
@@ -70,7 +79,9 @@ export function SecurityPage() {
         const [keys, audit, history] = await Promise.all([
           fetchApiKeySlots(),
           fetchAuditLogs(30),
-          fetchChangeHistory({ limit: 80, slot: slotFilter }),
+          user?.isManager
+            ? fetchChangeHistory({ limit: 80, slot: slotFilter })
+            : Promise.resolve({ changes: [] as ChangeHistoryEntry[] }),
         ])
         setSlots(keys.slots)
         setLogs(audit)
@@ -80,24 +91,28 @@ export function SecurityPage() {
         setSlots(DEMO_SLOTS)
         setLogs([])
         setChanges(
-          loadDemoChangeHistory().map((c, i) => ({
-            id: `local_${i}_${c.createdAt}`,
-            actorName: c.actorName,
-            apiKeySlot: null,
-            authMethod: 'demo',
-            resourceType: c.resourceType,
-            resourceId: c.resourceId,
-            changeType: c.changeType,
-            changedFields: c.changedFields,
-            before: null,
-            after: null,
-            createdAt: c.createdAt,
-          })),
+          user?.isManager
+            ? loadAllKeyChangeHistory()
+                .filter((c) => (slotFilter ? c.apiKeySlot === slotFilter : true))
+                .map((c, i) => ({
+                  id: `local_${i}_${c.createdAt}`,
+                  actorName: c.actorName,
+                  apiKeySlot: c.apiKeySlot ?? null,
+                  authMethod: c.authMethod ?? 'demo',
+                  resourceType: c.resourceType,
+                  resourceId: c.resourceId,
+                  changeType: c.changeType,
+                  changedFields: c.changedFields,
+                  before: null,
+                  after: null,
+                  createdAt: c.createdAt,
+                }))
+            : [],
         )
         setError(err instanceof Error ? err.message : 'Failed to load security data')
       }
     })()
-  }, [slotFilter])
+  }, [slotFilter, user?.isManager])
 
   return (
     <div className="flex flex-1 flex-col">
@@ -187,6 +202,7 @@ export function SecurityPage() {
           </p>
         </section>
 
+        {user?.isManager && (
         <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)">
           <div className="mb-4 flex items-center gap-2">
             <Shield className="h-5 w-5 text-accent" />
@@ -204,7 +220,9 @@ export function SecurityPage() {
             <li>• Audit log for sign-in and every write</li>
           </ul>
         </section>
+        )}
 
+        {user?.isManager && (
         <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card) lg:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -281,6 +299,7 @@ export function SecurityPage() {
             ))}
           </ul>
         </section>
+        )}
 
         <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card) lg:col-span-2">
           <div className="mb-4 flex items-center gap-2">

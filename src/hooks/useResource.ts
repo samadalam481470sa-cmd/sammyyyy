@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/auth/AuthContext'
 import { getStoredSession } from '@/lib/api'
-import { appendDemoChange, loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import {
+  appendDemoChange,
+  loadOwnedCollection,
+  saveOwnedCollection,
+} from '@/lib/demoStore'
+import { sessionOwnerKey } from '@/lib/ownerKey'
 
 const API_BASE = '/api/resources'
 
@@ -37,22 +43,19 @@ export interface UseResourceOptions {
   persistLocal?: boolean
 }
 
-function collectionName(resource: string, scope?: string) {
-  return scope ? `${resource}__${scope}` : resource
-}
-
 /**
  * Loads a CRM module collection from the database API.
  * In local-demo (static hosting) mode, edits persist in localStorage so
- * reopening the share link keeps every change.
+ * reopening the share link keeps every change — separately for each session key.
  */
 export function useResource<T extends { id: string }>(
   resource: string,
   mock: T[],
   options: UseResourceOptions = {},
 ): ResourceApi<T> {
-  const { scope, persistLocal } = options
-  const storeName = collectionName(resource, scope)
+  const { user } = useAuth()
+  const owner = options.scope ?? sessionOwnerKey(user)
+  const persistLocal = options.persistLocal !== false
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -62,10 +65,10 @@ export function useResource<T extends { id: string }>(
   const writeLocal = useCallback(
     (next: T[]) => {
       if (persistLocal || localMode.current || isLocalDemo()) {
-        saveDemoCollection(storeName, next)
+        saveOwnedCollection(resource, owner, next)
       }
     },
-    [persistLocal, storeName],
+    [persistLocal, resource, owner],
   )
 
   const refresh = useCallback(async () => {
@@ -73,23 +76,28 @@ export function useResource<T extends { id: string }>(
     setError(null)
     if (isLocalDemo()) {
       localMode.current = true
-      setItems(loadDemoCollection(storeName, mock))
+      const loaded = loadOwnedCollection(resource, owner, mock)
+      itemsRef.current = loaded
+      setItems(loaded)
       setLoading(false)
       return
     }
     try {
       const data = await request<T[]>(`/${resource}`)
       localMode.current = false
+      itemsRef.current = data
       setItems(data)
-      if (persistLocal) saveDemoCollection(storeName, data)
+      if (persistLocal) saveOwnedCollection(resource, owner, data)
     } catch (err) {
       localMode.current = true
-      setItems(loadDemoCollection(storeName, mock))
+      const loaded = loadOwnedCollection(resource, owner, mock)
+      itemsRef.current = loaded
+      setItems(loaded)
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [resource, mock, storeName, persistLocal])
+  }, [resource, mock, owner, persistLocal])
 
   useEffect(() => {
     itemsRef.current = items
@@ -98,6 +106,13 @@ export function useResource<T extends { id: string }>(
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const changeMeta = () => ({
+    actorName: user?.name || 'Newport user',
+    ownerKey: owner,
+    apiKeySlot: user?.apiKeySlot ?? null,
+    authMethod: user?.authMethod,
+  })
 
   const save = useCallback(
     async (id: string, patch: Partial<T>) => {
@@ -114,8 +129,8 @@ export function useResource<T extends { id: string }>(
           resourceId: id,
           changeType: 'update',
           changedFields: Object.keys(patch),
-          actorName: 'Dennis DiCapua',
           createdAt: new Date().toISOString(),
+          ...changeMeta(),
         })
         return merged
       }
@@ -123,14 +138,13 @@ export function useResource<T extends { id: string }>(
         method: 'PATCH',
         body: JSON.stringify(patch),
       })
-      setItems((prev) => {
-        const next = prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
-        writeLocal(next)
-        return next
-      })
+      const next = itemsRef.current.map((item) => (item.id === id ? { ...item, ...updated } : item))
+      itemsRef.current = next
+      setItems(next)
+      writeLocal(next)
       return updated
     },
-    [resource, writeLocal],
+    [resource, writeLocal, owner, user],
   )
 
   const create = useCallback(
@@ -149,8 +163,8 @@ export function useResource<T extends { id: string }>(
           resourceId: record.id,
           changeType: 'create',
           changedFields: Object.keys(data),
-          actorName: 'Dennis DiCapua',
           createdAt: new Date().toISOString(),
+          ...changeMeta(),
         })
         return record
       }
@@ -158,14 +172,13 @@ export function useResource<T extends { id: string }>(
         method: 'POST',
         body: JSON.stringify(data),
       })
-      setItems((prev) => {
-        const next = [created, ...prev]
-        writeLocal(next)
-        return next
-      })
+      const next = [created, ...itemsRef.current]
+      itemsRef.current = next
+      setItems(next)
+      writeLocal(next)
       return created
     },
-    [resource, writeLocal],
+    [resource, writeLocal, owner, user],
   )
 
   return { items, loading, error, save, create, refresh }

@@ -44,7 +44,7 @@ securityRouter.get('/audit-logs', requireRole('admin', 'partner'), (req, res) =>
  * Filterable by API key slot (1–5), resource type, or specific record id so
  * daily edits by any of the five key holders can be reviewed.
  */
-securityRouter.get('/change-history', requireRole('admin', 'partner'), (req, res) => {
+securityRouter.get('/change-history', requireManager, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500)
   const slot = req.query.slot ? Number(req.query.slot) : null
   const resourceType = typeof req.query.resourceType === 'string' ? req.query.resourceType : null

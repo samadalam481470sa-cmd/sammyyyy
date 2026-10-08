@@ -28,31 +28,87 @@ export function saveDemoCollection<T>(name: string, items: T[]): void {
   }
 }
 
-export function appendDemoChange(entry: {
+export function ownedStoreName(resource: string, ownerKey: string) {
+  return `${resource}__${ownerKey}`
+}
+
+/** Per-key CRM collection. First visit copies any shared legacy store, then diverges. */
+export function loadOwnedCollection<T>(resource: string, ownerKey: string, fallback: T[]): T[] {
+  const scoped = ownedStoreName(resource, ownerKey)
+  try {
+    const scopedRaw = localStorage.getItem(key(scoped))
+    if (scopedRaw) {
+      const parsed = JSON.parse(scopedRaw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : fallback
+    }
+    const legacyRaw = localStorage.getItem(key(resource))
+    if (legacyRaw) {
+      const parsed = JSON.parse(legacyRaw) as unknown
+      if (Array.isArray(parsed)) {
+        saveDemoCollection(scoped, parsed as T[])
+        return parsed as T[]
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return fallback
+}
+
+export function saveOwnedCollection<T>(resource: string, ownerKey: string, items: T[]): void {
+  saveDemoCollection(ownedStoreName(resource, ownerKey), items)
+}
+
+export interface DemoChange {
   resourceType: string
   resourceId: string
   changeType: string
   changedFields: string[]
   actorName: string
   createdAt: string
-}): void {
+  ownerKey?: string
+  apiKeySlot?: number | null
+  authMethod?: string
+}
+
+export function appendDemoChange(entry: DemoChange): void {
   try {
-    const existing = loadDemoCollection<typeof entry>('change_history', [])
-    saveDemoCollection('change_history', [entry, ...existing].slice(0, 500))
+    const owner = entry.ownerKey ?? 'anonymous'
+    const row: DemoChange = { ...entry, ownerKey: owner }
+    const scoped = loadDemoCollection<DemoChange>(`change_history__${owner}`, [])
+    saveDemoCollection(`change_history__${owner}`, [row, ...scoped].slice(0, 500))
+    const all = loadDemoCollection<DemoChange>('change_history__all', [])
+    saveDemoCollection('change_history__all', [row, ...all].slice(0, 500))
+    saveDemoCollection('change_history', [row, ...all].slice(0, 500))
   } catch {
     // ignore
   }
 }
 
-export function loadDemoChangeHistory() {
-  return loadDemoCollection<{
-    resourceType: string
-    resourceId: string
-    changeType: string
-    changedFields: string[]
-    actorName: string
-    createdAt: string
-  }>('change_history', [])
+export function loadDemoChangeHistory(ownerKey?: string): DemoChange[] {
+  if (ownerKey) return loadDemoCollection<DemoChange>(`change_history__${ownerKey}`, [])
+  return loadAllKeyChangeHistory()
+}
+
+export function loadAllKeyChangeHistory(): DemoChange[] {
+  const combined = loadDemoCollection<DemoChange>('change_history__all', [])
+  if (combined.length) return combined
+  const owners = [
+    'key:slot-1',
+    'key:slot-2',
+    'key:slot-3',
+    'key:slot-4',
+    'key:slot-5',
+    'key:manager',
+    'key:demo',
+  ]
+  const merged = owners.flatMap((owner) =>
+    loadDemoCollection<DemoChange>(`change_history__${owner}`, []),
+  )
+  if (merged.length) {
+    return [...merged].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+  return loadDemoCollection<DemoChange>('change_history', [])
 }
 
 /** Issued local-demo API keys (plaintext → slot) so revoke can block login. */
