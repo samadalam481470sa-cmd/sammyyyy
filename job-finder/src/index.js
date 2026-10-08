@@ -16,7 +16,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { loadConfig, loadResumeText, ROOT } = require("./config");
-const { SOURCES_BY_ID } = require("./sources");
+const { fetchAllJobs } = require("./fetchJobs");
 const { scoreJobs } = require("./score");
 const { writeOutputs, sendWebhook } = require("./report");
 
@@ -47,45 +47,7 @@ async function main() {
   const config = loadConfig();
   const resumeText = loadResumeText();
 
-  const enabledSourceIds = Object.entries(config.sources)
-    .filter(([, sourceConfig]) => sourceConfig && sourceConfig.enabled)
-    .map(([id]) => id);
-
-  if (enabledSourceIds.length === 0) {
-    throw new Error("No sources enabled in config.json — enable at least one under `sources`.");
-  }
-
-  console.log(`Fetching from ${enabledSourceIds.length} source(s): ${enabledSourceIds.join(", ")}`);
-
-  const allJobs = [];
-  const sourcesSucceeded = [];
-  const sourcesFailed = [];
-  const attributions = [];
-
-  // Sources run sequentially: it's a background job, and being gentle with
-  // third-party APIs matters more than shaving seconds off the runtime.
-  for (const id of enabledSourceIds) {
-    const source = SOURCES_BY_ID[id];
-    if (!source) {
-      sourcesFailed.push({ id, error: "unknown source id" });
-      console.warn(`Skipping unknown source "${id}"`);
-      continue;
-    }
-    try {
-      const jobs = await source.fetchJobs(config.sources[id] || {});
-      allJobs.push(...jobs);
-      sourcesSucceeded.push(id);
-      if (source.attribution) attributions.push(source.attribution);
-      console.log(`  ${source.label}: ${jobs.length} posting(s)`);
-    } catch (err) {
-      sourcesFailed.push({ id, error: err.message });
-      console.warn(`  ${source.label}: FAILED — ${err.message}`);
-    }
-  }
-
-  if (sourcesSucceeded.length === 0) {
-    throw new Error("Every enabled source failed — see the warnings above.");
-  }
+  const { allJobs, sourcesSucceeded, sourcesFailed, attributions } = await fetchAllJobs(config);
 
   const { profile, matches } = scoreJobs(allJobs, resumeText, config.filters);
 

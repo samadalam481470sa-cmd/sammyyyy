@@ -104,12 +104,23 @@ RESUME_FILE=./resume.local.txt node src/index.js
 | `USAJOBS_API_KEY` / `USAJOBS_EMAIL` | Enables the USAJOBS source |
 | `JOB_FINDER_USER_AGENT` | Override the User-Agent sent to APIs |
 
+## Multi-user mode
+
+For a self-hostable web service where any user can upload a resume and get
+continuously-updated matches, see [`../web/README.md`](../web/README.md). The
+CLI entry point for that path is:
+
+```bash
+node src/multiuser.js   # fetch once, score every uploaded resume
+```
+
 ## Development
 
 ```bash
 cd job-finder
 npm test              # parser, scoring, filters, tailoring, report rendering
-node src/index.js     # a real run (hits live APIs)
+node src/index.js     # a real single-user run (hits live APIs)
+node src/multiuser.js # a real multi-user run (hits live APIs)
 ```
 
 ## Adding a source
