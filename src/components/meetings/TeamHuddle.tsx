@@ -161,7 +161,8 @@ export function TeamHuddle() {
 
         <div className="space-y-1.5">
           {(isManager ? ALL_TEAM_MEMBERS : TEAM_SLOT_MEMBERS).map((m) => {
-            const checked = isManager ? selected.includes(m.ownerKey) : true
+            const checked =
+              m.ownerKey === ownerKey || (isManager ? selected.includes(m.ownerKey) : true)
             const connected = peerKeys.includes(m.ownerKey) || (live && m.ownerKey === ownerKey)
             return (
               <label
