@@ -41,36 +41,36 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4 py-10">
+    <div className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4 py-5">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(61,126,184,0.18),_transparent_55%)]" />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">
+      <div className="relative w-full max-w-[22rem] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">
         {/* Brand banner */}
         <div className="border-b border-border">
           <img
             src={newportLogo}
             alt="Newport Specialty Partners"
-            className="h-32 w-full object-cover object-center"
+            className="h-20 w-full object-cover object-center"
           />
         </div>
 
-        <div className="p-8">
+        <div className="px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h1 className="font-brand text-xl font-bold tracking-tight text-navy-900">
+              <h1 className="font-brand text-lg font-bold tracking-tight text-navy-900">
                 Secure Sign-In
               </h1>
-              <p className="mt-1 text-xs tracking-[0.1em] text-ink-muted uppercase">
+              <p className="mt-0.5 text-[11px] tracking-[0.1em] text-ink-muted uppercase">
                 Acquisition Management Platform
               </p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-canvas px-2.5 py-1 text-[10px] font-semibold tracking-wide text-ink-muted uppercase">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-canvas px-2 py-0.5 text-[10px] font-semibold tracking-wide text-ink-muted uppercase">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               Encrypted
             </span>
           </div>
 
-          <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          <p className="mt-2 text-xs leading-snug text-ink-muted">
             This system contains confidential acquisition data. Access is restricted to
             authorized Newport Specialty Partners personnel and monitored at all times.
           </p>
@@ -79,24 +79,24 @@ export function LoginPage() {
             type="button"
             disabled={busy}
             onClick={() => void onDemo()}
-            className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-navy-900 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-navy-900 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
           >
             <ShieldCheck className="h-4 w-4" strokeWidth={1.75} />
             Sign in — Demo access
           </button>
-          <p className="mt-2 text-center text-[11px] text-ink-subtle">
+          <p className="mt-1.5 text-center text-[10px] text-ink-subtle">
             Production sign-in will require a provisioned credential.
           </p>
 
-          <div className="my-6 flex items-center gap-3">
+          <div className="my-3 flex items-center gap-3">
             <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] tracking-wide text-ink-subtle uppercase">
+            <span className="text-[10px] tracking-wide text-ink-subtle uppercase">
               Partner API key
             </span>
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <form onSubmit={(e) => void onApiKey(e)} className="space-y-3">
+          <form onSubmit={(e) => void onApiKey(e)} className="space-y-2">
             <div className="flex items-baseline justify-between">
               <label
                 htmlFor="api-key"
@@ -116,18 +116,18 @@ export function LoginPage() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="nwp_ ••••••••••••••••"
-                className="h-11 w-full rounded-xl border border-border bg-canvas pr-3 pl-10 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+                className="h-10 w-full rounded-xl border border-border bg-canvas pr-3 pl-10 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               />
             </div>
             <button
               type="submit"
               disabled={busy || apiKey.trim().length < 16}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border bg-canvas text-sm font-semibold text-ink transition-colors hover:bg-accent-soft disabled:opacity-50"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-canvas text-sm font-semibold text-ink transition-colors hover:bg-accent-soft disabled:opacity-50"
             >
               <Lock className="h-4 w-4" strokeWidth={1.75} />
               Authenticate
             </button>
-            <p className="text-[11px] leading-relaxed text-ink-subtle">
+            <p className="text-[10px] leading-snug text-ink-subtle">
               Partner keys (5 slots) are issued by Information Security. The single
               managerial master key can revoke slots, kick sessions, and provision new
               access — held only by the designated owner.
@@ -135,12 +135,12 @@ export function LoginPage() {
           </form>
 
           {error && (
-            <p className="mt-4 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention">
+            <p className="mt-3 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention">
               {error}
             </p>
           )}
 
-          <div className="mt-7 grid grid-cols-3 gap-2 border-t border-border pt-5">
+          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3">
             <div className="flex flex-col items-center gap-1.5 text-center">
               <Fingerprint className="h-4 w-4 text-accent" strokeWidth={1.75} />
               <span className="text-[10px] leading-tight text-ink-subtle">
@@ -163,7 +163,7 @@ export function LoginPage() {
         </div>
       </div>
 
-      <p className="relative mt-6 max-w-md text-center text-[11px] leading-relaxed text-white/50">
+      <p className="relative mt-3 max-w-[22rem] text-center text-[10px] leading-snug text-white/50">
         © 2026 Newport Specialty Partners. Authorized users only. Unauthorized access is
         prohibited and all activity is logged, monitored, and subject to review.
       </p>
