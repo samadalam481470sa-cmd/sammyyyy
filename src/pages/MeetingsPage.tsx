@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Bell,
   CalendarDays,
   ExternalLink,
   Phone,
@@ -7,6 +8,8 @@ import {
   Save,
   Video,
 } from 'lucide-react'
+import { NotificationsPanel } from '@/components/layout/NotificationsPanel'
+import { loadKeyCalendarNotifications } from '@/lib/calendarReminders'
 import { useAuth } from '@/auth/AuthContext'
 import { useData } from '@/data/DataContext'
 import { mockMeetings } from '@/data/mockMeetings'
@@ -77,6 +80,8 @@ export function MeetingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const reminderDot = loadKeyCalendarNotifications(user).some((n) => !n.read)
 
   const startedAtRef = useRef<string | null>(null)
   const transcriberRef = useRef<LiveTranscriber | null>(null)
@@ -442,18 +447,34 @@ export function MeetingsPage() {
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border bg-surface px-6 py-5 lg:px-8">
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-ink-subtle uppercase">
-          Communications hub
-        </p>
-        <h1 className="mt-1 font-brand text-2xl font-semibold tracking-tight text-navy-900">
-          Meetings
-        </h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-muted">
-          Connect via Teams, Zoom, Skype, Meet, Webex, face call, mobile, or landline. Live captions
-          and dialer details write straight into the CRM — customer cards, project links, and searchable
-          transcripts.
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-ink-subtle uppercase">
+              Communications hub
+            </p>
+            <h1 className="mt-1 font-brand text-2xl font-semibold tracking-tight text-navy-900">
+              Meetings
+            </h1>
+            <p className="mt-1 max-w-3xl text-sm text-ink-muted">
+              Connect via Teams, Zoom, Skype, Meet, Webex, face call, mobile, or landline. Live captions
+              and dialer details write straight into the CRM — customer cards, project links, and searchable
+              transcripts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotifyOpen(true)}
+            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:bg-canvas hover:text-ink"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" strokeWidth={1.75} />
+            {reminderDot && (
+              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+            )}
+          </button>
+        </div>
       </header>
+      <NotificationsPanel open={notifyOpen} onClose={() => setNotifyOpen(false)} />
 
       <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)_300px] lg:px-6">
         <div className="flex min-h-0 flex-col gap-4">
