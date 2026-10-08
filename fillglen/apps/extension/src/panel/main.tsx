@@ -10,6 +10,7 @@ function PanelApp() {
   const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [paused, setPaused] = useState(false);
+  const [keepApplying, setKeepApplying] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
   const [port, setPort] = useState<chrome.runtime.Port | null>(null);
 
@@ -23,6 +24,7 @@ function PanelApp() {
         setSnapshot(msg.snapshot);
         setProfile(msg.profile);
         setPaused(msg.paused);
+        setKeepApplying(Boolean(msg.keepApplying));
       }
       if (msg.type === "draft") {
         setDrafts((d) => ({ ...d, [msg.questionId]: msg }));
@@ -38,6 +40,7 @@ function PanelApp() {
       snapshot={snapshot}
       profile={profile}
       paused={paused}
+      keepApplying={keepApplying}
       popout={popout}
       drafts={drafts}
       onFillPage={() => send({ type: "fill-page" })}
@@ -50,6 +53,8 @@ function PanelApp() {
       onInsertDraft={(questionId, text) => send({ type: "insert-draft", questionId, text })}
       onPopout={() => send({ type: "popout" })}
       onEdit={(questionId, value) => send({ type: "edit-value", questionId, value })}
+      onStartKeep={() => send({ type: "start-keep-applying" })}
+      onStopKeep={() => send({ type: "stop-keep-applying" })}
     />
   );
 }

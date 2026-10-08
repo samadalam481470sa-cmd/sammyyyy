@@ -12,9 +12,12 @@
   ],
   "stepAdvancePatterns": [
     "save and continue",
+    "save & continue",
     "continue",
     "next",
-    "next step"
+    "next step",
+    "continue application",
+    "review and continue"
   ],
   "linkedinEasyApply": {
     "hosts": ["linkedin.com", "www.linkedin.com"],

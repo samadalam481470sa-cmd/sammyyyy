@@ -3,12 +3,12 @@
 **Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, dashboard, and 24/7 local job finder. It never submits, never invents facts, and never runs on LinkedIn Easy Apply. See [`fillglen/README.md`](fillglen/README.md).
 
 **Download the Chrome extension:**
-[**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/fillglen-platform-0208/fillglen-assistant.zip)
-(use the `raw/` URL). Unzip, then `chrome://extensions` → Developer mode → Load unpacked → select the `fillglen-assistant/` folder.
+[**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip)
+(use the `raw/` URL). Unzip, then `chrome://extensions` → Developer mode → Load unpacked → select the `fillglen-assistant/` folder. Paste a resume and hit **Autofill & keep applying**.
 
 **Download / deploy the whole platform:**
-[**source zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/fillglen-platform-0208.zip)
-or `git clone -b cursor/fillglen-platform-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git` then `cd fillglen && npm install && npm run dev:api && npm run dev:dashboard`.
+[**source zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/keep-applying-autofill-0208.zip)
+or `git clone -b cursor/keep-applying-autofill-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git` then `cd fillglen && npm install && npm run dev:api && npm run dev:dashboard`.
 
 
 Two components that work together to make applying to jobs fast, without

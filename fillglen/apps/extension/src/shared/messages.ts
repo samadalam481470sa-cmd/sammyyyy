@@ -1,22 +1,34 @@
 import type { FillPlan, Profile, Question, ScanSnapshot } from "@fillglen/core";
 
+export type KeepStatus =
+  | "fill"
+  | "advanced"
+  | "submitted"
+  | "captcha"
+  | "blocked"
+  | "stuck"
+  | "done-job"
+  | "idle";
+
 export type ToBackground =
   | { type: "hello"; frameId: string }
   | { type: "scan"; snapshot: ScanSnapshot }
   | { type: "delta"; questions: Question[] }
   | { type: "typed"; questionId: string; value: string }
   | { type: "open-panel" }
-  | { type: "create-application"; snapshot: ScanSnapshot };
+  | { type: "create-application"; snapshot: ScanSnapshot }
+  | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string };
 
 export type ToContent =
   | { type: "fill-one"; questionId: string; value: string }
   | { type: "fill-plans"; plans: FillPlan[] }
   | { type: "focus"; questionId: string }
   | { type: "undo"; questionId?: string }
-  | { type: "pause" };
+  | { type: "pause" }
+  | { type: "keep-tick" };
 
 export type ToPanel =
-  | { type: "state"; snapshot: ScanSnapshot | null; profile: Profile | null; paused: boolean; tabId: number | null }
+  | { type: "state"; snapshot: ScanSnapshot | null; profile: Profile | null; paused: boolean; tabId: number | null; keepApplying?: boolean }
   | { type: "draft"; questionId: string; text: string; usedFacts: string[]; refused: boolean; reason?: string };
 
 export type FromPanel =
@@ -30,4 +42,6 @@ export type FromPanel =
   | { type: "draft-ai"; questionId: string }
   | { type: "insert-draft"; questionId: string; text: string }
   | { type: "popout" }
-  | { type: "edit-value"; questionId: string; value: string };
+  | { type: "edit-value"; questionId: string; value: string }
+  | { type: "start-keep-applying" }
+  | { type: "stop-keep-applying" };

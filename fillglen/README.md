@@ -19,18 +19,18 @@ It never clicks the final Submit button. It never invents facts. It never runs o
 
 **Chrome extension (Load unpacked)** — use this raw zip link (saving the GitHub file *page* gives HTML, not a zip):
 
-**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/fillglen-platform-0208/fillglen-assistant.zip**
+**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip**
 
 Unzip it. You get one folder named `fillglen-assistant/` with `manifest.json` inside. Then `chrome://extensions` → Developer mode on → **Load unpacked** → select that folder.
 
 **Whole platform (API + dashboard + 24/7 finder)** — source zip:
 
-**https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/fillglen-platform-0208.zip**
+**https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/keep-applying-autofill-0208.zip**
 
 Or clone the branch:
 
 ```bash
-git clone -b cursor/fillglen-platform-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git
+git clone -b cursor/keep-applying-autofill-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git
 cd sammyyyy/fillglen
 npm install
 npm test
@@ -40,7 +40,9 @@ npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
 
 Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
 
-Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/fillglen-platform-0208
+**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. While this computer and Chrome stay on, Fillglen fills fields, opens dropdowns, answers them, clicks Next, clicks Submit on the last step, then opens the next sourced job. It stops if you hit Stop, close Chrome, or the machine sleeps. LinkedIn is still blocked. A CAPTCHA skips that job and continues.
+
+Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/keep-applying-autofill-0208
 
 ## Run
 

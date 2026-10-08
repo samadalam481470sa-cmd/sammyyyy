@@ -11,11 +11,13 @@ function Popup() {
   const [paste, setPaste] = useState("");
   const [status, setStatus] = useState("Paste a resume, then confirm the fields.");
   const [matches, setMatches] = useState<{ count: number; top: Match[] }>({ count: 0, top: [] });
+  const [keepApplying, setKeepApplying] = useState(false);
 
   useEffect(() => {
-    chrome.storage.local.get(["profile", "apiBase", "sessionToken", "finderMatches"], (r) => {
+    chrome.storage.local.get(["profile", "apiBase", "sessionToken", "finderMatches", "keepApplying"], (r) => {
       if (r.profile) setProfile(r.profile);
       if (r.finderMatches) setMatches(r.finderMatches);
+      setKeepApplying(Boolean(r.keepApplying));
       const base = r.apiBase || "http://127.0.0.1:8787";
       if (r.sessionToken) {
         fetch(`${base}/v1/finder/matches`, { headers: { authorization: `Bearer ${r.sessionToken}` } })
@@ -43,7 +45,7 @@ function Popup() {
         <Logo />
         <div>
           <strong>Fillglen</strong>
-          <span>Toolbar · never submits</span>
+          <span>Toolbar · Autofill keeps going while Chrome is open</span>
         </div>
       </header>
       <p>{status}</p>
@@ -63,6 +65,33 @@ function Popup() {
           }}
         >
           Parse resume
+        </button>
+        <button
+          className="primary"
+          onClick={async () => {
+            if (!profile.contact.legalName && !paste) {
+              setStatus("Paste a resume and parse it first.");
+              return;
+            }
+            if (paste && !profile.contact.email) {
+              const parsed = parseResumeText(paste);
+              save(parsed);
+            }
+            await chrome.runtime.sendMessage({ type: "start-keep-applying" });
+            setKeepApplying(true);
+            setStatus("Keep applying is on. Fillglen fills fields, opens dropdowns, clicks Next, then Submit, then the next sourced job. It runs while this computer and Chrome stay on. Stop to halt.");
+          }}
+        >
+          Autofill & keep applying
+        </button>
+        <button
+          onClick={async () => {
+            await chrome.runtime.sendMessage({ type: "stop-keep-applying" });
+            setKeepApplying(false);
+            setStatus("Stopped. Fillglen is idle.");
+          }}
+        >
+          Stop
         </button>
         <button
           onClick={async () => {
@@ -102,7 +131,10 @@ function Popup() {
           </li>
         ))}
       </ol>
-      <p className="meta">LinkedIn Easy Apply is blocked. You always click Submit.</p>
+      <p className="meta">
+        {keepApplying ? "Keep applying is ON. Badge shows ON." : "Keep applying is off."} LinkedIn Easy Apply is
+        blocked. CAPTCHAs pause that job and skip to the next sourced listing.
+      </p>
     </div>
   );
 }

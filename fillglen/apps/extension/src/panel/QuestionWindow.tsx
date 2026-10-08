@@ -16,6 +16,7 @@ export interface QuestionWindowProps {
   snapshot: ScanSnapshot | null;
   profile: Profile | null;
   paused: boolean;
+  keepApplying?: boolean;
   popout?: boolean;
   drafts?: Record<string, DraftState>;
   onFillPage: () => void;
@@ -28,6 +29,8 @@ export interface QuestionWindowProps {
   onInsertDraft: (id: string, text: string) => void;
   onPopout?: () => void;
   onEdit: (id: string, value: string) => void;
+  onStartKeep?: () => void;
+  onStopKeep?: () => void;
 }
 
 const STATUS_LABEL: Record<Question["status"], string> = {
@@ -110,6 +113,13 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button className="primary" onClick={props.onFillPage} disabled={props.paused}>
           Fill this step
         </button>
+        {props.keepApplying ? (
+          <button onClick={props.onStopKeep}>Stop keep applying</button>
+        ) : (
+          <button className="primary" onClick={props.onStartKeep} disabled={props.paused}>
+            Autofill & keep applying
+          </button>
+        )}
         <button onClick={() => props.onUndo()}>Undo page</button>
         <button onClick={props.onPause}>{props.paused ? "Resume site" : "Pause this site"}</button>
         {props.onPopout && !props.popout ? <button onClick={props.onPopout}>Pop out</button> : null}
@@ -122,7 +132,12 @@ export function QuestionWindow(props: QuestionWindowProps) {
         ))}
       </div>
       {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
-      {done ? <p className="banner done">Every required question has an answer. You still click Submit yourself.</p> : null}
+      {done && !props.keepApplying ? (
+        <p className="banner done">Every required question has an answer. You still click Submit yourself unless Keep applying is on.</p>
+      ) : null}
+      {props.keepApplying ? (
+        <p className="banner done">Keep applying is on. Fillglen opens dropdowns, clicks Next, then Submit, then the next sourced job while Chrome stays open.</p>
+      ) : null}
       <ul className="qlist">
         {filtered.map((q) => (
           <QuestionRow

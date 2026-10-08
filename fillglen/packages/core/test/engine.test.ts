@@ -4,6 +4,7 @@ import { classifyQuestion, classifyAiBucket, isSelfId, neverSendToAi } from "../
 import { planFill, valueForType } from "../src/resolve.js";
 import { shouldBlockPage, isLinkedInEasyApply } from "../src/linkedin.js";
 import { isFinalSubmitLabel, isStepAdvanceLabel, mayAutoClick } from "../src/submitGuard.js";
+import { classifyAdvanceLabel, matchOption, nextQueueItem, pageLooksLikeCaptcha } from "../src/applyLoop.js";
 import { stableQuestionId, diffQuestions } from "../src/questionId.js";
 import { scoreMatch } from "../src/matchScore.js";
 import { tailorResume } from "../src/tailor.js";
@@ -159,6 +160,38 @@ describe("linkedin and submit guards", () => {
   it("recognizes Workday step buttons without treating them as final submit", () => {
     assert.equal(isStepAdvanceLabel("Save and Continue"), true);
     assert.equal(isFinalSubmitLabel("Save and Continue"), false);
+  });
+  it("allows Submit only in keep-applying mode", () => {
+    assert.equal(mayAutoClick("Submit Application"), false);
+    assert.equal(mayAutoClick("Submit Application", "keep-applying"), true);
+    assert.equal(mayAutoClick("Next", "keep-applying"), true);
+  });
+});
+
+describe("dropdown and keep-applying loop", () => {
+  it("toggles a long Yes option from a short Yes answer", () => {
+    const picked = matchOption("Yes", [
+      "No",
+      "Yes, I am authorized to work in the United States",
+      "Prefer not to say",
+    ]);
+    assert.match(picked || "", /yes/i);
+  });
+  it("classifies next vs submit", () => {
+    assert.equal(classifyAdvanceLabel("Save and Continue"), "next");
+    assert.equal(classifyAdvanceLabel("Submit Application"), "submit");
+  });
+  it("detects captcha copy", () => {
+    assert.equal(pageLooksLikeCaptcha("Please verify you are human"), true);
+    assert.equal(pageLooksLikeCaptcha("First name"), false);
+  });
+  it("walks to the next sourced job in the queue", () => {
+    const q = [
+      { url: "https://boards.greenhouse.io/a/1", title: "A", company: "A" },
+      { url: "https://boards.greenhouse.io/b/2", title: "B", company: "B" },
+    ];
+    assert.equal(nextQueueItem(q, q[0].url)?.url, q[1].url);
+    assert.equal(nextQueueItem(q, q[1].url), null);
   });
 });
 

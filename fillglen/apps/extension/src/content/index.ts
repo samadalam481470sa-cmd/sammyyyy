@@ -9,7 +9,15 @@ import {
   type Question,
   type ScanSnapshot,
 } from "@fillglen/core";
-import { flashAndScroll, readWorkdayStep, scanDocument, setFieldById } from "../../../../packages/core/src/dom";
+import {
+  clickAdvance,
+  clickMatchingDropdown,
+  detectCaptcha,
+  flashAndScroll,
+  readWorkdayStep,
+  scanDocument,
+  setFieldById,
+} from "../../../../packages/core/src/dom";
 import type { ToBackground, ToContent } from "../shared/messages";
 
 declare global {
@@ -32,6 +40,8 @@ function boot() {
   const undoStack: { id: string; prev: string }[] = [];
   let last: Question[] = [];
   let paused = false;
+  let keepTimer: number | undefined;
+  let stuckTicks = 0;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -46,6 +56,7 @@ function boot() {
       }
       if (msg.type === "focus") flashAndScroll(msg.questionId);
       if (msg.type === "undo") undo(msg.questionId);
+      if (msg.type === "keep-tick") keepCycle().catch(() => {});
     });
     port.onDisconnect.addListener(() => {
       port = null;
@@ -141,6 +152,68 @@ function boot() {
     if (!item) return;
     setFieldById(item.id, item.prev);
   }
+
+  async function keepCycle() {
+    if (window !== window.top) return;
+    const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
+    if (!stored.keepApplying || paused || blocked) return;
+    if (detectCaptcha(document)) {
+      post({ type: "keep-status", status: "captcha", url });
+      return;
+    }
+    const profile = (stored.profile as Profile) || EMPTY_PROFILE;
+    const questions = scanDocument(document, frameId, profile);
+    last = questions;
+    const plans = planPage(questions, profile);
+    for (const plan of plans) {
+      if (!plan.value) continue;
+      applyOne(plan.questionId, plan.value);
+      const q = questions.find((x) => x.id === plan.questionId);
+      if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio")) {
+        clickMatchingDropdown(plan.questionId, plan.value);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 450));
+    const stillEmpty = questions.filter((q) => q.required && !q.value);
+    const clicked = clickAdvance("keep-applying");
+    if (clicked?.kind === "next") {
+      stuckTicks = 0;
+      post({ type: "keep-status", status: "advanced", url });
+      return;
+    }
+    if (clicked?.kind === "submit") {
+      stuckTicks = 0;
+      post({ type: "keep-status", status: "submitted", url });
+      return;
+    }
+    if (stillEmpty.length) {
+      stuckTicks += 1;
+      if (stuckTicks >= 8) {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+      }
+    }
+  }
+
+  function startKeepLoop() {
+    if (keepTimer || window !== window.top) return;
+    keepTimer = window.setInterval(() => {
+      keepCycle().catch(() => {});
+    }, 2500);
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.keepApplying) return;
+    if (changes.keepApplying.newValue) startKeepLoop();
+    else if (keepTimer) {
+      clearInterval(keepTimer);
+      keepTimer = undefined;
+    }
+  });
+
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (r.keepApplying) startKeepLoop();
+  });
 
   if (window === window.top) mountFab();
 

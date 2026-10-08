@@ -2,12 +2,13 @@ import {
   adapterFor,
   EMPTY_PROFILE,
   isSupportedApplyUrl,
+  nextQueueItem,
   planPage,
   shouldBlockPage,
   type Profile,
   type ScanSnapshot,
 } from "@fillglen/core";
-import type { FromPanel, ToBackground, ToContent, ToPanel } from "./shared/messages";
+import type { FromPanel, KeepStatus, ToBackground, ToContent, ToPanel } from "./shared/messages";
 
 const contentPorts = new Map<number, Set<chrome.runtime.Port>>();
 const panelPorts = new Set<chrome.runtime.Port>();
@@ -44,7 +45,8 @@ async function pushState(tabId: number | null) {
       paused = false;
     }
   }
-  broadcastPanel({ type: "state", snapshot, profile, paused, tabId });
+  const { keepApplying } = await chrome.storage.local.get(["keepApplying"]);
+  broadcastPanel({ type: "state", snapshot, profile, paused, tabId, keepApplying: Boolean(keepApplying) });
 }
 
 function sendToTab(tabId: number, msg: ToContent) {
@@ -75,6 +77,9 @@ chrome.runtime.onConnect.addListener((port) => {
           await maybeTrack(snap);
         }
         await pushState(tabId);
+      }
+      if (msg.type === "keep-status") {
+        await onKeepStatus(tabId, msg.status, msg.url, msg.detail);
       }
       if (msg.type === "typed" && snapshots.has(tabId)) {
         const snap = snapshots.get(tabId)!;
@@ -122,6 +127,8 @@ chrome.runtime.onConnect.addListener((port) => {
         await chrome.storage.local.set({ pausedOrigins: [...next] });
         await pushState(tabId);
       }
+      if (msg.type === "start-keep-applying") await setKeepApplying(true, tabId);
+      if (msg.type === "stop-keep-applying") await setKeepApplying(false, tabId);
       if (msg.type === "save-answer") {
         const profile = await loadProfile();
         profile.answers = [
@@ -256,3 +263,55 @@ chrome.runtime.onInstalled.addListener(() => {
     if (!r.profile) chrome.storage.local.set({ profile: EMPTY_PROFILE });
   });
 });
+
+chrome.runtime.onMessage.addListener((msg: { type?: string }) => {
+  if (msg?.type === "start-keep-applying") setKeepApplying(true);
+  if (msg?.type === "stop-keep-applying") setKeepApplying(false);
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== "fillglen-keep") return;
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (!r.keepApplying) return;
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      const id = tabs[0]?.id;
+      if (id) sendToTab(id, { type: "keep-tick" });
+    });
+  });
+});
+
+async function setKeepApplying(on: boolean, tabId?: number | null) {
+  await chrome.storage.local.set({ keepApplying: on });
+  if (on) {
+    chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
+    chrome.action.setBadgeText({ text: "ON" });
+    chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
+    const { finderMatches } = await chrome.storage.local.get(["finderMatches"]);
+    const lookup = (finderMatches?.lookup || finderMatches?.top || []) as { url: string; title?: string; company?: string; source?: string }[];
+    const queue = lookup.filter((j) => j.url && !/linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url));
+    await chrome.storage.local.set({ applyQueue: queue });
+    const [tab] = tabId
+      ? [await chrome.tabs.get(tabId).catch(() => null)]
+      : await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    const id = tab?.id;
+    if (id) sendToTab(id, { type: "keep-tick" });
+    const url = tab?.url || "";
+    if (id && !looksApply(url) && queue[0]) chrome.tabs.update(id, { url: queue[0].url });
+  } else {
+    await chrome.alarms.clear("fillglen-keep");
+    chrome.action.setBadgeText({ text: "" });
+  }
+}
+
+async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
+  const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
+  if (!keepApplying) return;
+  if (status === "advanced" || status === "fill") return;
+  if (status === "captcha" || status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
+    const next = nextQueueItem(applyQueue, currentUrl || "");
+    const url = next?.url || applyQueue[0]?.url;
+    if (url && url !== currentUrl) {
+      setTimeout(() => chrome.tabs.update(tabId, { url }), status === "captcha" ? 4000 : 1200);
+    }
+  }
+}

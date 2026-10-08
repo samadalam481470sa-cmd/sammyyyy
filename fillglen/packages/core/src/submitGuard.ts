@@ -14,7 +14,11 @@ export function isStepAdvanceLabel(label: string): boolean {
   return rules.stepAdvancePatterns.some((p) => n === normalize(p));
 }
 
-/** Fillglen never clicks the last Submit. Step buttons stay with the user too unless an adapter opts in. */
-export function mayAutoClick(label: string): boolean {
-  return !isFinalSubmitLabel(label);
+/**
+ * Next/Continue is allowed during fill. Final Submit is only allowed in keep-applying
+ * mode after the user hits Autofill (screen-on loop). LinkedIn is still blocked elsewhere.
+ */
+export function mayAutoClick(label: string, mode: "fill-only" | "keep-applying" = "fill-only"): boolean {
+  if (isFinalSubmitLabel(label)) return mode === "keep-applying";
+  return true;
 }

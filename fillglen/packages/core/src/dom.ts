@@ -1,6 +1,8 @@
 import { classifyQuestion } from "./classify.js";
-import { isFinalSubmitLabel } from "./submitGuard.js";
+import { classifyAdvanceLabel, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
+import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
 import { stableQuestionId } from "./questionId.js";
+import { normalize } from "./fuzzy.js";
 import type { FieldKind, Profile, Question } from "./types.js";
 
 function visible(el: HTMLElement): boolean {
@@ -126,17 +128,25 @@ export function setFieldById(id: string, value: string): { ok: boolean; readBack
   if (!el) return { ok: false, readBack: "", error: "Field left the page." };
   try {
     if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
-      const on = /^(yes|true|y|on|1)$/i.test(value) || el.value.toLowerCase() === value.toLowerCase();
+      const label = labelFor(el);
+      const hit = matchOption(value, [el.value, label, el.getAttribute("aria-label") || ""]);
+      const on = Boolean(hit);
       el.checked = on;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
+      if (el.type === "radio" && on) el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     } else if (el instanceof HTMLSelectElement) {
-      const match = Array.from(el.options).find(
-        (o) => o.text.toLowerCase() === value.toLowerCase() || o.value.toLowerCase() === value.toLowerCase()
-      );
+      const texts = Array.from(el.options).map((o) => o.text);
+      const picked = matchOption(value, texts);
+      const match = picked
+        ? Array.from(el.options).find((o) => o.text === picked || normalize(o.text) === normalize(picked))
+        : Array.from(el.options).find((o) => o.value.toLowerCase() === value.toLowerCase());
       nativeSet(el, match ? match.value : value);
+      el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     } else {
       nativeSet(el, value);
+      openAndPickCustom(el, value);
     }
     const readBack =
       el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")
@@ -159,6 +169,67 @@ export function flashAndScroll(id: string): void {
   setTimeout(() => {
     el.style.outline = prev;
   }, 1200);
+}
+
+function openAndPickCustom(el: HTMLElement, value: string): boolean {
+  el.click();
+  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  const options = [
+    ...document.querySelectorAll("[role='option'], [role='listbox'] li, [data-test='select-option']"),
+  ] as HTMLElement[];
+  const texts = options.map((o) => (o.textContent || "").trim()).filter(Boolean);
+  const picked = matchOption(value, texts);
+  if (!picked) return false;
+  const node = options.find((o) => normalize(o.textContent || "") === normalize(picked) || (o.textContent || "").trim() === picked);
+  if (!node) return false;
+  node.click();
+  node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  return true;
+}
+
+export function clickMatchingDropdown(id: string, value: string): boolean {
+  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
+  if (!el) return false;
+  if (el instanceof HTMLSelectElement) {
+    const result = setFieldById(id, value);
+    return result.ok;
+  }
+  return openAndPickCustom(el, value);
+}
+
+export function detectCaptcha(doc: Document): boolean {
+  const iframes = [...doc.querySelectorAll("iframe")].map((f) => f.src || "");
+  return pageLooksLikeCaptcha(doc.body?.innerText?.slice(0, 4000) || "", iframes);
+}
+
+export function findAdvanceControl(
+  doc: Document,
+  mode: "fill-only" | "keep-applying" = "fill-only"
+): { el: HTMLElement; kind: "next" | "submit"; label: string } | null {
+  const els = [
+    ...doc.querySelectorAll("button, a, input[type=button], input[type=submit], [role='button']"),
+  ] as HTMLElement[];
+  const labeled = els
+    .filter(visible)
+    .map((el) => ({
+      el,
+      label: (el.getAttribute("value") || el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim(),
+    }))
+    .filter((x) => x.label && classifyAdvanceLabel(x.label));
+  const next = labeled.find((x) => classifyAdvanceLabel(x.label) === "next");
+  const submit = labeled.find((x) => classifyAdvanceLabel(x.label) === "submit");
+  if (next) return { ...next, kind: "next" };
+  if (submit && mayAutoClick(submit.label, mode)) return { ...submit, kind: "submit" };
+  return null;
+}
+
+export function clickAdvance(mode: "fill-only" | "keep-applying" = "fill-only"): { kind: "next" | "submit" } | null {
+  const found = findAdvanceControl(document, mode);
+  if (!found) return null;
+  found.el.scrollIntoView({ block: "center" });
+  found.el.click();
+  return { kind: found.kind };
 }
 
 export function readWorkdayStep(): { label: string; index?: number; total?: number } {
