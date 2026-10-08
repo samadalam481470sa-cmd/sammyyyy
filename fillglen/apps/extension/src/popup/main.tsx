@@ -79,7 +79,7 @@ function Popup() {
             }
             await chrome.runtime.sendMessage({ type: "start-keep-applying" });
             setKeepApplying(true);
-            setStatus("Keep applying is on. Fillglen fills fields, opens dropdowns, clicks Next, then Submit, then the next sourced job. It runs while this computer and Chrome stay on. Stop to halt.");
+            setStatus("Keep applying is on. It pulls the built-in researched job list (no 24/7 server required), fills fields and dropdowns, clicks Next/Submit, then the next job while Chrome stays open. If a CAPTCHA appears, solve it on this screen — Fillglen waits, then continues. It never solves CAPTCHAs.");
           }}
         >
           Autofill & keep applying
@@ -132,8 +132,8 @@ function Popup() {
         ))}
       </ol>
       <p className="meta">
-        {keepApplying ? "Keep applying is ON. Badge shows ON." : "Keep applying is off."} LinkedIn Easy Apply is
-        blocked. CAPTCHAs pause that job and skip to the next sourced listing.
+        {keepApplying ? "Keep applying is ON. Badge shows ON, or WAIT if a CAPTCHA needs you." : "Keep applying is off."}{" "}
+        LinkedIn Easy Apply is blocked. CAPTCHAs wait for you; they are not solved automatically.
       </p>
     </div>
   );

@@ -1,10 +1,12 @@
 import {
   adapterFor,
   EMPTY_PROFILE,
+  fetchBuiltInJobQueue,
   isSupportedApplyUrl,
   nextQueueItem,
   planPage,
   shouldBlockPage,
+  type ApplyQueueItem,
   type Profile,
   type ScanSnapshot,
 } from "@fillglen/core";
@@ -287,8 +289,20 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
     const { finderMatches } = await chrome.storage.local.get(["finderMatches"]);
-    const lookup = (finderMatches?.lookup || finderMatches?.top || []) as { url: string; title?: string; company?: string; source?: string }[];
-    const queue = lookup.filter((j) => j.url && !/linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url));
+    const lookup = (finderMatches?.lookup || finderMatches?.top || []) as ApplyQueueItem[];
+    let builtIn: ApplyQueueItem[] = [];
+    try {
+      builtIn = await fetchBuiltInJobQueue(60);
+    } catch {
+      builtIn = [];
+    }
+    const seen = new Set<string>();
+    const queue: ApplyQueueItem[] = [];
+    for (const j of [...lookup, ...builtIn]) {
+      if (!j?.url || seen.has(j.url) || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url)) continue;
+      seen.add(j.url);
+      queue.push({ url: j.url, title: j.title || "Job", company: j.company || "", source: j.source });
+    }
     await chrome.storage.local.set({ applyQueue: queue });
     const [tab] = tabId
       ? [await chrome.tabs.get(tabId).catch(() => null)]
@@ -306,12 +320,26 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
 async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
   const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
   if (!keepApplying) return;
-  if (status === "advanced" || status === "fill") return;
-  if (status === "captcha" || status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
+  if (status === "advanced") return;
+  if (status === "captcha") {
+    chrome.action.setBadgeText({ text: "WAIT" });
+    chrome.notifications?.create("fillglen-captcha", {
+      type: "basic",
+      iconUrl: "public/icon128.png",
+      title: "Fillglen: CAPTCHA on screen",
+      message: "Solve it yourself. Fillglen waits on this tab, then keeps applying. It never solves CAPTCHAs.",
+    });
+    return;
+  }
+  if (status === "fill") {
+    chrome.action.setBadgeText({ text: "ON" });
+    return;
+  }
+  if (status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
     const next = nextQueueItem(applyQueue, currentUrl || "");
     const url = next?.url || applyQueue[0]?.url;
     if (url && url !== currentUrl) {
-      setTimeout(() => chrome.tabs.update(tabId, { url }), status === "captcha" ? 4000 : 1200);
+      setTimeout(() => chrome.tabs.update(tabId, { url }), 1200);
     }
   }
 }

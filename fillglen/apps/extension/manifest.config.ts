@@ -26,7 +26,7 @@ export default defineManifest({
     service_worker: "src/background.ts",
     type: "module",
   },
-  permissions: ["storage", "sidePanel", "scripting", "tabs", "windows", "webNavigation", "alarms"],
+  permissions: ["storage", "sidePanel", "scripting", "tabs", "windows", "webNavigation", "alarms", "notifications"],
   host_permissions: [
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*",

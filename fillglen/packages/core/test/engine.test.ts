@@ -4,7 +4,14 @@ import { classifyQuestion, classifyAiBucket, isSelfId, neverSendToAi } from "../
 import { planFill, valueForType } from "../src/resolve.js";
 import { shouldBlockPage, isLinkedInEasyApply } from "../src/linkedin.js";
 import { isFinalSubmitLabel, isStepAdvanceLabel, mayAutoClick } from "../src/submitGuard.js";
-import { classifyAdvanceLabel, matchOption, nextQueueItem, pageLooksLikeCaptcha } from "../src/applyLoop.js";
+import {
+  captchaPolicy,
+  classifyAdvanceLabel,
+  matchOption,
+  nextQueueItem,
+  pageLooksLikeCaptcha,
+  shouldLeavePageOnCaptcha,
+} from "../src/applyLoop.js";
 import { stableQuestionId, diffQuestions } from "../src/questionId.js";
 import { scoreMatch } from "../src/matchScore.js";
 import { tailorResume } from "../src/tailor.js";
@@ -184,6 +191,11 @@ describe("dropdown and keep-applying loop", () => {
   it("detects captcha copy", () => {
     assert.equal(pageLooksLikeCaptcha("Please verify you are human"), true);
     assert.equal(pageLooksLikeCaptcha("First name"), false);
+  });
+  it("waits for a person to finish a CAPTCHA and never leaves the page", () => {
+    assert.equal(captchaPolicy(true), "wait-for-human");
+    assert.equal(captchaPolicy(false), "continue");
+    assert.equal(shouldLeavePageOnCaptcha(), false);
   });
   it("walks to the next sourced job in the queue", () => {
     const q = [

@@ -4,7 +4,7 @@ TypeScript, React, Vite, and `@crxjs/vite-plugin`. Side panel is the live questi
 
 **Download:** [fillglen-assistant.zip](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip) (raw URL). Unzip and Load unpacked the `fillglen-assistant/` folder in `chrome://extensions`.
 
-Paste a resume, then **Autofill & keep applying**. While Chrome stays open it fills fields, opens dropdowns, clicks Next, then Submit, then the next sourced job. Hit Stop to halt. LinkedIn is blocked.
+Paste a resume, then **Autofill & keep applying**. The extension loads the built-in researched job list (no 24/7 server). While Chrome stays open it fills fields, opens dropdowns, clicks Next/Submit, then the next job. A CAPTCHA waits for you — Fillglen never solves it. Hit Stop to halt. LinkedIn is blocked.
 
 Or build locally: `npm run build -w @fillglen/extension` and select `fillglen/apps/extension/dist`.
 

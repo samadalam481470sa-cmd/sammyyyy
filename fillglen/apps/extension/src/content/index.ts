@@ -42,6 +42,7 @@ function boot() {
   let paused = false;
   let keepTimer: number | undefined;
   let stuckTicks = 0;
+  let waitingOnCaptcha = false;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -158,8 +159,15 @@ function boot() {
     const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
     if (!stored.keepApplying || paused || blocked) return;
     if (detectCaptcha(document)) {
-      post({ type: "keep-status", status: "captcha", url });
+      if (!waitingOnCaptcha) {
+        waitingOnCaptcha = true;
+        post({ type: "keep-status", status: "captcha", url });
+      }
       return;
+    }
+    if (waitingOnCaptcha) {
+      waitingOnCaptcha = false;
+      post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
     }
     const profile = (stored.profile as Profile) || EMPTY_PROFILE;
     const questions = scanDocument(document, frameId, profile);

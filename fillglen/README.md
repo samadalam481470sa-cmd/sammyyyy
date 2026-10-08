@@ -40,7 +40,7 @@ npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
 
 Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
 
-**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. While this computer and Chrome stay on, Fillglen fills fields, opens dropdowns, answers them, clicks Next, clicks Submit on the last step, then opens the next sourced job. It stops if you hit Stop, close Chrome, or the machine sleeps. LinkedIn is still blocked. A CAPTCHA skips that job and continues.
+**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Next/Submit, then the next job. If a CAPTCHA appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
 
 Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/keep-applying-autofill-0208
 

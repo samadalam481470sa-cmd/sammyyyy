@@ -38,6 +38,15 @@ export function pageLooksLikeCaptcha(text: string, iframeSrcs: string[] = []): b
   );
 }
 
+/** Fillglen never solves CAPTCHAs. It waits on the open tab until a person finishes it. */
+export function captchaPolicy(detected: boolean): "wait-for-human" | "continue" {
+  return detected ? "wait-for-human" : "continue";
+}
+
+export function shouldLeavePageOnCaptcha(): boolean {
+  return false;
+}
+
 export type KeepApplyStatus = "fill" | "advanced" | "submitted" | "captcha" | "blocked" | "stuck" | "done-job";
 
 export interface ApplyQueueItem {
