@@ -57,6 +57,7 @@ export function useResource<T extends { id: string }>(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const localMode = useRef(false)
+  const itemsRef = useRef<T[]>([])
 
   const writeLocal = useCallback(
     (next: T[]) => {
@@ -91,23 +92,23 @@ export function useResource<T extends { id: string }>(
   }, [resource, mock, storeName, persistLocal])
 
   useEffect(() => {
+    itemsRef.current = items
+  }, [items])
+
+  useEffect(() => {
     void refresh()
   }, [refresh])
 
   const save = useCallback(
     async (id: string, patch: Partial<T>) => {
       if (localMode.current) {
-        let merged: T | undefined
-        setItems((prev) => {
-          const next = prev.map((item) => {
-            if (item.id !== id) return item
-            merged = { ...item, ...patch }
-            return merged
-          })
-          writeLocal(next)
-          return next
-        })
-        if (!merged) throw new Error('Record not found')
+        const existing = itemsRef.current.find((item) => item.id === id)
+        if (!existing) throw new Error('Record not found')
+        const merged = { ...existing, ...patch }
+        const next = itemsRef.current.map((item) => (item.id === id ? merged : item))
+        itemsRef.current = next
+        setItems(next)
+        writeLocal(next)
         appendDemoChange({
           resourceType: resource,
           resourceId: id,
@@ -139,11 +140,10 @@ export function useResource<T extends { id: string }>(
           ...data,
           id: `${resource}_local_${Date.now()}`,
         } as T
-        setItems((prev) => {
-          const next = [record, ...prev]
-          writeLocal(next)
-          return next
-        })
+        const next = [record, ...itemsRef.current]
+        itemsRef.current = next
+        setItems(next)
+        writeLocal(next)
         appendDemoChange({
           resourceType: resource,
           resourceId: record.id,

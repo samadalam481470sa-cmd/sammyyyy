@@ -275,26 +275,31 @@ export function MeetingsPage() {
     setElapsed(draft.elapsed)
     startedAtRef.current = draft.startedAt
     const transcript = draft.lines.map((l) => `${l.speaker}: ${l.text}`).join('\n')
-    void meetingsApi
-      .save(draft.meetingId, sanitizeMeetingRecord({
-        status: 'completed',
-        title: draft.title,
-        channel: draft.channel,
-        durationSeconds: draft.elapsed,
-        startedAt: draft.startedAt,
-        endedAt: new Date().toISOString(),
-        transcript,
-        transcriptLinesJson: JSON.stringify(draft.lines),
-        summary: draft.summary || summarizeTranscript(transcript),
-        participantName: draft.customer.name,
-        participantCompany: draft.customer.company,
-        participantEmail: draft.customer.email,
-        participantPhone: draft.customer.phone,
-        customerNotes: draft.customer.notes,
-        projectName: draft.projectName,
-        opportunityId: draft.opportunityId || null,
-      }))
-      .then(() => {
+    const recovered = sanitizeMeetingRecord({
+      status: 'completed',
+      title: draft.title,
+      channel: draft.channel,
+      durationSeconds: draft.elapsed,
+      startedAt: draft.startedAt,
+      endedAt: new Date().toISOString(),
+      transcript,
+      transcriptLinesJson: JSON.stringify(draft.lines),
+      summary: draft.summary || summarizeTranscript(transcript),
+      participantName: draft.customer.name,
+      participantCompany: draft.customer.company,
+      participantEmail: draft.customer.email,
+      participantPhone: draft.customer.phone,
+      customerNotes: draft.customer.notes,
+      projectName: draft.projectName,
+      opportunityId: draft.opportunityId || null,
+    })
+    const known = meetingsApi.items.some((item) => item.id === draft.meetingId)
+    const persist = known
+      ? meetingsApi.save(draft.meetingId, recovered)
+      : meetingsApi.create(recovered)
+    void persist
+      .then((row) => {
+        setSelectedId(row.id)
         setMessage('Recovered your last session. Transcript and notes were saved to this key.')
       })
       .catch(() => {
