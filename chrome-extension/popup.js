@@ -62,9 +62,17 @@ function populateFieldsFromProfile(profile) {
   els.skills.value = (profile.skills || []).join(", ");
   els.summary.value = profile.summary || "";
   rawResumeText = profile.rawText || "";
+  // Keep the paste box in sync so a later Save doesn't drop the resume body.
+  if (rawResumeText && !els.resumePaste.value.trim()) {
+    els.resumePaste.value = rawResumeText;
+  }
 }
 
 function readProfileFromFields() {
+  // Prefer the paste box if the user typed/pasted there after the last parse.
+  const pasted = els.resumePaste.value.trim();
+  if (pasted) rawResumeText = pasted;
+
   return {
     name: els.name.value.trim(),
     firstName: els.firstName.value.trim(),
@@ -83,10 +91,40 @@ function readProfileFromFields() {
   };
 }
 
+function saveProfile(profile, message) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [STORAGE_KEY]: profile }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        els.saveStatus.textContent = "Save failed: " + err.message;
+        els.saveStatus.style.color = "#b91c1c";
+        resolve(false);
+        return;
+      }
+      els.saveStatus.style.color = "";
+      els.saveStatus.textContent = message || "Saved.";
+      setTimeout(() => {
+        if (els.saveStatus.textContent === (message || "Saved.")) els.saveStatus.textContent = "";
+      }, 3500);
+      resolve(true);
+    });
+  });
+}
+
+function parseAndFillFromPaste() {
+  const text = els.resumePaste.value.trim();
+  if (!text) return null;
+  rawResumeText = text;
+  const profile = ResumeParser.parseResume(text);
+  populateFieldsFromProfile(profile);
+  return readProfileFromFields();
+}
+
 function loadSavedProfile() {
-  chrome.storage.local.get([STORAGE_KEY], (result) => {
+  chrome.storage.local.get([STORAGE_KEY, QA_STORAGE_KEY], (result) => {
     if (result[STORAGE_KEY]) {
       populateFieldsFromProfile(result[STORAGE_KEY]);
+      if (result[STORAGE_KEY].rawText) els.resumePaste.value = result[STORAGE_KEY].rawText;
     }
   });
 }
@@ -95,30 +133,40 @@ els.resumeFile.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     const text = String(reader.result || "");
     rawResumeText = text;
     els.resumePaste.value = text;
     const profile = ResumeParser.parseResume(text);
     populateFieldsFromProfile(profile);
+    // Auto-save so closing the popup doesn't lose the upload.
+    await saveProfile(readProfileFromFields(), "Parsed and saved from file.");
   };
   reader.readAsText(file);
 });
 
-els.parseBtn.addEventListener("click", () => {
-  const text = els.resumePaste.value;
-  if (!text.trim()) return;
-  rawResumeText = text;
-  const profile = ResumeParser.parseResume(text);
-  populateFieldsFromProfile(profile);
+els.parseBtn.addEventListener("click", async () => {
+  const profile = parseAndFillFromPaste();
+  if (!profile) {
+    els.saveStatus.textContent = "Paste your resume text first.";
+    return;
+  }
+  await saveProfile(profile, "Parsed and saved. Edit fields anytime, then Save again.");
 });
 
-els.saveBtn.addEventListener("click", () => {
+els.saveBtn.addEventListener("click", async () => {
+  // If the structured fields are empty but paste has text, parse first.
+  const needsParse =
+    !els.name.value.trim() && !els.email.value.trim() && els.resumePaste.value.trim();
+  if (needsParse) parseAndFillFromPaste();
+
   const profile = readProfileFromFields();
-  chrome.storage.local.set({ [STORAGE_KEY]: profile }, () => {
-    els.saveStatus.textContent = "Saved. Go to \"Fill & Score\" on any job page.";
-    setTimeout(() => (els.saveStatus.textContent = ""), 3000);
-  });
+  if (!profile.name && !profile.email && !profile.rawText) {
+    els.saveStatus.textContent = "Nothing to save — paste a resume or fill the fields.";
+    els.saveStatus.style.color = "#b91c1c";
+    return;
+  }
+  await saveProfile(profile, "Saved. Open a job page and use Fill & Score or the RF bubble.");
 });
 
 chrome.runtime.onMessage.addListener((message) => {
