@@ -5,6 +5,7 @@ import {
   eventsOnDate,
   monthGrid,
 } from './meetingCalendar'
+import { ownerKeyFromAuth } from './ownerKey'
 import type { AuthUser } from '@/types'
 
 const slot1: AuthUser = {
@@ -50,6 +51,23 @@ describe('meetingCalendar', () => {
     const cells = monthGrid(2026, 9) // October 2026
     expect(cells.filter(Boolean).length).toBe(31)
     expect(cells[4]).toBe('2026-10-01') // Thu
+  })
+
+  it('uses the same owner key on the server as the calendar', () => {
+    expect(
+      ownerKeyFromAuth({
+        userId: 'user-dennis',
+        authMethod: 'api_key',
+        apiKeySlot: 2,
+      }),
+    ).toBe('key:slot-2')
+    expect(
+      ownerKeyFromAuth({
+        userId: 'user-manager',
+        authMethod: 'manager_key',
+        isManager: true,
+      }),
+    ).toBe('key:manager')
   })
 
   it('marks today and tomorrow as due reminders', () => {

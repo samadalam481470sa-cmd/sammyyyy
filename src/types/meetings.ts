@@ -42,6 +42,7 @@ export interface MeetingRecord {
   customerNotes: string
   tags: string
   recordingEnabled: boolean
+  ownerKey?: string
   createdAt?: string
   updatedAt?: string
 }

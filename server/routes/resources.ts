@@ -1,7 +1,15 @@
-import { Router } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
+import { sanitizeMeetingPatch } from '../../src/lib/meetingSecurity.ts'
 import { db } from '../db/index.ts'
-import { requireAuth, requireRole, writeAudit, recordChange } from '../middleware/security.ts'
+import {
+  meetingsWriteLimit,
+  ownerKeyFromAuth,
+  requireAuth,
+  requireRole,
+  writeAudit,
+  recordChange,
+} from '../middleware/security.ts'
 
 /**
  * Generic CRUD for the CRM module tables.
@@ -169,6 +177,31 @@ function pickWritable(def: ResourceDef, body: Record<string, unknown>) {
   return picked
 }
 
+function meetingsWriteGuard(req: Request, res: Response, next: NextFunction) {
+  if (req.params.resource !== 'meetings') return next()
+  return meetingsWriteLimit(req, res, next)
+}
+
+function ownedMeeting(id: string, ownerKey: string) {
+  return db
+    .prepare(`SELECT * FROM meetings WHERE id = ? AND owner_key = ?`)
+    .get(id, ownerKey) as Record<string, unknown> | undefined
+}
+
+function prepareMeetingsBody(
+  body: Record<string, unknown>,
+  existing?: Record<string, unknown>,
+) {
+  const sanitized = sanitizeMeetingPatch({
+    ...body,
+    channel: body.channel ?? existing?.channel,
+    ownerKey: undefined,
+    owner_key: undefined,
+  })
+  delete (sanitized as { ownerKey?: unknown }).ownerKey
+  return sanitized
+}
+
 export const resourcesRouter = Router()
 
 resourcesRouter.use(requireAuth)
@@ -180,18 +213,31 @@ resourcesRouter.param('resource', (req, res, next, key: string) => {
 
 resourcesRouter.get('/:resource', (req, res) => {
   const def = RESOURCES[req.params.resource]
+  if (req.params.resource === 'meetings') {
+    const ownerKey = ownerKeyFromAuth(req.auth)
+    const rows = db
+      .prepare(`SELECT * FROM meetings WHERE owner_key = ? ORDER BY ${def.orderBy}`)
+      .all(ownerKey) as Record<string, unknown>[]
+    return res.json(rows.map(rowToApi))
+  }
   const rows = db
     .prepare(`SELECT * FROM ${def.table} ORDER BY ${def.orderBy}`)
     .all() as Record<string, unknown>[]
   res.json(rows.map(rowToApi))
 })
 
-resourcesRouter.post('/:resource', requireRole('admin', 'partner', 'analyst'), (req, res) => {
+resourcesRouter.post(
+  '/:resource',
+  requireRole('admin', 'partner', 'analyst'),
+  meetingsWriteGuard,
+  (req, res) => {
   const def = RESOURCES[req.params.resource]
   const parsed = payloadSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' })
 
-  const data = pickWritable(def, parsed.data)
+  const incoming =
+    req.params.resource === 'meetings' ? prepareMeetingsBody(parsed.data) : parsed.data
+  const data = pickWritable(def, incoming)
   if (Object.keys(data).length === 0) {
     return res.status(400).json({ error: 'No writable fields provided' })
   }
@@ -199,12 +245,15 @@ resourcesRouter.post('/:resource', requireRole('admin', 'partner', 'analyst'), (
   const id = `${req.params.resource.slice(0, 3)}_${Date.now()}_${Math.random()
     .toString(36)
     .slice(2, 7)}`
-  const cols = ['id', ...Object.keys(data)]
+  const extra =
+    req.params.resource === 'meetings' ? { owner_key: ownerKeyFromAuth(req.auth) } : {}
+  const cols = ['id', ...Object.keys(data), ...Object.keys(extra)]
   const placeholders = cols.map((c) => `@${c}`).join(', ')
   try {
     db.prepare(`INSERT INTO ${def.table} (${cols.join(', ')}) VALUES (${placeholders})`).run({
       id,
       ...data,
+      ...extra,
     })
   } catch (err) {
     if (isConstraintError(err)) {
@@ -235,17 +284,26 @@ resourcesRouter.post('/:resource', requireRole('admin', 'partner', 'analyst'), (
 resourcesRouter.patch(
   '/:resource/:id',
   requireRole('admin', 'partner', 'analyst'),
+  meetingsWriteGuard,
   (req, res) => {
     const def = RESOURCES[req.params.resource]
     const parsed = payloadSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' })
 
-    const existing = db
-      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
-      .get(req.params.id) as Record<string, unknown> | undefined
+    const ownerKey = ownerKeyFromAuth(req.auth)
+    const existing =
+      req.params.resource === 'meetings'
+        ? ownedMeeting(req.params.id, ownerKey)
+        : (db.prepare(`SELECT * FROM ${def.table} WHERE id = ?`).get(req.params.id) as
+            | Record<string, unknown>
+            | undefined)
     if (!existing) return res.status(404).json({ error: 'Record not found' })
 
-    const data = pickWritable(def, parsed.data)
+    const incoming =
+      req.params.resource === 'meetings'
+        ? prepareMeetingsBody(parsed.data, existing)
+        : parsed.data
+    const data = pickWritable(def, incoming)
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: 'No writable fields provided' })
     }
@@ -283,14 +341,19 @@ resourcesRouter.patch(
   },
 )
 
-  resourcesRouter.delete(
+resourcesRouter.delete(
   '/:resource/:id',
   requireRole('admin', 'partner'),
+  meetingsWriteGuard,
   (req, res) => {
     const def = RESOURCES[req.params.resource]
-    const existing = db
-      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
-      .get(req.params.id) as Record<string, unknown> | undefined
+    const ownerKey = ownerKeyFromAuth(req.auth)
+    const existing =
+      req.params.resource === 'meetings'
+        ? ownedMeeting(req.params.id, ownerKey)
+        : (db.prepare(`SELECT * FROM ${def.table} WHERE id = ?`).get(req.params.id) as
+            | Record<string, unknown>
+            | undefined)
     if (!existing) return res.status(404).json({ error: 'Record not found' })
 
     db.prepare(`DELETE FROM ${def.table} WHERE id = ?`).run(req.params.id)

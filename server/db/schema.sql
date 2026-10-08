@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS meetings (
   customer_notes TEXT NOT NULL DEFAULT '',
   tags TEXT NOT NULL DEFAULT '',
   recording_enabled INTEGER NOT NULL DEFAULT 1,
+  owner_key TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -284,3 +285,4 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_started ON meetings(started_at);
 CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
+CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key);

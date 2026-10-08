@@ -13,6 +13,7 @@ import {
   type CalendarEvent,
 } from '@/lib/meetingCalendar'
 import { pushCalendarReminders } from '@/lib/calendarReminders'
+import { FIELD_LIMITS, sanitizeCalendarEvent } from '@/lib/meetingSecurity'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -91,10 +92,14 @@ export function MeetingCalendar() {
       setMessage('Add a title or notes for this day.')
       return
     }
-    const nextItem = {
+    const nextItem = sanitizeCalendarEvent({
       ...draft,
       date: selected,
       title: draft.title.trim() || 'Meeting note',
+    })
+    if (!nextItem) {
+      setMessage('That calendar entry could not be saved.')
+      return
     }
     const exists = events.some((e) => e.id === nextItem.id)
     const next = exists
@@ -235,6 +240,7 @@ export function MeetingCalendar() {
             value={draft.title}
             onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
             placeholder="Meeting title"
+            maxLength={FIELD_LIMITS.calendarTitle}
             className="h-9 w-full rounded-lg border border-border bg-canvas px-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />
           <div className="flex gap-2">
@@ -257,6 +263,7 @@ export function MeetingCalendar() {
             value={draft.notes}
             onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
             placeholder="Notes for this day…"
+            maxLength={FIELD_LIMITS.calendarNotes}
             rows={2}
             className="w-full rounded-lg border border-border bg-canvas px-2.5 py-1.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
           />

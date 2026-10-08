@@ -28,6 +28,15 @@ db.pragma('foreign_keys = ON')
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
+;(() => {
+  const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
+  if (cols.length && !cols.some((c) => c.name === 'owner_key')) {
+    db.exec(`ALTER TABLE meetings ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''`)
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key)`)
+  db.prepare(`UPDATE meetings SET owner_key = 'key:demo' WHERE owner_key = ''`).run()
+})()
+
 // SQLite cannot ALTER CHECK constraints — rebuild sessions if manager_key is missing
 ;(() => {
   const row = db
@@ -320,18 +329,19 @@ function seedModuleTables() {
         id, title, channel, status, direction, started_at, ended_at, duration_seconds,
         host_name, participant_name, participant_company, participant_email, participant_phone,
         join_url, dialed_number, opportunity_id, project_name, transcript, transcript_lines_json,
-        summary, customer_notes, tags, recording_enabled
+        summary, customer_notes, tags, recording_enabled, owner_key
       ) VALUES (
         @id, @title, @channel, @status, @direction, @startedAt, @endedAt, @durationSeconds,
         @hostName, @participantName, @participantCompany, @participantEmail, @participantPhone,
         @joinUrl, @dialedNumber, @opportunityId, @projectName, @transcript, @transcriptLinesJson,
-        @summary, @customerNotes, @tags, @recordingEnabled
+        @summary, @customerNotes, @tags, @recordingEnabled, @ownerKey
       )
     `)
     mockMeetings.forEach((r) =>
       ins.run({
         ...r,
         recordingEnabled: r.recordingEnabled ? 1 : 0,
+        ownerKey: 'key:demo',
       }),
     )
   }

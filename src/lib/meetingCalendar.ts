@@ -1,5 +1,7 @@
 import type { AuthUser } from '@/types'
 import type { NotificationItem } from '@/lib/api'
+import { sanitizeCalendarEvent, sanitizeCalendarEvents, sanitizeMultiline, sanitizeText } from '@/lib/meetingSecurity'
+import { ownerKeyFromAuth } from '@/lib/ownerKey'
 
 export interface CalendarEvent {
   id: string
@@ -13,11 +15,13 @@ export interface CalendarEvent {
 /** Stable owner for a session key — slot 1, slot 2, manager, etc. never share calendars. */
 export function calendarOwnerKey(user: AuthUser | null | undefined): string {
   if (!user) return 'anonymous'
-  if (user.isManager || user.authMethod === 'manager_key') return 'key:manager'
-  if (user.apiKeySlot != null) return `key:slot-${user.apiKeySlot}`
-  if (user.apiKeyId) return `key:${user.apiKeyId}`
-  if (user.authMethod === 'demo') return 'key:demo'
-  return `user:${user.id}`
+  return ownerKeyFromAuth({
+    userId: user.id,
+    authMethod: user.authMethod,
+    apiKeySlot: user.apiKeySlot,
+    apiKeyId: user.apiKeyId,
+    isManager: user.isManager,
+  })
 }
 
 export function calendarOwnerLabel(user: AuthUser | null | undefined): string {
@@ -40,8 +44,7 @@ export function loadCalendarEvents(owner: string): CalendarEvent[] {
     const raw = localStorage.getItem(storageKey(owner))
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(isCalendarEvent)
+    return sanitizeCalendarEvents(parsed)
   } catch {
     return []
   }
@@ -49,16 +52,13 @@ export function loadCalendarEvents(owner: string): CalendarEvent[] {
 
 export function saveCalendarEvents(owner: string, events: CalendarEvent[]): void {
   try {
-    localStorage.setItem(storageKey(owner), JSON.stringify(events))
+    const clean = events
+      .map(sanitizeCalendarEvent)
+      .filter((event): event is CalendarEvent => event != null)
+    localStorage.setItem(storageKey(owner), JSON.stringify(clean))
   } catch {
     // ignore quota
   }
-}
-
-function isCalendarEvent(v: unknown): v is CalendarEvent {
-  if (typeof v !== 'object' || v == null) return false
-  const e = v as CalendarEvent
-  return typeof e.id === 'string' && typeof e.date === 'string' && typeof e.title === 'string'
 }
 
 export function todayISO(now = new Date()): string {
@@ -119,11 +119,11 @@ export function reminderNotifications(
       direction: 'inbound',
       from: 'Newport Meetings',
       to: user.email,
-      subject: `Meeting reminder — ${event.title || 'Untitled'} (${when}${time})`,
+      subject: `Meeting reminder — ${sanitizeText(event.title || 'Untitled', 200)} (${when}${time})`,
       body: [
         `Calendar reminder for your ${calendarOwnerLabel(user)}.`,
         `Date: ${event.date}${time}`,
-        event.notes ? `Notes: ${event.notes}` : '',
+        event.notes ? `Notes: ${sanitizeMultiline(event.notes, 4000)}` : '',
       ]
         .filter(Boolean)
         .join('\n'),

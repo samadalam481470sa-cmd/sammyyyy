@@ -30,6 +30,17 @@ export interface ResourceApi<T extends { id: string }> {
   refresh: () => Promise<void>
 }
 
+export interface UseResourceOptions {
+  /** Isolates localStorage so session keys never share a collection. */
+  scope?: string
+  /** Always mirror API results to localStorage so static hosting keeps data. */
+  persistLocal?: boolean
+}
+
+function collectionName(resource: string, scope?: string) {
+  return scope ? `${resource}__${scope}` : resource
+}
+
 /**
  * Loads a CRM module collection from the database API.
  * In local-demo (static hosting) mode, edits persist in localStorage so
@@ -38,18 +49,30 @@ export interface ResourceApi<T extends { id: string }> {
 export function useResource<T extends { id: string }>(
   resource: string,
   mock: T[],
+  options: UseResourceOptions = {},
 ): ResourceApi<T> {
+  const { scope, persistLocal } = options
+  const storeName = collectionName(resource, scope)
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const localMode = useRef(false)
+
+  const writeLocal = useCallback(
+    (next: T[]) => {
+      if (persistLocal || localMode.current || isLocalDemo()) {
+        saveDemoCollection(storeName, next)
+      }
+    },
+    [persistLocal, storeName],
+  )
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     if (isLocalDemo()) {
       localMode.current = true
-      setItems(loadDemoCollection(resource, mock))
+      setItems(loadDemoCollection(storeName, mock))
       setLoading(false)
       return
     }
@@ -57,14 +80,15 @@ export function useResource<T extends { id: string }>(
       const data = await request<T[]>(`/${resource}`)
       localMode.current = false
       setItems(data)
+      if (persistLocal) saveDemoCollection(storeName, data)
     } catch (err) {
       localMode.current = true
-      setItems(loadDemoCollection(resource, mock))
+      setItems(loadDemoCollection(storeName, mock))
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [resource, mock])
+  }, [resource, mock, storeName, persistLocal])
 
   useEffect(() => {
     void refresh()
@@ -80,7 +104,7 @@ export function useResource<T extends { id: string }>(
             merged = { ...item, ...patch }
             return merged
           })
-          saveDemoCollection(resource, next)
+          writeLocal(next)
           return next
         })
         if (!merged) throw new Error('Record not found')
@@ -98,10 +122,14 @@ export function useResource<T extends { id: string }>(
         method: 'PATCH',
         body: JSON.stringify(patch),
       })
-      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...updated } : item)))
+      setItems((prev) => {
+        const next = prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+        writeLocal(next)
+        return next
+      })
       return updated
     },
-    [resource],
+    [resource, writeLocal],
   )
 
   const create = useCallback(
@@ -113,7 +141,7 @@ export function useResource<T extends { id: string }>(
         } as T
         setItems((prev) => {
           const next = [record, ...prev]
-          saveDemoCollection(resource, next)
+          writeLocal(next)
           return next
         })
         appendDemoChange({
@@ -130,10 +158,14 @@ export function useResource<T extends { id: string }>(
         method: 'POST',
         body: JSON.stringify(data),
       })
-      setItems((prev) => [created, ...prev])
+      setItems((prev) => {
+        const next = [created, ...prev]
+        writeLocal(next)
+        return next
+      })
       return created
     },
-    [resource],
+    [resource, writeLocal],
   )
 
   return { items, loading, error, save, create, refresh }

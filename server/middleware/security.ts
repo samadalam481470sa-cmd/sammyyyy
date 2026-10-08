@@ -1,6 +1,9 @@
 import type { Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
+import { ownerKeyFromAuth } from '../../src/lib/ownerKey.ts'
 import { db, hashToken } from '../db/index.ts'
+
+export { ownerKeyFromAuth }
 
 export interface AuthContext {
   userId: string
@@ -102,6 +105,24 @@ export const apiRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded.' },
+})
+
+export const meetingsWriteLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many meeting writes. Try again in a minute.' },
+  keyGenerator: (req) => `${req.auth?.sessionId || req.ip || 'anon'}:meetings-write`,
+})
+
+export const calendarWriteLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many calendar writes. Try again in a minute.' },
+  keyGenerator: (req) => `${req.auth?.sessionId || req.ip || 'anon'}:calendar-write`,
 })
 
 function getBearerOrApiKey(req: Request): string | null {

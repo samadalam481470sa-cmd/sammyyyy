@@ -12,7 +12,6 @@ import { NotificationsPanel } from '@/components/layout/NotificationsPanel'
 import { loadKeyCalendarNotifications } from '@/lib/calendarReminders'
 import { useAuth } from '@/auth/AuthContext'
 import { useData } from '@/data/DataContext'
-import { mockMeetings } from '@/data/mockMeetings'
 import { mockContacts, type ContactRecord } from '@/data/mockModules'
 import { useResource } from '@/hooks/useResource'
 import { SoftPhone } from '@/components/meetings/SoftPhone'
@@ -20,6 +19,23 @@ import { CallStage } from '@/components/meetings/CallStage'
 import { TranscriptPanel } from '@/components/meetings/TranscriptPanel'
 import { MeetingCalendar } from '@/components/meetings/MeetingCalendar'
 import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay } from '@/lib/meetingLinks'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
+import {
+  clearLiveMeetingDraft,
+  loadLiveMeetingDraft,
+  saveLiveMeetingDraft,
+} from '@/lib/meetingPersist'
+import {
+  FIELD_LIMITS,
+  isAllowedJoinUrl,
+  parseTranscriptLines,
+  safeOpenJoinUrl,
+  sanitizeEmail,
+  sanitizeMeetingRecord,
+  sanitizeMultiline,
+  sanitizePhone,
+  sanitizeText,
+} from '@/lib/meetingSecurity'
 import { LiveTranscriber, speechSupported, summarizeTranscript } from '@/lib/speechTranscription'
 import type {
   CustomerCapture,
@@ -36,6 +52,8 @@ const PLATFORMS: { id: MeetingChannel; label: string; hint: string }[] = [
   { id: 'webex', label: 'Webex', hint: 'Webex personal room' },
   { id: 'facecall', label: 'Face call', hint: 'In-CRM camera room + captions' },
 ]
+
+const EMPTY_MEETINGS: MeetingRecord[] = []
 
 const emptyCustomer = (): CustomerCapture => ({
   name: '',
@@ -54,7 +72,11 @@ function newId(prefix: string) {
 export function MeetingsPage() {
   const { user } = useAuth()
   const { opportunities } = useData()
-  const meetingsApi = useResource<MeetingRecord>('meetings', mockMeetings)
+  const owner = calendarOwnerKey(user)
+  const meetingsApi = useResource<MeetingRecord>('meetings', EMPTY_MEETINGS, {
+    scope: owner,
+    persistLocal: true,
+  })
   const contactsApi = useResource<ContactRecord>('contacts', mockContacts)
 
   const [channel, setChannel] = useState<MeetingChannel>('facecall')
@@ -82,10 +104,12 @@ export function MeetingsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notifyOpen, setNotifyOpen] = useState(false)
   const reminderDot = loadKeyCalendarNotifications(user).some((n) => !n.read)
+  const recoveredRef = useRef(false)
 
   const startedAtRef = useRef<string | null>(null)
   const transcriberRef = useRef<LiveTranscriber | null>(null)
   const timerRef = useRef<number | null>(null)
+  const elapsedRef = useRef(0)
 
   const hostName = user?.name || 'Newport user'
 
@@ -121,6 +145,10 @@ export function MeetingsPage() {
   }, [])
 
   useEffect(() => {
+    elapsedRef.current = elapsed
+  }, [elapsed])
+
+  useEffect(() => {
     return () => {
       clearTimer()
       stopTranscription()
@@ -133,6 +161,148 @@ export function MeetingsPage() {
     [lines],
   )
 
+  const meetingSnapshot = useCallback(
+    (extra: Partial<MeetingRecord> = {}): Partial<MeetingRecord> =>
+      sanitizeMeetingRecord({
+        title,
+        channel,
+        hostName,
+        participantName: customer.name,
+        participantCompany: customer.company,
+        participantEmail: customer.email,
+        participantPhone: customer.phone || dialNumber,
+        customerNotes: customer.notes,
+        projectName: projectName || customer.projectName,
+        opportunityId: opportunityId || null,
+        transcript: fullTranscript,
+        transcriptLinesJson: JSON.stringify(lines),
+        summary: summary || summarizeTranscript(fullTranscript),
+        ...extra,
+      }),
+    [
+      channel,
+      customer,
+      dialNumber,
+      fullTranscript,
+      hostName,
+      lines,
+      opportunityId,
+      projectName,
+      summary,
+      title,
+    ],
+  )
+
+  const persistLiveDraft = useCallback(() => {
+    if (!activeMeetingId) return
+    saveLiveMeetingDraft(owner, {
+      meetingId: activeMeetingId,
+      ownerKey: owner,
+      title,
+      channel,
+      joinId,
+      dialNumber,
+      customer,
+      projectName,
+      opportunityId,
+      lines,
+      summary,
+      elapsed: elapsedRef.current,
+      startedAt: startedAtRef.current,
+      joinUrl: selected?.joinUrl || '',
+      savedAt: new Date().toISOString(),
+    })
+  }, [
+    activeMeetingId,
+    channel,
+    customer,
+    dialNumber,
+    joinId,
+    lines,
+    owner,
+    opportunityId,
+    projectName,
+    selected?.joinUrl,
+    summary,
+    title,
+  ])
+
+  useEffect(() => {
+    if (!live || !activeMeetingId) return
+    persistLiveDraft()
+    const id = window.setInterval(() => {
+      persistLiveDraft()
+      void meetingsApi
+        .save(
+          activeMeetingId,
+          meetingSnapshot({
+            status: 'live',
+            durationSeconds: elapsedRef.current,
+            startedAt: startedAtRef.current,
+          }),
+        )
+        .catch(() => undefined)
+    }, 8000)
+    return () => window.clearInterval(id)
+  }, [activeMeetingId, live, meetingSnapshot, meetingsApi, persistLiveDraft])
+
+  useEffect(() => {
+    const onLeave = () => {
+      if (live && activeMeetingId) persistLiveDraft()
+    }
+    window.addEventListener('beforeunload', onLeave)
+    return () => window.removeEventListener('beforeunload', onLeave)
+  }, [activeMeetingId, live, persistLiveDraft])
+
+  useEffect(() => {
+    if (recoveredRef.current || meetingsApi.loading) return
+    const draft = loadLiveMeetingDraft(owner)
+    if (!draft) {
+      recoveredRef.current = true
+      return
+    }
+    recoveredRef.current = true
+    setTitle(draft.title)
+    setChannel(draft.channel)
+    setJoinId(draft.joinId)
+    setDialNumber(draft.dialNumber)
+    setCustomer(draft.customer)
+    setProjectName(draft.projectName)
+    setOpportunityId(draft.opportunityId)
+    setLines(parseTranscriptLines(draft.lines))
+    setSummary(draft.summary)
+    setSelectedId(draft.meetingId)
+    setElapsed(draft.elapsed)
+    startedAtRef.current = draft.startedAt
+    const transcript = draft.lines.map((l) => `${l.speaker}: ${l.text}`).join('\n')
+    void meetingsApi
+      .save(draft.meetingId, sanitizeMeetingRecord({
+        status: 'completed',
+        title: draft.title,
+        channel: draft.channel,
+        durationSeconds: draft.elapsed,
+        startedAt: draft.startedAt,
+        endedAt: new Date().toISOString(),
+        transcript,
+        transcriptLinesJson: JSON.stringify(draft.lines),
+        summary: draft.summary || summarizeTranscript(transcript),
+        participantName: draft.customer.name,
+        participantCompany: draft.customer.company,
+        participantEmail: draft.customer.email,
+        participantPhone: draft.customer.phone,
+        customerNotes: draft.customer.notes,
+        projectName: draft.projectName,
+        opportunityId: draft.opportunityId || null,
+      }))
+      .then(() => {
+        setMessage('Recovered your last session. Transcript and notes were saved to this key.')
+      })
+      .catch(() => {
+        setMessage('Recovered your last session from this browser. Re-save if you want it on the server.')
+      })
+    clearLiveMeetingDraft(owner)
+  }, [meetingsApi, owner])
+
   const startTranscription = useCallback(() => {
     stopTranscription()
     const t = new LiveTranscriber({
@@ -140,16 +310,16 @@ export function MeetingsPage() {
       onStatus: setTranscriptStatus,
       onLine: ({ text, isFinal, speaker }) => {
         if (!isFinal) {
-          setInterim(text)
+          setInterim(sanitizeMultiline(text, FIELD_LIMITS.lineText))
           return
         }
         setInterim('')
         setLines((prev) => [
-          ...prev,
+          ...prev.slice(0, FIELD_LIMITS.maxTranscriptLines - 1),
           {
             id: newId('line'),
-            speaker,
-            text,
+            speaker: sanitizeText(speaker, FIELD_LIMITS.speaker) || 'You',
+            text: sanitizeMultiline(text, FIELD_LIMITS.lineText).trim(),
             at: new Date().toISOString(),
           },
         ])
@@ -199,7 +369,6 @@ export function MeetingsPage() {
           }
         }
       } else {
-        // Phone / landline — still request mic for live transcription of the handset conversation
         try {
           media = await navigator.mediaDevices.getUserMedia({ audio: true })
           setStream(media)
@@ -210,7 +379,7 @@ export function MeetingsPage() {
         }
       }
 
-      const draft: Partial<MeetingRecord> = {
+      const draft = sanitizeMeetingRecord({
         title: opts.title,
         channel: opts.channel,
         status: 'live',
@@ -234,12 +403,29 @@ export function MeetingsPage() {
         customerNotes: customer.notes,
         tags: opts.channel,
         recordingEnabled: true,
-      }
+      })
 
       try {
         const created = await meetingsApi.create(draft)
         setActiveMeetingId(created.id)
         setSelectedId(created.id)
+        saveLiveMeetingDraft(owner, {
+          meetingId: created.id,
+          ownerKey: owner,
+          title: opts.title,
+          channel: opts.channel,
+          joinId,
+          dialNumber: opts.dialedNumber || '',
+          customer,
+          projectName,
+          opportunityId,
+          lines: [],
+          summary: '',
+          elapsed: 0,
+          startedAt: startedAtRef.current,
+          joinUrl: opts.joinUrl || '',
+          savedAt: new Date().toISOString(),
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not open meeting record')
       }
@@ -253,8 +439,10 @@ export function MeetingsPage() {
       clearTimer,
       customer,
       hostName,
+      joinId,
       meetingsApi,
       opportunityId,
+      owner,
       projectName,
       startTranscription,
     ],
@@ -273,38 +461,29 @@ export function MeetingsPage() {
 
     if (activeMeetingId) {
       try {
-        await meetingsApi.save(activeMeetingId, {
+        await meetingsApi.save(activeMeetingId, meetingSnapshot({
           status: 'completed',
           endedAt,
           durationSeconds: elapsed,
-          transcript: fullTranscript,
-          transcriptLinesJson: JSON.stringify(lines),
           summary: summaryText,
-          participantName: customer.name,
-          participantCompany: customer.company,
-          participantEmail: customer.email,
-          participantPhone: customer.phone || dialNumber,
-          customerNotes: customer.notes,
-          projectName: projectName || customer.projectName,
-          opportunityId: opportunityId || null,
-        })
+        }))
         setMessage('Meeting saved to CRM with transcript and customer details.')
       } catch (err) {
+        persistLiveDraft()
         setError(err instanceof Error ? err.message : 'Failed to save meeting')
       }
     }
+    clearLiveMeetingDraft(owner)
     setActiveMeetingId(null)
   }, [
     activeMeetingId,
     clearTimer,
-    customer,
-    dialNumber,
     elapsed,
     fullTranscript,
-    lines,
+    meetingSnapshot,
     meetingsApi,
-    opportunityId,
-    projectName,
+    owner,
+    persistLiveDraft,
     stopMedia,
     stopTranscription,
     summary,
@@ -313,11 +492,15 @@ export function MeetingsPage() {
   const onSoftCall = async () => {
     setChannel('phone')
     const phone = normalizePhoneDisplay(dialNumber)
+    if (sanitizePhone(dialNumber).replace(/\D/g, '').length < 3) {
+      setError('Enter a valid phone number before calling.')
+      return
+    }
     setCustomer((c) => ({ ...c, phone: c.phone || phone }))
     await beginSession({
       channel: 'phone',
-      title: title || `Phone call ${phone}`,
-      dialedNumber: dialNumber.replace(/\D/g, ''),
+      title: sanitizeText(title, FIELD_LIMITS.title) || `Phone call ${phone}`,
+      dialedNumber: sanitizePhone(dialNumber).replace(/\D/g, ''),
       joinUrl: buildJoinUrl('phone', { phone: dialNumber }),
       withCamera: false,
     })
@@ -325,12 +508,16 @@ export function MeetingsPage() {
 
   const onLandline = () => {
     const href = buildJoinUrl('landline', { phone: dialNumber })
-    window.open(href, '_self')
+    if (!isAllowedJoinUrl(href, 'landline')) {
+      setError('That phone number could not be used for a landline connection.')
+      return
+    }
+    safeOpenJoinUrl(href, 'landline', '_self')
     setChannel('landline')
     void beginSession({
       channel: 'landline',
-      title: title || `Landline ${normalizePhoneDisplay(dialNumber)}`,
-      dialedNumber: dialNumber.replace(/\D/g, ''),
+      title: sanitizeText(title, FIELD_LIMITS.title) || `Landline ${normalizePhoneDisplay(dialNumber)}`,
+      dialedNumber: sanitizePhone(dialNumber).replace(/\D/g, ''),
       joinUrl: href,
       withCamera: false,
     })
@@ -341,63 +528,103 @@ export function MeetingsPage() {
     if (platform === 'facecall') {
       await beginSession({
         channel: 'facecall',
-        title: title || 'Face call',
+        title: sanitizeText(title, FIELD_LIMITS.title) || 'Face call',
         joinUrl: '#facecall',
         withCamera: true,
       })
       return
     }
     const url = buildJoinUrl(platform, { meetingId: joinId, title })
-    window.open(url, '_blank', 'noopener,noreferrer')
+    if (!isAllowedJoinUrl(url, platform)) {
+      setError('That join link was blocked. Use an official Teams, Zoom, Meet, Webex, or Skype link.')
+      return
+    }
+    safeOpenJoinUrl(url, platform)
     await beginSession({
       channel: platform,
-      title: title || `${channelLabel(platform)} meeting`,
+      title: sanitizeText(title, FIELD_LIMITS.title) || `${channelLabel(platform)} meeting`,
       joinUrl: url,
       withCamera: false,
     })
     setMessage(`Opened ${channelLabel(platform)}. Captions are running in Newport — keep this tab open.`)
   }
 
+  const onShareScreen = async () => {
+    if (!live) return
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      const track = display.getVideoTracks()[0]
+      if (!track) return
+      track.addEventListener('ended', () => {
+        setCamOn(false)
+      })
+      setStream((prev) => {
+        if (!prev) return display
+        const next = new MediaStream([
+          ...prev.getAudioTracks(),
+          track,
+        ])
+        prev.getVideoTracks().forEach((t) => t.stop())
+        return next
+      })
+      setCamOn(true)
+      setMessage('Screen share is on. Hang up to stop sharing.')
+    } catch {
+      setMessage('Screen share cancelled or not available in this browser.')
+    }
+  }
+
+  const saveMeetingRecord = async (id: string | null) => {
+    setError(null)
+    if (!id) {
+      setError('Start or open a meeting before saving.')
+      return
+    }
+    try {
+      await meetingsApi.save(id, meetingSnapshot({
+        status: live ? 'live' : 'completed',
+        durationSeconds: elapsed,
+        startedAt: startedAtRef.current,
+      }))
+      setMessage('Meeting notes, transcript, and customer details saved for this key.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save meeting')
+    }
+  }
+
   const saveCustomerToCrm = async () => {
     setError(null)
-    if (!customer.name.trim()) {
+    const name = sanitizeText(customer.name, FIELD_LIMITS.name)
+    if (!name) {
       setError('Customer name is required to save into Relationships.')
+      return
+    }
+    if (customer.email && !sanitizeEmail(customer.email)) {
+      setError('Enter a valid email or leave it blank.')
       return
     }
     try {
       await contactsApi.create({
-        name: customer.name.trim(),
-        title: customer.title || 'Contact',
-        company: customer.company || '',
+        name,
+        title: sanitizeText(customer.title, FIELD_LIMITS.name) || 'Contact',
+        company: sanitizeText(customer.company, FIELD_LIMITS.company),
         category: 'Meeting Capture',
-        email: customer.email || '',
-        phone: customer.phone || normalizePhoneDisplay(dialNumber),
+        email: sanitizeEmail(customer.email),
+        phone: sanitizePhone(customer.phone) || normalizePhoneDisplay(dialNumber),
         opportunityId: opportunityId || null,
-        projectName: projectName || customer.projectName || '',
+        projectName: sanitizeText(projectName || customer.projectName, FIELD_LIMITS.project),
         status: 'Active',
         lastContactDate: new Date().toISOString().slice(0, 10),
         notes: [
-          customer.notes,
-          summary && `Call summary: ${summary}`,
-          fullTranscript && `Transcript excerpt: ${fullTranscript.slice(0, 500)}`,
+          sanitizeMultiline(customer.notes, FIELD_LIMITS.notes),
+          summary && `Call summary: ${sanitizeMultiline(summary, FIELD_LIMITS.summary)}`,
+          fullTranscript && `Transcript excerpt: ${sanitizeMultiline(fullTranscript, 500)}`,
         ]
           .filter(Boolean)
           .join('\n\n'),
       })
-      if (activeMeetingId) {
-        await meetingsApi.save(activeMeetingId, {
-          participantName: customer.name,
-          participantCompany: customer.company,
-          participantEmail: customer.email,
-          participantPhone: customer.phone || dialNumber,
-          customerNotes: customer.notes,
-          summary: summary || summarizeTranscript(fullTranscript),
-          transcript: fullTranscript,
-          transcriptLinesJson: JSON.stringify(lines),
-          projectName: projectName || customer.projectName,
-          opportunityId: opportunityId || null,
-        })
-      }
+      const target = activeMeetingId || selectedId
+      if (target) await saveMeetingRecord(target)
       setMessage('Customer details + transcript linked into Relationships / Meetings.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save customer')
@@ -423,25 +650,43 @@ export function MeetingsPage() {
     setProjectName(m.projectName)
     setOpportunityId(m.opportunityId || '')
     setSummary(m.summary)
-    try {
-      const parsed = JSON.parse(m.transcriptLinesJson || '[]') as TranscriptLine[]
-      if (Array.isArray(parsed) && parsed.length) setLines(parsed)
-      else if (m.transcript) {
-        setLines(
-          m.transcript.split('\n').filter(Boolean).map((row, i) => {
-            const [speaker, ...rest] = row.split(':')
-            return {
-              id: `hist_${i}`,
-              speaker: rest.length ? speaker : 'Speaker',
-              text: rest.length ? rest.join(':').trim() : row,
-              at: m.startedAt || new Date().toISOString(),
-            }
-          }),
-        )
-      } else setLines([])
-    } catch {
-      setLines([])
+    const parsed = parseTranscriptLines(m.transcriptLinesJson)
+    if (parsed.length) setLines(parsed)
+    else if (m.transcript) {
+      setLines(
+        m.transcript.split('\n').filter(Boolean).slice(0, FIELD_LIMITS.maxTranscriptLines).map((row, i) => {
+          const [speaker, ...rest] = row.split(':')
+          return {
+            id: `hist_${i}`,
+            speaker: rest.length ? sanitizeText(speaker, FIELD_LIMITS.speaker) : 'Speaker',
+            text: rest.length
+              ? sanitizeMultiline(rest.join(':').trim(), FIELD_LIMITS.lineText)
+              : sanitizeMultiline(row, FIELD_LIMITS.lineText),
+            at: m.startedAt || new Date().toISOString(),
+          }
+        }),
+      )
+    } else setLines([])
+  }
+
+  const rejoinSelected = () => {
+    if (!selected) return
+    if (selected.channel === 'facecall') {
+      void onPlatformJoin('facecall')
+      return
     }
+    if (!isAllowedJoinUrl(selected.joinUrl, selected.channel)) {
+      setError('Saved join link is no longer valid for this platform.')
+      return
+    }
+    safeOpenJoinUrl(selected.joinUrl, selected.channel, selected.channel === 'landline' ? '_self' : '_blank')
+    void beginSession({
+      channel: selected.channel,
+      title: selected.title,
+      joinUrl: selected.joinUrl,
+      dialedNumber: selected.dialedNumber,
+      withCamera: false,
+    })
   }
 
   return (
@@ -458,7 +703,7 @@ export function MeetingsPage() {
             <p className="mt-1 max-w-3xl text-sm text-ink-muted">
               Connect via Teams, Zoom, Skype, Meet, Webex, face call, mobile, or landline. Live captions
               and dialer details write straight into the CRM — customer cards, project links, and searchable
-              transcripts.
+              transcripts, private to this session key.
             </p>
           </div>
           <button
@@ -479,7 +724,6 @@ export function MeetingsPage() {
       <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)_300px] lg:px-6">
         <div className="flex min-h-0 flex-col gap-4">
         <MeetingCalendar />
-        {/* History rail */}
         <aside className="flex min-h-0 flex-col rounded-xl border border-border bg-surface shadow-(--shadow-card)">
           <div className="flex items-center justify-between border-b border-border px-3 py-3">
             <div className="flex items-center gap-2">
@@ -504,6 +748,7 @@ export function MeetingsPage() {
               New
             </button>
           </div>
+          <p className="px-3 pt-2 text-[11px] text-ink-subtle">Private to this key · saved forever in this browser</p>
           <ul className="custom-scroll min-h-0 flex-1 overflow-y-auto p-2">
             {meetingsApi.loading && (
               <li className="px-2 py-4 text-sm text-ink-muted">Loading…</li>
@@ -535,7 +780,6 @@ export function MeetingsPage() {
         </aside>
         </div>
 
-        {/* Main stage */}
         <section className="flex min-w-0 flex-col gap-4">
           {(message || error) && (
             <p
@@ -557,6 +801,7 @@ export function MeetingsPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={live}
+              maxLength={FIELD_LIMITS.title}
               className="mt-1 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
             />
 
@@ -591,6 +836,7 @@ export function MeetingsPage() {
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   disabled={live}
+                  maxLength={FIELD_LIMITS.project}
                   className="mt-1 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
                 />
               </div>
@@ -623,6 +869,7 @@ export function MeetingsPage() {
                   value={joinId}
                   onChange={(e) => setJoinId(e.target.value)}
                   disabled={live}
+                  maxLength={FIELD_LIMITS.joinUrl}
                   placeholder={PLATFORMS.find((p) => p.id === channel)?.hint}
                   className="h-10 flex-1 rounded-lg border border-border bg-canvas px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
                 />
@@ -649,6 +896,17 @@ export function MeetingsPage() {
                 Start face call + captions
               </button>
             )}
+
+            {selected && !live && selected.joinUrl && (
+              <button
+                type="button"
+                onClick={rejoinSelected}
+                className="mt-3 ml-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-border px-4 text-sm font-semibold text-ink hover:bg-canvas"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Rejoin saved session
+              </button>
+            )}
           </div>
 
           <CallStage
@@ -660,6 +918,7 @@ export function MeetingsPage() {
             camOn={camOn}
             micOn={micOn}
             stream={stream}
+            onShareScreen={() => void onShareScreen()}
             onToggleCam={() => {
               const track = stream?.getVideoTracks()[0]
               if (track) {
@@ -701,18 +960,19 @@ export function MeetingsPage() {
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {(
                   [
-                    ['name', 'Full name'],
-                    ['company', 'Company'],
-                    ['title', 'Title'],
-                    ['email', 'Email'],
-                    ['phone', 'Phone'],
-                    ['projectName', 'Project'],
+                    ['name', 'Full name', FIELD_LIMITS.name],
+                    ['company', 'Company', FIELD_LIMITS.company],
+                    ['title', 'Title', FIELD_LIMITS.name],
+                    ['email', 'Email', FIELD_LIMITS.email],
+                    ['phone', 'Phone', FIELD_LIMITS.phone],
+                    ['projectName', 'Project', FIELD_LIMITS.project],
                   ] as const
-                ).map(([key, label]) => (
+                ).map(([key, label, max]) => (
                   <label key={key} className="block text-[11px] font-semibold text-ink-muted">
                     {label}
                     <input
                       value={customer[key]}
+                      maxLength={max}
                       onChange={(e) => setCustomer((c) => ({ ...c, [key]: e.target.value }))}
                       className="mt-1 h-9 w-full rounded-lg border border-border bg-canvas px-2.5 text-sm font-normal text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
                     />
@@ -723,6 +983,7 @@ export function MeetingsPage() {
                 Notes
                 <textarea
                   value={customer.notes}
+                  maxLength={FIELD_LIMITS.notes}
                   onChange={(e) => setCustomer((c) => ({ ...c, notes: e.target.value }))}
                   rows={3}
                   className="mt-1 w-full rounded-lg border border-border bg-canvas px-2.5 py-2 text-sm font-normal text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
@@ -736,11 +997,17 @@ export function MeetingsPage() {
                 <Save className="h-4 w-4" />
                 Save customer + transcript to CRM
               </button>
+              <button
+                type="button"
+                onClick={() => void saveMeetingRecord(activeMeetingId || selectedId)}
+                className="mt-2 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-border text-sm font-semibold text-ink hover:bg-canvas"
+              >
+                Save meeting notes forever
+              </button>
             </div>
           </div>
         </section>
 
-        {/* Transcript */}
         <div className="min-h-[420px] lg:min-h-0">
           <TranscriptPanel
             lines={lines}

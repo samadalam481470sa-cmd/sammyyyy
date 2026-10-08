@@ -22,6 +22,7 @@ interface CallStageProps {
   onToggleCam: () => void
   onToggleMic: () => void
   onHangup: () => void
+  onShareScreen?: () => void
   stream: MediaStream | null
 }
 
@@ -36,6 +37,7 @@ export function CallStage({
   onToggleCam,
   onToggleMic,
   onHangup,
+  onShareScreen,
   stream,
 }: CallStageProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -145,8 +147,9 @@ export function CallStage({
         <button
           type="button"
           disabled={!live}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 disabled:opacity-30"
-          title="Share (demo)"
+          onClick={onShareScreen}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-white/15 disabled:opacity-30"
+          title="Share screen"
         >
           <MonitorUp className="h-5 w-5" />
         </button>

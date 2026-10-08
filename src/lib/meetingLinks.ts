@@ -1,34 +1,51 @@
+import { isAllowedHttpsJoinUrl, isAllowedJoinUrl, sanitizePhone } from '@/lib/meetingSecurity'
 import type { MeetingChannel } from '@/types/meetings'
 
-/** Build deep-links / join URLs for common conference platforms. */
+function looksLikeUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value) || value.startsWith('//')
+}
+
+/** Build deep-links / join URLs for common conference platforms. Never pass through untrusted URLs. */
 export function buildJoinUrl(
   channel: MeetingChannel,
   opts: { meetingId?: string; phone?: string; title?: string } = {},
 ): string {
   const id = (opts.meetingId || '').trim()
-  const phone = (opts.phone || '').replace(/[^\d+]/g, '')
+  const phone = sanitizePhone(opts.phone || '').replace(/[^\d+]/g, '')
 
   switch (channel) {
     case 'teams':
-      // Teams deep link — opens desktop/web client with join flow
-      if (id.startsWith('http')) return id
+      if (looksLikeUrl(id)) {
+        return isAllowedHttpsJoinUrl(id, 'teams') ? id : 'https://teams.microsoft.com/l/meeting-join'
+      }
       return id
         ? `https://teams.microsoft.com/l/meetup-join/${encodeURIComponent(id)}`
         : 'https://teams.microsoft.com/l/meeting-join'
     case 'zoom':
-      if (id.startsWith('http')) return id
-      const zoomNum = id.replace(/\D/g, '') || '00000000000'
-      return `https://zoom.us/j/${zoomNum}`
+      if (looksLikeUrl(id)) {
+        return isAllowedHttpsJoinUrl(id, 'zoom') ? id : 'https://zoom.us/join'
+      }
+      {
+        const zoomNum = id.replace(/\D/g, '')
+        return zoomNum ? `https://zoom.us/j/${zoomNum}` : 'https://zoom.us/join'
+      }
     case 'skype':
-      if (id.startsWith('http') || id.startsWith('skype:')) return id
-      return id ? `skype:${encodeURIComponent(id)}?call` : 'https://web.skype.com/'
+      if (id.startsWith('skype:') && isAllowedJoinUrl(id, 'skype')) return id
+      if (looksLikeUrl(id)) {
+        return isAllowedHttpsJoinUrl(id, 'skype') ? id : 'https://web.skype.com/'
+      }
+      return id ? `skype:${encodeURIComponent(id.replace(/[^a-zA-Z0-9._-]/g, ''))}?call` : 'https://web.skype.com/'
     case 'meet':
-      if (id.startsWith('http')) return id
+      if (looksLikeUrl(id)) {
+        return isAllowedHttpsJoinUrl(id, 'meet') ? id : 'https://meet.google.com/new'
+      }
       return id
-        ? `https://meet.google.com/${id}`
+        ? `https://meet.google.com/${encodeURIComponent(id.replace(/[^a-zA-Z0-9-]/g, ''))}`
         : 'https://meet.google.com/new'
     case 'webex':
-      if (id.startsWith('http')) return id
+      if (looksLikeUrl(id)) {
+        return isAllowedHttpsJoinUrl(id, 'webex') ? id : 'https://webex.com/'
+      }
       return id
         ? `https://webex.com/meet/${encodeURIComponent(id)}`
         : 'https://webex.com/'
@@ -66,12 +83,12 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 export function normalizePhoneDisplay(raw: string): string {
-  const digits = raw.replace(/\D/g, '')
+  const digits = sanitizePhone(raw).replace(/\D/g, '')
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
   }
   if (digits.length === 11 && digits.startsWith('1')) {
     return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`
   }
-  return raw.trim()
+  return sanitizePhone(raw)
 }
