@@ -234,3 +234,70 @@ export function writeAudit(
     ip_address: req?.ip ?? null,
   })
 }
+
+function resolveApiKeySlot(apiKeyId: string | undefined): number | null {
+  if (!apiKeyId) return null
+  const row = db.prepare(`SELECT slot FROM api_keys WHERE id = ?`).get(apiKeyId) as
+    | { slot: number }
+    | undefined
+  return row?.slot ?? null
+}
+
+function diffFields(
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+): string[] {
+  if (!before && after) return Object.keys(after)
+  if (before && !after) return Object.keys(before)
+  if (!before || !after) return []
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+  const changed: string[] = []
+  for (const key of keys) {
+    if (key === 'created_at' || key === 'updated_at') continue
+    const a = JSON.stringify(before[key] ?? null)
+    const b = JSON.stringify(after[key] ?? null)
+    if (a !== b) changed.push(key)
+  }
+  return changed
+}
+
+/**
+ * Permanently records a data change for any of the 5 API key users (or demo session).
+ * before/after snapshots are stored as JSON so daily edits can be reconstructed.
+ */
+export function recordChange(
+  req: Request,
+  resourceType: string,
+  resourceId: string,
+  changeType: 'create' | 'update' | 'delete',
+  before: Record<string, unknown> | null,
+  after: Record<string, unknown> | null,
+) {
+  const auth = req.auth
+  const changed = diffFields(before, after)
+  db.prepare(
+    `INSERT INTO change_history (
+       id, actor_id, actor_name, api_key_id, api_key_slot, auth_method,
+       resource_type, resource_id, change_type, before_json, after_json,
+       changed_fields, ip_address
+     ) VALUES (
+       @id, @actor_id, @actor_name, @api_key_id, @api_key_slot, @auth_method,
+       @resource_type, @resource_id, @change_type, @before_json, @after_json,
+       @changed_fields, @ip_address
+     )`,
+  ).run({
+    id: `chg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    actor_id: auth?.userId ?? null,
+    actor_name: auth?.userName ?? null,
+    api_key_id: auth?.apiKeyId ?? null,
+    api_key_slot: resolveApiKeySlot(auth?.apiKeyId),
+    auth_method: auth?.authMethod ?? 'demo',
+    resource_type: resourceType,
+    resource_id: resourceId,
+    change_type: changeType,
+    before_json: before ? JSON.stringify(before) : null,
+    after_json: after ? JSON.stringify(after) : null,
+    changed_fields: JSON.stringify(changed),
+    ip_address: req.ip ?? null,
+  })
+}

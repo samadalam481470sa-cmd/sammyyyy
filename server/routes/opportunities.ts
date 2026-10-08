@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../db/index.ts'
-import { requireAuth, requireRole, writeAudit } from '../middleware/security.ts'
+import { requireAuth, requireRole, writeAudit, recordChange } from '../middleware/security.ts'
 import { rowToOpportunity, type DbOpportunityRow } from '../mappers.ts'
 
 export const opportunitiesRouter = Router()
@@ -118,6 +118,8 @@ opportunitiesRouter.patch('/:id', requireRole('admin', 'partner', 'analyst'), (r
      WHERE id = @id`,
   ).run({ ...next, id: req.params.id })
 
+  const updated = db.prepare(`SELECT * FROM opportunities WHERE id = ?`).get(req.params.id) as DbOpportunityRow
+
   writeAudit(
     req.auth!.userId,
     req.auth!.userName,
@@ -127,7 +129,14 @@ opportunitiesRouter.patch('/:id', requireRole('admin', 'partner', 'analyst'), (r
     `Updated fields: ${Object.keys(data).join(', ')}`,
     req,
   )
+  recordChange(
+    req,
+    'opportunity',
+    req.params.id,
+    'update',
+    existing as unknown as Record<string, unknown>,
+    updated as unknown as Record<string, unknown>,
+  )
 
-  const updated = db.prepare(`SELECT * FROM opportunities WHERE id = ?`).get(req.params.id) as DbOpportunityRow
   res.json(rowToOpportunity(updated))
 })

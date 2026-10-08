@@ -84,6 +84,26 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Permanent record of every data change made by any of the 5 API key users
+-- (or demo/password sessions). Stores before/after snapshots so daily edits
+-- are never lost and can be attributed to a specific key slot.
+CREATE TABLE IF NOT EXISTS change_history (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT,
+  actor_name TEXT,
+  api_key_id TEXT,
+  api_key_slot INTEGER,
+  auth_method TEXT NOT NULL DEFAULT 'demo',
+  resource_type TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  change_type TEXT NOT NULL CHECK (change_type IN ('create', 'update', 'delete')),
+  before_json TEXT,
+  after_json TEXT,
+  changed_fields TEXT NOT NULL DEFAULT '[]',
+  ip_address TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Relationships: people tied to deals (management, bankers, counsel, accountants)
 CREATE TABLE IF NOT EXISTS contacts (
   id TEXT PRIMARY KEY,
@@ -184,6 +204,9 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON opportunities(stage);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_change_history_created ON change_history(created_at);
+CREATE INDEX IF NOT EXISTS idx_change_history_resource ON change_history(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_change_history_slot ON change_history(api_key_slot);
 CREATE INDEX IF NOT EXISTS idx_contacts_opp ON contacts(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);

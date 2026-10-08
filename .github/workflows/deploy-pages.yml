@@ -31,9 +31,9 @@ jobs:
           STATIC_DEMO: '1'
           VITE_STATIC_DEMO: '1'
       - run: cp dist/index.html dist/404.html
+      # Pages must already be enabled in repo Settings → Pages → Source: GitHub Actions.
+      # Do not pass enablement:true — the workflow token cannot create the Pages site.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

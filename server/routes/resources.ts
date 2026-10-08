@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../db/index.ts'
-import { requireAuth, requireRole, writeAudit } from '../middleware/security.ts'
+import { requireAuth, requireRole, writeAudit, recordChange } from '../middleware/security.ts'
 
 /**
  * Generic CRUD for the CRM module tables.
@@ -185,6 +185,11 @@ resourcesRouter.post('/:resource', requireRole('admin', 'partner', 'analyst'), (
     throw err
   }
 
+  const row = db.prepare(`SELECT * FROM ${def.table} WHERE id = ?`).get(id) as Record<
+    string,
+    unknown
+  >
+
   writeAudit(
     req.auth!.userId,
     req.auth!.userName,
@@ -194,11 +199,8 @@ resourcesRouter.post('/:resource', requireRole('admin', 'partner', 'analyst'), (
     `Created with fields: ${Object.keys(data).join(', ')}`,
     req,
   )
+  recordChange(req, req.params.resource, id, 'create', null, row)
 
-  const row = db.prepare(`SELECT * FROM ${def.table} WHERE id = ?`).get(id) as Record<
-    string,
-    unknown
-  >
   res.status(201).json(rowToApi(row))
 })
 
@@ -211,8 +213,8 @@ resourcesRouter.patch(
     if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' })
 
     const existing = db
-      .prepare(`SELECT id FROM ${def.table} WHERE id = ?`)
-      .get(req.params.id)
+      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
+      .get(req.params.id) as Record<string, unknown> | undefined
     if (!existing) return res.status(404).json({ error: 'Record not found' })
 
     const data = pickWritable(def, parsed.data)
@@ -234,6 +236,10 @@ resourcesRouter.patch(
       throw err
     }
 
+    const row = db
+      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
+      .get(req.params.id) as Record<string, unknown>
+
     writeAudit(
       req.auth!.userId,
       req.auth!.userName,
@@ -243,21 +249,23 @@ resourcesRouter.patch(
       `Updated fields: ${Object.keys(data).join(', ')}`,
       req,
     )
+    recordChange(req, req.params.resource, req.params.id, 'update', existing, row)
 
-    const row = db
-      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
-      .get(req.params.id) as Record<string, unknown>
     res.json(rowToApi(row))
   },
 )
 
-resourcesRouter.delete(
+  resourcesRouter.delete(
   '/:resource/:id',
   requireRole('admin', 'partner'),
   (req, res) => {
     const def = RESOURCES[req.params.resource]
-    const result = db.prepare(`DELETE FROM ${def.table} WHERE id = ?`).run(req.params.id)
-    if (result.changes === 0) return res.status(404).json({ error: 'Record not found' })
+    const existing = db
+      .prepare(`SELECT * FROM ${def.table} WHERE id = ?`)
+      .get(req.params.id) as Record<string, unknown> | undefined
+    if (!existing) return res.status(404).json({ error: 'Record not found' })
+
+    db.prepare(`DELETE FROM ${def.table} WHERE id = ?`).run(req.params.id)
 
     writeAudit(
       req.auth!.userId,
@@ -268,6 +276,8 @@ resourcesRouter.delete(
       'Record deleted',
       req,
     )
+    recordChange(req, req.params.resource, req.params.id, 'delete', existing, null)
+
     res.json({ ok: true })
   },
 )

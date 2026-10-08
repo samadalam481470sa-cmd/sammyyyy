@@ -146,3 +146,31 @@ export async function fetchAuditLogs(limit = 40) {
     }>
   >(`/security/audit-logs?limit=${limit}`)
 }
+
+export interface ChangeHistoryEntry {
+  id: string
+  actorName: string | null
+  apiKeySlot: number | null
+  authMethod: string
+  resourceType: string
+  resourceId: string
+  changeType: 'create' | 'update' | 'delete' | string
+  changedFields: string[]
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  createdAt: string
+}
+
+export async function fetchChangeHistory(opts: {
+  limit?: number
+  slot?: number | null
+  resourceType?: string | null
+} = {}) {
+  const params = new URLSearchParams()
+  params.set('limit', String(opts.limit ?? 100))
+  if (opts.slot) params.set('slot', String(opts.slot))
+  if (opts.resourceType) params.set('resourceType', opts.resourceType)
+  return apiFetch<{ count: number; changes: ChangeHistoryEntry[] }>(
+    `/security/change-history?${params.toString()}`,
+  )
+}

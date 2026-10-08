@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
-import { fetchApiKeySlots, fetchAuditLogs } from '@/lib/api'
-import { KeyRound, ScrollText, Shield } from 'lucide-react'
+import {
+  fetchApiKeySlots,
+  fetchAuditLogs,
+  fetchChangeHistory,
+  type ChangeHistoryEntry,
+} from '@/lib/api'
+import { History, KeyRound, ScrollText, Shield } from 'lucide-react'
 
 export function SecurityPage() {
   const [slots, setSlots] = useState<
@@ -21,27 +26,35 @@ export function SecurityPage() {
       created_at: string
     }>
   >([])
+  const [changes, setChanges] = useState<ChangeHistoryEntry[]>([])
+  const [slotFilter, setSlotFilter] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
       try {
-        const [keys, audit] = await Promise.all([fetchApiKeySlots(), fetchAuditLogs(30)])
+        const [keys, audit, history] = await Promise.all([
+          fetchApiKeySlots(),
+          fetchAuditLogs(30),
+          fetchChangeHistory({ limit: 80, slot: slotFilter }),
+        ])
         setSlots(keys.slots)
         setLogs(audit)
+        setChanges(history.changes)
+        setError(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load security data')
       }
     })()
-  }, [])
+  }, [slotFilter])
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="border-b border-border bg-surface px-6 py-5 lg:px-8">
         <h1 className="font-brand text-2xl font-bold text-navy-900">Security</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          API key infrastructure (5 slots), audit trail, and access controls. Keys are provisioned
-          by the security team — this app only stores hashes.
+          API key infrastructure (5 slots), permanent change history for every daily edit, and
+          access controls. Keys are provisioned by the security team — this app only stores hashes.
         </p>
       </header>
 
@@ -101,11 +114,89 @@ export function SecurityPage() {
             <li>• Auth required for all CRM data routes</li>
             <li>• API keys hashed (SHA-256); plaintext never stored</li>
             <li>• Session tokens hashed; 8–12 hour expiry</li>
+            <li>• Brute-force lockout after 5 failed attempts</li>
             <li>• Role checks (admin / partner / analyst / viewer)</li>
             <li>• Rate limiting on auth and API</li>
-            <li>• Helmet security headers</li>
-            <li>• Request body size limits</li>
-            <li>• Audit log for sign-in and opportunity updates</li>
+            <li>• Helmet security headers + CSP</li>
+            <li>• Permanent change history with before/after snapshots</li>
+            <li>• Audit log for sign-in and every write</li>
+          </ul>
+        </section>
+
+        <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card) lg:col-span-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-accent" />
+              <h2 className="font-brand text-lg font-bold text-navy-900">
+                Change history (all 5 keys)
+              </h2>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSlotFilter(null)}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase ${
+                  slotFilter === null
+                    ? 'bg-navy-900 text-white'
+                    : 'border border-border bg-canvas text-ink-muted'
+                }`}
+              >
+                All
+              </button>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSlotFilter(s)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold uppercase ${
+                    slotFilter === s
+                      ? 'bg-navy-900 text-white'
+                      : 'border border-border bg-canvas text-ink-muted'
+                  }`}
+                >
+                  Slot {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="mb-3 text-xs text-ink-muted">
+            Every create, update, and delete is saved permanently with before/after values and
+            attributed to the API key slot (or demo session) that made it — so daily deal edits are
+            never lost.
+          </p>
+          <ul className="divide-y divide-border">
+            {changes.length === 0 && (
+              <li className="py-3 text-sm text-ink-muted">
+                No changes recorded yet{slotFilter ? ` for slot ${slotFilter}` : ''}.
+              </li>
+            )}
+            {changes.map((chg) => (
+              <li key={chg.id} className="py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-ink">
+                    <span className="font-semibold">{chg.actorName ?? 'System'}</span>
+                    {chg.apiKeySlot ? (
+                      <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
+                        Key slot {chg.apiKeySlot}
+                      </span>
+                    ) : (
+                      <span className="ml-1.5 rounded bg-canvas px-1.5 py-0.5 text-[10px] font-semibold text-ink-subtle uppercase">
+                        {chg.authMethod}
+                      </span>
+                    )}{' '}
+                    — {chg.changeType} {chg.resourceType}
+                    <span className="text-ink-muted"> · {chg.resourceId}</span>
+                  </p>
+                  <span className="text-[11px] text-ink-subtle">{chg.createdAt}</span>
+                </div>
+                {chg.changedFields.length > 0 && (
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Fields: {chg.changedFields.slice(0, 12).join(', ')}
+                    {chg.changedFields.length > 12 ? '…' : ''}
+                  </p>
+                )}
+              </li>
+            ))}
           </ul>
         </section>
 
