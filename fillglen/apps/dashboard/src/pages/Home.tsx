@@ -5,7 +5,7 @@ import { api, token } from "../api";
 
 export default function Home() {
   const [data, setData] = useState<{ applications: { status: string; createdAt: string }[] }>({ applications: [] });
-  const [localCount, setLocalCount] = useState(0);
+  const [localCount, setLocalCount] = useState<number | null>(null);
   useEffect(() => {
     if (!token()) return;
     api("/v1/applications").then(setData).catch(() => {});
@@ -34,7 +34,7 @@ export default function Home() {
         <Card label="Applications this week" value={week} />
         <Card label="Marked applied" value={applied} />
         <Card label="Response rate" value={applied ? `${Math.round((applied / Math.max(data.applications.length, 1)) * 100)}%` : "—"} />
-        <Card label="New local matches" value={localCount} />
+        <Card label="New local matches" value={localCount == null ? "…" : localCount} />
       </div>
       <div className="h-56 bg-[#fffbf5] border border-[#d9d0c4] rounded-xl p-3">
         <ResponsiveContainer width="100%" height="100%">

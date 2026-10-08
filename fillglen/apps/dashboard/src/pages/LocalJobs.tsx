@@ -90,6 +90,10 @@ export default function LocalJobs() {
       jobs.filter((j) => j.score >= minScore && (mode === "all" || j.workMode === mode) && j.status === "open"),
     [jobs, minScore, mode]
   );
+  const pins = useMemo(
+    () => jobs.filter((j) => j.status === "open" && j.lat != null && j.lng != null && (mode === "all" || j.workMode === mode)),
+    [jobs, mode]
+  );
 
   return (
     <div className="space-y-4">
@@ -116,7 +120,7 @@ export default function LocalJobs() {
       </div>
       {coverage ? (
         <p className="text-sm">
-          DFW coverage: {coverage.mappedCount} of {coverage.seedCount} seed employers have a public feed.{" "}
+          DFW coverage: {coverage.mappedCount} of {coverage.seedCount} seed employers have a public feed we can pull.{" "}
           {coverage.note}
           {coverage.unmapped?.length ? ` Unmapped: ${coverage.unmapped.join(", ")}.` : ""}
         </p>
@@ -145,10 +149,10 @@ export default function LocalJobs() {
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="relative h-80 bg-[#fffbf5] border border-[#d9d0c4] rounded-2xl overflow-hidden">
           <div className="absolute inset-3 border border-dashed border-[#d9d0c4] rounded-xl">
-            <span className="absolute left-2 top-2 text-xs text-[#5c6b64]">DFW map</span>
-            {shown
-              .filter((j) => j.lat != null && j.lng != null)
-              .map((j) => {
+            <span className="absolute left-2 top-2 text-xs text-[#5c6b64]">
+              DFW map · {pins.length} geocoded pin{pins.length === 1 ? "" : "s"}
+            </span>
+            {pins.map((j) => {
                 const p = project(j.lat!, j.lng!);
                 return (
                   <a
@@ -156,7 +160,7 @@ export default function LocalJobs() {
                     href={j.url}
                     target="_blank"
                     rel="noreferrer"
-                    title={`${j.title} · ${j.score}`}
+                    title={`${j.title} · ${j.company} · ${j.score}`}
                     className="absolute w-3 h-3 rounded-full bg-clay -ml-1.5 -mt-1.5"
                     style={{ left: `${p.x}%`, top: `${p.y}%` }}
                   />

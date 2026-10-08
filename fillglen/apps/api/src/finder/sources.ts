@@ -36,6 +36,7 @@ async function fetchGreenhouse(employer: EmployerRecord): Promise<CanonicalListi
       title: string;
       absolute_url: string;
       location?: { name: string };
+      offices?: { name?: string; location?: string }[];
       updated_at?: string;
       content?: string;
     }[];
@@ -44,7 +45,10 @@ async function fetchGreenhouse(employer: EmployerRecord): Promise<CanonicalListi
     id: `gh-${employer.slug}-${j.id}`,
     title: j.title,
     company: employer.company,
-    locationText: j.location?.name || "",
+    locationText: [j.location?.name, ...(j.offices || []).map((o) => o.location || o.name)]
+      .filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .join(" · "),
     description: stripHtml(j.content || ""),
     url: j.absolute_url,
     source: "greenhouse",

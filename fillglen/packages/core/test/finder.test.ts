@@ -65,6 +65,8 @@ describe("geocode and radius", () => {
     assert.ok(c);
     const dallas = geocodeLocation("Dallas, TX")!;
     assert.ok(haversineMiles(c!, dallas) < 25);
+    assert.equal(geocodeLocation("Austin, TX, United States"), null);
+    assert.ok(geocodeLocation("Remote - Dallas, TX"));
   });
   it("drops on-site jobs outside the radius", () => {
     const austin = job({
@@ -164,7 +166,7 @@ describe("employer mapping", () => {
   it("reports DFW coverage honestly", () => {
     const c = coverage(seedEmployers(), seedEmployers(), "dfw");
     assert.ok(c.seedCount >= 1);
-    assert.ok(c.unmapped.includes("American Airlines") || c.mappedCount < c.seedCount);
+    assert.ok(c.unmapped.includes("American Airlines") || c.unmapped.includes("Texas Instruments") || c.mappedCount < c.seedCount);
     assert.match(c.note, /every job/i);
   });
 });

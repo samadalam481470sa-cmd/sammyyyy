@@ -145,7 +145,7 @@ export function geocodeLocation(text: string, metroId = "dfw"): { lat: number; l
   for (const [name, coord] of places) {
     if (n.includes(name)) return { ...coord, label: name };
   }
-  if (/\b(remote|united states|usa)\b/.test(n) && /dallas|fort worth|texas|\btx\b|dfw/.test(n)) {
+  if (/\bremote\b/.test(n) && /\bdallas\b|\bfort worth\b|\bdfw\b/.test(n)) {
     return { ...metro.center, label: "dfw" };
   }
   return null;
