@@ -19,7 +19,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  if (!authReady) return <div className="min-h-full bg-navy-950" aria-busy="true" />
+  if (!authReady) return <div className="min-h-full bg-[#040b16]" aria-busy="true" />
   if (isAuthenticated) return <Navigate to="/" replace />
 
   const onDemo = async () => {
@@ -52,14 +52,18 @@ export function LoginPage() {
   return (
     <div
       ref={shieldRef}
-      className="flex min-h-full flex-col items-center justify-center bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 px-4 py-5"
+      className="relative flex min-h-full flex-col items-center justify-center overflow-hidden px-4 py-5"
+      style={{
+        background:
+          'linear-gradient(90deg, #040b16 0%, #061525 28%, #0b2a4d 58%, #1e5a8c 82%, #3d7eb8 100%)',
+      }}
       onCopy={(e) => {
         const target = e.target
         if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
         e.preventDefault()
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(61,126,184,0.18),_transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_100%_40%,rgba(61,126,184,0.35),transparent_55%)]" />
 
       <div className="relative w-full max-w-[22rem] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">
         {/* Brand banner */}
