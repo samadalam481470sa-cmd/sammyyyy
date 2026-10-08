@@ -65,17 +65,17 @@ export function LoginPage() {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_80%_at_100%_40%,rgba(61,126,184,0.35),transparent_55%)]" />
 
-      <div className="relative w-full max-w-[22rem] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">
+      <div className="relative w-full max-w-[26rem] overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-(--shadow-elevated)">
         {/* Brand banner */}
         <div className="border-b border-border">
           <img
             src={newportLogo}
             alt="Newport Specialty Partners"
-            className="h-20 w-full object-cover object-center"
+            className="h-24 w-full object-cover object-center"
           />
         </div>
 
-        <div className="px-5 py-4">
+        <div className="px-6 py-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h1 className="font-brand text-lg font-bold tracking-tight text-navy-900">
@@ -152,15 +152,10 @@ export function LoginPage() {
               {error}
             </p>
           )}
-
-          <p className="mt-4 border-t border-border pt-3 text-xs leading-snug text-ink-muted">
-            This system contains confidential acquisition data. Access is restricted to
-            authorized Newport Specialty Partners personnel and monitored at all times.
-          </p>
         </div>
       </div>
 
-      <p className="relative mt-3 max-w-[22rem] text-center text-[10px] leading-snug text-white/50">
+      <p className="relative mt-3 max-w-[26rem] text-center text-[10px] leading-snug text-white/50">
         © 2026 Newport Specialty Partners. Authorized users only. Unauthorized access is
         prohibited and all activity is logged, monitored, and subject to review.
       </p>
