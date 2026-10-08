@@ -15,6 +15,33 @@ It never clicks the final Submit button. It never invents facts. It never runs o
 - `apps/api` — Express + Zod + Helmet + rate limit + audit log (PostgreSQL schema in `src/schema.sql`; local JSON store when `DATABASE_URL` is unset). The **24/7 local finder** lives here: hourly fetch of public Greenhouse/Lever/Ashby/SmartRecruiters feeds, USAJOBS and Adzuna when keys exist, rule filters, optional Claude/OpenAI scoring, alerts. Chrome does not search.
 - `apps/dashboard` — React 19, Vite, Tailwind, Recharts. **Local jobs** map/list and **Saved searches**.
 
+## Download and deploy
+
+**Chrome extension (Load unpacked)** — use this raw zip link (saving the GitHub file *page* gives HTML, not a zip):
+
+**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/fillglen-platform-0208/fillglen-assistant.zip**
+
+Unzip it. You get one folder named `fillglen-assistant/` with `manifest.json` inside. Then `chrome://extensions` → Developer mode on → **Load unpacked** → select that folder.
+
+**Whole platform (API + dashboard + 24/7 finder)** — source zip:
+
+**https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/fillglen-platform-0208.zip**
+
+Or clone the branch:
+
+```bash
+git clone -b cursor/fillglen-platform-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git
+cd sammyyyy/fillglen
+npm install
+npm test
+npm run dev:api        # http://127.0.0.1:8787  (hourly finder on by default)
+npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
+```
+
+Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
+
+Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/fillglen-platform-0208
+
 ## Run
 
 ```bash
