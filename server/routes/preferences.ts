@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../db/index.ts'
-import { requireAuth } from '../middleware/security.ts'
+import { requireAuth, type AuthContext } from '../middleware/security.ts'
 
 export const preferencesRouter = Router()
 
@@ -49,4 +49,60 @@ preferencesRouter.put('/nav-order', (req, res) => {
   ).run(req.auth!.userId, orderJson)
 
   res.json({ ok: true, order: parsed.data.order, userId: req.auth!.userId })
+})
+
+function calendarOwnerFromAuth(auth: AuthContext | undefined): string {
+  if (!auth) return 'anonymous'
+  if (auth.isManager || auth.authMethod === 'manager_key') return 'key:manager'
+  if (auth.apiKeySlot != null) return `key:slot-${auth.apiKeySlot}`
+  if (auth.apiKeyId) return `key:${auth.apiKeyId}`
+  return `user:${auth.userId}`
+}
+
+const calendarSchema = z.object({
+  events: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80),
+        date: z.string().min(8).max(16),
+        time: z.string().max(8).optional().default(''),
+        title: z.string().max(200),
+        notes: z.string().max(4000),
+        remind: z.boolean().optional().default(true),
+      }),
+    )
+    .max(400),
+})
+
+preferencesRouter.get('/calendar', (req, res) => {
+  const ownerKey = calendarOwnerFromAuth(req.auth)
+  const row = db
+    .prepare(`SELECT events_json FROM key_calendars WHERE owner_key = ?`)
+    .get(ownerKey) as { events_json: string } | undefined
+  let events: unknown[] = []
+  if (row?.events_json) {
+    try {
+      const parsed = JSON.parse(row.events_json) as unknown
+      if (Array.isArray(parsed)) events = parsed
+    } catch {
+      events = []
+    }
+  }
+  res.json({ ownerKey, events })
+})
+
+preferencesRouter.put('/calendar', (req, res) => {
+  const parsed = calendarSchema.safeParse(req.body ?? {})
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid calendar payload' })
+  }
+  const ownerKey = calendarOwnerFromAuth(req.auth)
+  db.prepare(
+    `INSERT INTO key_calendars (owner_key, events_json, updated_at)
+     VALUES (?, ?, datetime('now'))
+     ON CONFLICT(owner_key) DO UPDATE SET
+       events_json = excluded.events_json,
+       updated_at = datetime('now')`,
+  ).run(ownerKey, JSON.stringify(parsed.data.events))
+  res.json({ ok: true, ownerKey, count: parsed.data.events.length })
 })

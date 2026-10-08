@@ -170,12 +170,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     }
 
     const isManager = session.auth_method === 'manager_key'
+    let apiKeySlot: number | undefined
+    if (session.api_key_id && session.auth_method === 'api_key') {
+      const slotRow = db
+        .prepare(`SELECT slot FROM api_keys WHERE id = ?`)
+        .get(session.api_key_id) as { slot: number } | undefined
+      apiKeySlot = slotRow?.slot
+    }
     req.auth = {
       userId: session.user_id,
       userName: session.user_name,
       role: isManager ? 'admin' : session.role,
       authMethod: session.auth_method,
       apiKeyId: session.api_key_id ?? undefined,
+      apiKeySlot,
       isManager,
       sessionId: session.session_id,
     }

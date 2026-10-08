@@ -235,6 +235,13 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Per-session-key meeting calendars (slot 1 ≠ slot 2 ≠ manager)
+CREATE TABLE IF NOT EXISTS key_calendars (
+  owner_key TEXT PRIMARY KEY,
+  events_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Meetings / calls hub (Teams, Zoom, Skype, phone, landline, face call)
 CREATE TABLE IF NOT EXISTS meetings (
   id TEXT PRIMARY KEY,

@@ -15,6 +15,7 @@ import { useResource } from '@/hooks/useResource'
 import { SoftPhone } from '@/components/meetings/SoftPhone'
 import { CallStage } from '@/components/meetings/CallStage'
 import { TranscriptPanel } from '@/components/meetings/TranscriptPanel'
+import { MeetingCalendar } from '@/components/meetings/MeetingCalendar'
 import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay } from '@/lib/meetingLinks'
 import { LiveTranscriber, speechSupported, summarizeTranscript } from '@/lib/speechTranscription'
 import type {
@@ -454,7 +455,9 @@ export function MeetingsPage() {
         </p>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-4 px-4 py-4 lg:grid-cols-[260px_minmax(0,1fr)_320px] lg:px-6">
+      <div className="mx-auto grid w-full max-w-[1400px] flex-1 gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)_300px] lg:px-6">
+        <div className="flex min-h-0 flex-col gap-4">
+        <MeetingCalendar />
         {/* History rail */}
         <aside className="flex min-h-0 flex-col rounded-xl border border-border bg-surface shadow-(--shadow-card)">
           <div className="flex items-center justify-between border-b border-border px-3 py-3">
@@ -509,6 +512,7 @@ export function MeetingsPage() {
             ))}
           </ul>
         </aside>
+        </div>
 
         {/* Main stage */}
         <section className="flex min-w-0 flex-col gap-4">

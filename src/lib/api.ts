@@ -360,3 +360,19 @@ export async function saveNavOrder(order: string[]) {
     body: JSON.stringify({ order }),
   })
 }
+
+export async function fetchKeyCalendar() {
+  return apiFetch<{ ownerKey: string; events: import('@/lib/meetingCalendar').CalendarEvent[] }>(
+    '/preferences/calendar',
+  )
+}
+
+export async function saveKeyCalendar(events: import('@/lib/meetingCalendar').CalendarEvent[]) {
+  return apiFetch<{ ok: boolean; ownerKey: string }>(
+    '/preferences/calendar',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ events }),
+    },
+  )
+}

@@ -8,6 +8,16 @@ import {
 } from '@/lib/api'
 import { getStoredSession } from '@/lib/api'
 import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import { useAuth } from '@/auth/AuthContext'
+import {
+  loadCalendarEvents,
+  calendarOwnerKey,
+} from '@/lib/meetingCalendar'
+import {
+  loadKeyCalendarNotifications,
+  pushCalendarReminders,
+  saveKeyCalendarNotifications,
+} from '@/lib/calendarReminders'
 
 interface NotificationsPanelProps {
   open: boolean
@@ -40,6 +50,7 @@ const SEED: NotificationItem[] = [
 ]
 
 export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
+  const { user } = useAuth()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [selected, setSelected] = useState<NotificationItem | null>(null)
   const [to, setTo] = useState('')
@@ -51,29 +62,38 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
   useEffect(() => {
     if (!open) return
     void (async () => {
+      const owner = calendarOwnerKey(user)
+      pushCalendarReminders(user, loadCalendarEvents(owner))
+      const reminders = loadKeyCalendarNotifications(user)
       if (getStoredSession()?.token === 'local-demo') {
-        setItems(loadDemoCollection('notifications', SEED))
+        setItems([...reminders, ...loadDemoCollection('notifications', SEED)])
         return
       }
       try {
         const data = await fetchNotifications()
-        setItems(data.notifications)
+        setItems([...reminders, ...data.notifications])
       } catch {
-        setItems(loadDemoCollection('notifications', SEED))
+        setItems([...reminders, ...loadDemoCollection('notifications', SEED)])
       }
     })()
-  }, [open])
+  }, [open, user])
 
   if (!open) return null
 
   const onSelect = async (item: NotificationItem) => {
     setSelected(item)
     if (!item.read) {
-      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)))
-      if (getStoredSession()?.token === 'local-demo') {
+      const next = items.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+      setItems(next)
+      if (item.id.startsWith('cal-reminder-')) {
+        saveKeyCalendarNotifications(
+          user,
+          next.filter((n) => n.id.startsWith('cal-reminder-')),
+        )
+      } else if (getStoredSession()?.token === 'local-demo') {
         saveDemoCollection(
           'notifications',
-          items.map((n) => (n.id === item.id ? { ...n, read: true } : n)),
+          next.filter((n) => !n.id.startsWith('cal-reminder-')),
         )
       } else {
         try {

@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Bell, Plus, Search } from 'lucide-react'
 import { getGreeting } from '@/utils/dashboard'
 import { useAuth } from '@/auth/AuthContext'
 import { NotificationsPanel } from '@/components/layout/NotificationsPanel'
 import { ProfileMenu } from '@/components/layout/ProfileMenu'
+import { calendarOwnerKey, loadCalendarEvents } from '@/lib/meetingCalendar'
+import { loadKeyCalendarNotifications, pushCalendarReminders } from '@/lib/calendarReminders'
 
 interface TopHeaderProps {
   search: string
@@ -18,6 +20,11 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
   const initials = user?.initials ?? 'NP'
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const hasReminder = useMemo(() => {
+    const events = loadCalendarEvents(calendarOwnerKey(user))
+    pushCalendarReminders(user, events)
+    return loadKeyCalendarNotifications(user).some((n) => !n.read)
+  }, [user, notifyOpen])
 
   return (
     <>
@@ -61,7 +68,9 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
-              <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+              {hasReminder && (
+                <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+              )}
             </button>
 
             <div className="relative">
