@@ -13,6 +13,7 @@ import {
   mockSources,
   mockTasksDb,
 } from '../../src/data/mockModules.ts'
+import { mockMeetings } from '../../src/data/mockMeetings.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.resolve(__dirname, '../../data')
@@ -311,6 +312,28 @@ function seedModuleTables() {
         @confidentiality, @uploadedBy, @link, @uploadedAt, @notes)
     `)
     mockDocuments.forEach((r) => ins.run(r))
+  }
+
+  if (count('meetings') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO meetings (
+        id, title, channel, status, direction, started_at, ended_at, duration_seconds,
+        host_name, participant_name, participant_company, participant_email, participant_phone,
+        join_url, dialed_number, opportunity_id, project_name, transcript, transcript_lines_json,
+        summary, customer_notes, tags, recording_enabled
+      ) VALUES (
+        @id, @title, @channel, @status, @direction, @startedAt, @endedAt, @durationSeconds,
+        @hostName, @participantName, @participantCompany, @participantEmail, @participantPhone,
+        @joinUrl, @dialedNumber, @opportunityId, @projectName, @transcript, @transcriptLinesJson,
+        @summary, @customerNotes, @tags, @recordingEnabled
+      )
+    `)
+    mockMeetings.forEach((r) =>
+      ins.run({
+        ...r,
+        recordingEnabled: r.recordingEnabled ? 1 : 0,
+      }),
+    )
   }
 }
 

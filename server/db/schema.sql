@@ -235,6 +235,35 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Meetings / calls hub (Teams, Zoom, Skype, phone, landline, face call)
+CREATE TABLE IF NOT EXISTS meetings (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'facecall',
+  status TEXT NOT NULL DEFAULT 'scheduled',
+  direction TEXT NOT NULL DEFAULT 'conference',
+  started_at TEXT,
+  ended_at TEXT,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  host_name TEXT NOT NULL DEFAULT '',
+  participant_name TEXT NOT NULL DEFAULT '',
+  participant_company TEXT NOT NULL DEFAULT '',
+  participant_email TEXT NOT NULL DEFAULT '',
+  participant_phone TEXT NOT NULL DEFAULT '',
+  join_url TEXT NOT NULL DEFAULT '',
+  dialed_number TEXT NOT NULL DEFAULT '',
+  opportunity_id TEXT,
+  project_name TEXT NOT NULL DEFAULT '',
+  transcript TEXT NOT NULL DEFAULT '',
+  transcript_lines_json TEXT NOT NULL DEFAULT '[]',
+  summary TEXT NOT NULL DEFAULT '',
+  customer_notes TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  recording_enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON opportunities(stage);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
@@ -246,3 +275,5 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at
 CREATE INDEX IF NOT EXISTS idx_contacts_opp ON contacts(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_started ON meetings(started_at);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);

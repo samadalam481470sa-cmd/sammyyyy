@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyNavOrder, moveNavId } from './navOrder'
+import { applyNavOrder, mergeNavOrderWithDefaults, moveNavId } from './navOrder'
 import type { NavItem } from '@/data/constants'
 
 const sample: NavItem[] = [
@@ -10,13 +10,13 @@ const sample: NavItem[] = [
 ]
 
 describe('navOrder', () => {
-  it('applies saved order and appends new items at the end', () => {
+  it('applies saved order and inserts missing items before the next default neighbor', () => {
     const ordered = applyNavOrder(sample, ['reports', 'dashboard', 'opportunities'])
     expect(ordered.map((i) => i.id)).toEqual([
+      'projects',
       'reports',
       'dashboard',
       'opportunities',
-      'projects',
     ])
   })
 
@@ -34,5 +34,16 @@ describe('navOrder', () => {
     const ids = sample.map((i) => i.id)
     expect(moveNavId(ids, 0, 0)).toEqual(ids)
     expect(moveNavId(ids, -1, 2)).toEqual(ids)
+  })
+
+  it('inserts newly added ids before the next known default neighbor', () => {
+    const defaults = ['dashboard', 'reports', 'meetings', 'security']
+    const saved = ['reports', 'dashboard', 'security']
+    expect(mergeNavOrderWithDefaults(defaults, saved)).toEqual([
+      'reports',
+      'dashboard',
+      'meetings',
+      'security',
+    ])
   })
 })

@@ -24,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   GripVertical,
+  Video,
 } from 'lucide-react'
 import { NAV_ITEMS, type NavItem } from '@/data/constants'
 import { useAuth } from '@/auth/AuthContext'
@@ -31,6 +32,7 @@ import { fetchNavOrder, getStoredSession, saveNavOrder } from '@/lib/api'
 import {
   applyNavOrder,
   loadLocalNavOrder,
+  mergeNavOrderWithDefaults,
   moveNavId,
   saveLocalNavOrder,
 } from '@/lib/navOrder'
@@ -47,6 +49,7 @@ const ICONS: Record<string, LucideIcon> = {
   portfolio: Landmark,
   documents: FileText,
   reports: BarChart3,
+  meetings: Video,
   security: ShieldCheck,
   'key-control': Ban,
   'key-provision': KeyRound,
@@ -83,10 +86,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (!user?.id) return
     const defaults = visibleNavItems(user.isManager).map((item) => item.id)
     const local = loadLocalNavOrder(user.id)
-    setOrderIds(local?.length ? applyNavOrder(
-      visibleNavItems(user.isManager),
-      local,
-    ).map((i) => i.id) : defaults)
+    const initial = mergeNavOrderWithDefaults(defaults, local)
+    setOrderIds(initial)
+    if (local && initial.join('|') !== local.join('|')) {
+      saveLocalNavOrder(user.id, initial)
+    }
 
     const localDemo = getStoredSession()?.token === 'local-demo'
     if (localDemo) return
@@ -94,10 +98,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     void fetchNavOrder()
       .then((data) => {
         if (!data.order?.length) return
-        saveLocalNavOrder(user.id, data.order)
-        setOrderIds(
-          applyNavOrder(visibleNavItems(user.isManager), data.order).map((i) => i.id),
-        )
+        const merged = mergeNavOrderWithDefaults(defaults, data.order)
+        saveLocalNavOrder(user.id, merged)
+        setOrderIds(merged)
       })
       .catch(() => {
         // offline / unauthorized — keep local order
