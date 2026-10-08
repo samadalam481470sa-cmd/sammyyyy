@@ -20,7 +20,7 @@ page it:
 - gives you a small draggable floating widget for one-click fills.
 
 **Install:** download the zip with the
-[**raw download link**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/job-application-assistant-extension-0208/resume-fit-assistant.zip)
+[**raw download link**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/auto-apply-bot-0208/resume-fit-assistant.zip)
 (the `raw/` URL matters — saving the GitHub file *page* gives you HTML, not a
 zip), unzip it to get a single `resume-fit-assistant/` folder, then
 `chrome://extensions` → **Developer mode** on → **Load unpacked** → select

@@ -26,10 +26,13 @@ fraud or platform-abuse territory. It:
   posting's description, plus which keywords are matched vs. missing.
 - Never auto-submits an application and never simulates mouse movement or any
   other bot-detection evasion.
+- **Autopilot fill on open (default on):** as soon as a job-application page
+  is detected (ATS URL, apply path, or form fields), it fills from your saved
+  resume/Q&A without a click. It retries while the form hydrates and on SPA
+  step changes. It still **never** clicks Submit — you review and send.
 - Includes a small **floating helper bubble** ("RF") that appears in the
   corner of every page (draggable, and can be turned off from the popup).
-  Click it for one-click actions: Fill Name, Fill Email, Fill Phone, and Full
-  Autofill + Job Score — all using the engine described above.
+  Click it for Fill again now, Fill Name / Email / Phone, or to see status.
 
 ## What this deliberately does NOT do
 
@@ -55,13 +58,13 @@ review-and-autofill assistant, not an autonomous applicant.
 
 Download it directly (right-click → Save Link As, or just click):
 
-**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/job-application-assistant-extension-0208/resume-fit-assistant.zip**
+**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/auto-apply-bot-0208/resume-fit-assistant.zip**
 
 The `raw/` URL matters. If you open the file's normal GitHub *page* and use
 "Save As", you'll save the HTML page instead of the zip, and Chrome will
 reject it. Also note the file lives on the
-`cursor/job-application-assistant-extension-0208` branch — it isn't on `main`
-until that branch is merged.
+`cursor/auto-apply-bot-0208` branch — it isn't on `main` until that branch is
+merged.
 
 Verify you got a real archive (should print `Zip archive data`):
 

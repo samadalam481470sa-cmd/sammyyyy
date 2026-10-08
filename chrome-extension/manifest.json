@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Resume-Fit Autofill Assistant",
-  "version": "1.1.0",
-  "description": "Autopilot-fills job application forms from your saved resume when you open them. Never invents facts and never clicks Submit — you review and send.",
-  "permissions": ["storage", "activeTab", "scripting", "contextMenus"],
+  "version": "1.2.0",
+  "description": "Autopilot-fills job application forms from your saved resume as soon as an application page opens. Never invents facts and never clicks Submit — you review and send.",
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "tabs", "webNavigation"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Resume-Fit Autofill Assistant"
@@ -15,7 +16,7 @@
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["lib/matcher.js", "lib/tailor.js", "lib/autofillEngine.js", "widget.js"],
-      "run_at": "document_idle",
+      "run_at": "document_end",
       "all_frames": false
     }
   ]

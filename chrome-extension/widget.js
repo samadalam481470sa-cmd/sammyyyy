@@ -17,30 +17,40 @@
     init({ showWidget, autoFill });
   });
 
-  function looksLikeApplicationPage() {
-    const href = location.href.toLowerCase();
-    const host = location.hostname.toLowerCase();
-    const pathHint =
-      /greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|workday\.com|icims\.com|smartrecruiters\.com|jobvite\.com|taleo\.net|successfactors|boards\.|careers\.|jobs\./.test(
-        host + href
-      ) || /\/(apply|application|jobs?\/|careers?\/)/.test(href);
-
+  function countVisibleFields() {
     const fields = document.querySelectorAll(
       'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select'
     );
     let visible = 0;
     fields.forEach((el) => {
       const s = window.getComputedStyle(el);
-      if (!el.disabled && s.display !== "none" && s.visibility !== "hidden") visible++;
+      if (!el.disabled && s.display !== "none" && s.visibility !== "hidden" && s.opacity !== "0") {
+        visible++;
+      }
     });
+    return visible;
+  }
 
+  function looksLikeApplicationPage() {
+    const href = location.href.toLowerCase();
+    const host = location.hostname.toLowerCase();
+    const strongAts =
+      /greenhouse\.io|boards\.greenhouse|job-boards\.greenhouse|lever\.co|ashbyhq\.com|myworkdayjobs\.com|icims\.com|smartrecruiters\.com|jobvite\.com|taleo\.|successfactors|bamboohr\.com|dover\.io|gem\.com/.test(
+        host
+      ) || /\/(apply|application)(\/|$|\?)/.test(href);
+
+    const softPath = /\/(jobs?|careers?|position|opening)\//.test(href) || /\b(careers|jobs)\./.test(host);
+    const visible = countVisibleFields();
     const text = (document.body && document.body.innerText) || "";
-    const copyHint = /apply|application|resume|curriculum|cover letter|work authorization|submit application/i.test(
-      text.slice(0, 4000)
+    const copyHint = /apply for|submit application|upload (your )?resume|cover letter|work authorization|legally authorized/i.test(
+      text.slice(0, 6000)
     );
 
-    // Need a real form-ish page: enough fields, plus URL or copy signal.
-    return visible >= 3 && (pathHint || copyHint);
+    // Strong ATS/apply URL: fill as soon as any fields exist (even 1–2).
+    if (strongAts && visible >= 1) return true;
+    // Softer career pages: need a few fields + apply copy.
+    if ((softPath || copyHint) && visible >= 2) return true;
+    return visible >= 4 && copyHint;
   }
 
   function init({ showWidget, autoFill }) {
@@ -199,30 +209,31 @@
     let lastSig = "";
     let busy = false;
 
-    const tryFill = async () => {
+    const markWorking = showWidget
+      ? (on) => {
+          const root = document.getElementById("resume-fit-widget-root");
+          const bubble = root && root.shadowRoot && root.shadowRoot.querySelector(".bubble");
+          if (bubble) {
+            bubble.classList.toggle("working", !!on);
+            bubble.textContent = on ? "…" : "RF";
+          }
+        }
+      : () => {};
+
+    const tryFill = async (reason) => {
       if (busy) return;
-      if (!looksLikeApplicationPage()) return;
       if (typeof window.ResumeFitEngine === "undefined") return;
+      if (!looksLikeApplicationPage()) {
+        if (reason === "manual") setStatus("No application form detected on this page yet.");
+        return;
+      }
 
       const sig = signatureForPage();
-      if (sig === lastSig) return;
+      if (sig === lastSig && reason !== "manual") return;
 
       busy = true;
       try {
-        const did = await runFillOnce({
-          setStatus,
-          markWorking: showWidget
-            ? (on) => {
-                const root = document.getElementById("resume-fit-widget-root");
-                const bubble = root && root.shadowRoot && root.shadowRoot.querySelector(".bubble");
-                if (bubble) {
-                  bubble.classList.toggle("working", !!on);
-                  bubble.textContent = on ? "…" : "RF";
-                }
-              }
-            : () => {},
-          force: false,
-        });
+        const did = await runFillOnce({ setStatus, markWorking, force: reason === "manual" });
         if (did) {
           lastSig = sig;
           if (showWidget) openPanel();
@@ -232,17 +243,59 @@
       }
     };
 
-    // Initial attempts — many ATS forms hydrate after load.
-    setTimeout(tryFill, 800);
-    setTimeout(tryFill, 2500);
-    setTimeout(tryFill, 5000);
+    // Run as soon as the script lands, then keep retrying while the ATS hydrates fields.
+    const scheduleBurst = () => {
+      tryFill("load");
+      [50, 150, 300, 600, 1000, 1800, 3000, 5000, 8000, 12000].forEach((ms) =>
+        setTimeout(() => tryFill("retry"), ms)
+      );
+    };
+    scheduleBurst();
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => scheduleBurst(), { once: true });
+    }
+    window.addEventListener("load", () => scheduleBurst(), { once: true });
 
-    // Multipage / SPA: when new inputs appear, fill again.
+    // Multipage / SPA: new form fields appearing.
     const observer = new MutationObserver(() => {
       clearTimeout(observer._t);
-      observer._t = setTimeout(tryFill, 600);
+      observer._t = setTimeout(() => tryFill("dom"), 200);
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    if (document.documentElement) {
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["style", "class", "hidden", "disabled"],
+      });
+    }
+
+    // SPA URL changes (Greenhouse/Lever often don't full-reload).
+    let lastHref = location.href;
+    const onUrlMaybeChanged = () => {
+      if (location.href === lastHref) return;
+      lastHref = location.href;
+      lastSig = ""; // allow refill on the new step/page
+      scheduleBurst();
+    };
+    window.addEventListener("popstate", onUrlMaybeChanged);
+    ["pushState", "replaceState"].forEach((fn) => {
+      const orig = history[fn];
+      history[fn] = function () {
+        const ret = orig.apply(this, arguments);
+        queueMicrotask(onUrlMaybeChanged);
+        return ret;
+      };
+    });
+    setInterval(onUrlMaybeChanged, 800);
+
+    // Background tab updates / "application opened" pings — fill immediately on open.
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === "RESUME_FIT_PAGE_OPENED") {
+        lastSig = "";
+        scheduleBurst();
+      }
+    });
   }
 
   function signatureForPage() {
