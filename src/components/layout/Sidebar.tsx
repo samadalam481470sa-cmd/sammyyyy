@@ -183,11 +183,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3" aria-label="Main">
-        {!collapsed && (
-          <p className="mb-2 px-3 text-[10px] tracking-[0.08em] text-white/35 uppercase">
-            Hold & drag to reorder · saved for you
-          </p>
-        )}
         <ul className="space-y-0.5">
           {items.map((item, index) => {
             const Icon = ICONS[item.id] ?? Briefcase
