@@ -9,5 +9,13 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Root app is Newport CRM; ignore other packages that landed on main
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/job-finder/**',
+      '**/chrome-extension/**',
+      '**/web/**',
+    ],
   },
 })
