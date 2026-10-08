@@ -1,4 +1,9 @@
-import { isAllowedHttpsJoinUrl, isAllowedJoinUrl, sanitizePhone } from '@/lib/meetingSecurity'
+import {
+  isAllowedHttpsJoinUrl,
+  isAllowedJoinUrl,
+  isDangerousJoinInput,
+  sanitizePhone,
+} from '@/lib/meetingSecurity'
 import type { MeetingChannel } from '@/types/meetings'
 
 function looksLikeUrl(value: string): boolean {
@@ -10,7 +15,8 @@ export function buildJoinUrl(
   channel: MeetingChannel,
   opts: { meetingId?: string; phone?: string; title?: string } = {},
 ): string {
-  const id = (opts.meetingId || '').trim()
+  const rawId = (opts.meetingId || '').trim()
+  const id = isDangerousJoinInput(rawId) ? '' : rawId
   const phone = sanitizePhone(opts.phone || '').replace(/[^\d+]/g, '')
 
   switch (channel) {

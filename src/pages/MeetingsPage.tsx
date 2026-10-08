@@ -28,6 +28,7 @@ import {
 import {
   FIELD_LIMITS,
   isAllowedJoinUrl,
+  isDangerousJoinInput,
   parseTranscriptLines,
   safeOpenJoinUrl,
   sanitizeEmail,
@@ -537,6 +538,10 @@ export function MeetingsPage() {
         joinUrl: '#facecall',
         withCamera: true,
       })
+      return
+    }
+    if (isDangerousJoinInput(joinId)) {
+      setError('That join link was blocked. Use an official Teams, Zoom, Meet, Webex, or Skype link.')
       return
     }
     const url = buildJoinUrl(platform, { meetingId: joinId, title })

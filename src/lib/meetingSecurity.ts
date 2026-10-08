@@ -122,6 +122,10 @@ export function isAllowedSkypeUrl(raw: string): boolean {
   return /^skype:[a-zA-Z0-9._-]{1,64}(\?call)?$/.test(raw) || raw === 'https://web.skype.com/'
 }
 
+export function isDangerousJoinInput(raw: string): boolean {
+  return /^(javascript|data|vbscript|file|blob):/i.test(raw.trim())
+}
+
 export function isAllowedJoinUrl(raw: string, channel?: MeetingChannel): boolean {
   if (!raw || raw.length > FIELD_LIMITS.joinUrl) return false
   if (raw === '#' || raw === '#facecall') return true

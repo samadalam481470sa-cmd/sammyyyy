@@ -28,6 +28,9 @@ describe('meetingSecurity', () => {
   })
 
   it('builds only allowlisted platform links', () => {
+    expect(buildJoinUrl('teams', { meetingId: 'javascript:alert(1)' })).toBe(
+      'https://teams.microsoft.com/l/meeting-join',
+    )
     expect(buildJoinUrl('teams', { meetingId: 'https://evil.example/x' })).toBe(
       'https://teams.microsoft.com/l/meeting-join',
     )
