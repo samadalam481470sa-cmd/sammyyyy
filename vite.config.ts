@@ -13,6 +13,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    // Inline the Newport logo into the JS bundle so CDN demos don't rely on
+    // relative image fetches (many raw CDNs serve HTML as text/plain or rate-limit assets).
+    assetsInlineLimit: process.env.STATIC_DEMO ? 200_000 : 4096,
+  },
   server: {
     host: true,
     allowedHosts: true,
