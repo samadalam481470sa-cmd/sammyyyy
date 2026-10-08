@@ -98,17 +98,24 @@
   </section>
 
   <section id="tab-fill" class="tab-panel">
-    <p class="hint">Open a job application or job posting tab, then click below. Matched fields are filled with your real info or saved Q&amp;A answers; open-ended prompts get a draft to review; anything uncertain is flagged for you to complete yourself.</p>
-    <button id="fillBtn" class="btn primary">Analyze &amp; Fill This Page</button>
+    <p class="hint">With autopilot on, the extension fills application forms by itself when you open them — no button click. It still never clicks Submit; you send the application after a quick review.</p>
+    <button id="fillBtn" class="btn primary">Fill This Page Now</button>
     <div id="fillResult" class="fill-result"></div>
 
     <hr />
     <div class="field-group toggle-row">
+      <label for="autoFillToggle" class="toggle-label">
+        <input type="checkbox" id="autoFillToggle" />
+        Autopilot: fill forms automatically (no click)
+      </label>
+      <p class="hint">Default on. Detects Greenhouse/Lever/Ashby/career apply pages and fills from your saved resume + Q&amp;A. Reload the job tab after changing this.</p>
+    </div>
+    <div class="field-group toggle-row">
       <label for="widgetToggle" class="toggle-label">
         <input type="checkbox" id="widgetToggle" />
-        Show floating helper bubble on web pages
+        Show floating RF bubble
       </label>
-      <p class="hint">A small draggable "RF" button in the corner of every page with quick actions (fill name/email/phone, full autofill). Reload open tabs after changing this.</p>
+      <p class="hint">Status + manual refill controls. Reload open tabs after changing.</p>
     </div>
   </section>
 

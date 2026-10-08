@@ -24,6 +24,7 @@ const els = {
   fillBtn: document.getElementById("fillBtn"),
   fillResult: document.getElementById("fillResult"),
   widgetToggle: document.getElementById("widgetToggle"),
+  autoFillToggle: document.getElementById("autoFillToggle"),
   qaList: document.getElementById("qaList"),
   addQaBtn: document.getElementById("addQaBtn"),
   qaQuickAdd: document.getElementById("qaQuickAdd"),
@@ -327,12 +328,17 @@ els.saveQaBtn.addEventListener("click", () => {
 
 // --- Floating widget toggle ------------------------------------------
 
-chrome.storage.local.get(["widgetEnabled"], (result) => {
+chrome.storage.local.get(["widgetEnabled", "autoFillEnabled"], (result) => {
   els.widgetToggle.checked = result.widgetEnabled !== false;
+  els.autoFillToggle.checked = result.autoFillEnabled !== false;
 });
 
 els.widgetToggle.addEventListener("change", () => {
   chrome.storage.local.set({ widgetEnabled: els.widgetToggle.checked });
+});
+
+els.autoFillToggle.addEventListener("change", () => {
+  chrome.storage.local.set({ autoFillEnabled: els.autoFillToggle.checked });
 });
 
 renderQuickAddChips();
