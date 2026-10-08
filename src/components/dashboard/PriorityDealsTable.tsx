@@ -1,19 +1,10 @@
-import type { Opportunity, OpportunityStatus } from '@/types'
+import type { Opportunity } from '@/types'
 import { formatCurrency, formatDate } from '@/utils/dashboard'
+import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 
 interface PriorityDealsTableProps {
   opportunities: Opportunity[]
   onSelect: (opportunity: Opportunity) => void
-}
-
-const STATUS_STYLES: Record<OpportunityStatus, string> = {
-  Active: 'bg-success-bg text-success',
-  Pending: 'bg-accent-soft text-accent-hover',
-  Inactive: 'bg-canvas text-ink-muted',
-  Closed: 'bg-canvas text-ink-muted',
-  Declined: 'bg-canvas text-ink-subtle',
-  Withdrew: 'bg-canvas text-ink-subtle',
-  Completed: 'bg-success-bg text-success',
 }
 
 export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTableProps) {
@@ -80,12 +71,14 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
                   <td className="px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
                   <td className="px-3 py-3.5">
                     <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[opp.status]}`}
+                      className={badgeClass(statusBadge(opp.status))}
                     >
                       {opp.status}
                     </span>
                   </td>
-                  <td className="px-3 py-3.5 font-medium text-ink">{opp.stage}</td>
+                  <td className="px-3 py-3.5">
+                    <span className={badgeClass(stageBadge(opp.stage))}>{opp.stage}</span>
+                  </td>
                   <td className="px-3 py-3.5 text-ink-muted">{opp.dealLead || '—'}</td>
                   <td className="px-3 py-3.5 text-right font-medium tabular-nums text-ink">
                     {formatCurrency(opp.nwp)}

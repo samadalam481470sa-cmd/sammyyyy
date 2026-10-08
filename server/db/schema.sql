@@ -32,11 +32,39 @@ CREATE TABLE IF NOT EXISTS api_keys (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Exactly one managerial master key — can revoke/provision the 5 API key slots
+-- and kick active sessions. Plaintext is shown only once at seed/provision time.
+CREATE TABLE IF NOT EXISTS manager_keys (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  holder_name TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked')),
+  last_used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- In-app work-email style notifications (best-effort live feed)
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  from_address TEXT NOT NULL,
+  to_address TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  read_flag INTEGER NOT NULL DEFAULT 0,
+  related_project TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
-  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password')),
+  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
   api_key_id TEXT REFERENCES api_keys(id),
   ip_address TEXT,
   user_agent TEXT,
@@ -207,6 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_change_history_created ON change_history(created_at);
 CREATE INDEX IF NOT EXISTS idx_change_history_resource ON change_history(resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_change_history_slot ON change_history(api_key_slot);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_opp ON contacts(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);

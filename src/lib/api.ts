@@ -50,13 +50,54 @@ export async function demoSignIn() {
   return data
 }
 
+/** Managerial master key issued to Samad (demo / local). */
+export const MANAGER_MASTER_KEY = 'nwp_mgr_samad_newport_master_only'
+export const DEMO_SLOT1_KEY = 'nwp_demo_key_slot1_replace_me_by_security_team'
+
 export async function apiKeySignIn(apiKey: string) {
-  const data = await apiFetch<{ token: string; user: AuthUser }>('/auth/api-key', {
-    method: 'POST',
-    body: JSON.stringify({ apiKey }),
-  })
-  storeSession(data.token, data.user)
-  return data
+  try {
+    const data = await apiFetch<{ token: string; user: AuthUser }>('/auth/api-key', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey }),
+    })
+    storeSession(data.token, data.user)
+    return data
+  } catch (err) {
+    // Static demo fallbacks
+    if (apiKey === MANAGER_MASTER_KEY) {
+      const user: AuthUser = {
+        id: 'user-manager',
+        email: 'samad@newportspecialty.demo',
+        name: 'Samad Alam',
+        role: 'admin',
+        initials: 'SA',
+        authMethod: 'manager_key',
+        isManager: true,
+        apiKeyId: 'mgr-master-1',
+        apiKeySlot: null,
+        apiKeyLabel: 'Managerial master key',
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+    if (apiKey === DEMO_SLOT1_KEY) {
+      const user: AuthUser = {
+        id: 'user-dennis',
+        email: 'dennis@newportspecialty.demo',
+        name: 'Dennis DiCapua',
+        role: 'partner',
+        initials: 'DD',
+        authMethod: 'api_key',
+        isManager: false,
+        apiKeyId: 'key-slot-1',
+        apiKeySlot: 1,
+        apiKeyLabel: 'Primary integration (demo)',
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+    throw err
+  }
 }
 
 export async function signOut() {
@@ -173,4 +214,84 @@ export async function fetchChangeHistory(opts: {
   return apiFetch<{ count: number; changes: ChangeHistoryEntry[] }>(
     `/security/change-history?${params.toString()}`,
   )
+}
+
+export interface NotificationItem {
+  id: string
+  direction: 'inbound' | 'outbound' | string
+  from: string
+  to: string
+  subject: string
+  body: string
+  read: boolean
+  relatedProject: string
+  createdAt: string
+  mailto?: string
+}
+
+export async function fetchNotifications(limit = 40) {
+  return apiFetch<{ notifications: NotificationItem[] }>(
+    `/security/notifications?limit=${limit}`,
+  )
+}
+
+export async function sendNotification(payload: {
+  to: string
+  subject: string
+  body: string
+  relatedProject?: string
+}) {
+  return apiFetch<NotificationItem>('/security/notifications', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function markNotificationRead(id: string) {
+  return apiFetch<{ ok: boolean }>(`/security/notifications/${id}/read`, {
+    method: 'POST',
+    body: '{}',
+  })
+}
+
+export async function fetchSessions() {
+  return apiFetch<{
+    sessions: Array<{
+      id: string
+      auth_method: string
+      api_key_id: string | null
+      api_key_slot: number | null
+      api_key_label: string | null
+      user_name: string
+      user_email: string
+      ip_address: string | null
+      expires_at: string
+      created_at: string
+    }>
+  }>('/security/sessions')
+}
+
+export async function kickSession(id: string) {
+  return apiFetch<{ ok: boolean }>(`/security/sessions/${id}`, { method: 'DELETE' })
+}
+
+export async function revokeApiKeySlot(slot: number) {
+  return apiFetch<{ ok: boolean; slot: number; status: string }>(
+    `/security/api-keys/${slot}/revoke`,
+    { method: 'POST', body: '{}' },
+  )
+}
+
+export async function provisionApiKeySlot(slot: number, label?: string) {
+  return apiFetch<{
+    slot: number
+    label: string
+    keyPrefix: string
+    status: string
+    plaintext: string
+    notice: string
+  }>(`/security/api-keys/${slot}/provision`, {
+    method: 'POST',
+    body: JSON.stringify({ label }),
+  })
 }

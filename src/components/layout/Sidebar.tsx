@@ -11,6 +11,8 @@ import {
   BarChart3,
   FolderKanban,
   ShieldCheck,
+  Ban,
+  KeyRound,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -32,6 +34,8 @@ const ICONS: Record<string, LucideIcon> = {
   documents: FileText,
   reports: BarChart3,
   security: ShieldCheck,
+  'key-control': Ban,
+  'key-provision': KeyRound,
 }
 
 interface SidebarProps {
@@ -67,7 +71,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3">
         <ul className="space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => {
+            if (item.id === 'key-control' || item.id === 'key-provision') {
+              return Boolean(user?.isManager)
+            }
+            return item.enabled
+          }).map((item) => {
             const Icon = ICONS[item.id] ?? Briefcase
             return (
               <li key={item.id}>

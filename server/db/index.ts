@@ -27,6 +27,34 @@ db.pragma('foreign_keys = ON')
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
+// SQLite cannot ALTER CHECK constraints — rebuild sessions if manager_key is missing
+;(() => {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'`)
+    .get() as { sql: string } | undefined
+  if (row?.sql && !row.sql.includes('manager_key')) {
+    db.exec(`
+      ALTER TABLE sessions RENAME TO sessions_legacy_migrate;
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
+        api_key_id TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO sessions (id, user_id, token_hash, auth_method, api_key_id, ip_address, user_agent, expires_at, created_at)
+      SELECT id, user_id, token_hash, auth_method, api_key_id, ip_address, user_agent, expires_at, created_at
+      FROM sessions_legacy_migrate;
+      DROP TABLE sessions_legacy_migrate;
+      CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+    `)
+  }
+})()
+
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -54,6 +82,29 @@ export function seedDatabase() {
       initials: 'DD',
       password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
     })
+    insertUser.run({
+      id: 'user-manager',
+      email: 'samad@newportspecialty.demo',
+      name: 'Samad Alam',
+      role: 'admin',
+      initials: 'SA',
+      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+    })
+  } else {
+    // Ensure managerial principal exists on upgraded databases
+    const mgrUser = db.prepare(`SELECT id FROM users WHERE id = 'user-manager'`).get()
+    if (!mgrUser) {
+      db.prepare(
+        `INSERT INTO users (id, email, name, role, initials, password_hash)
+         VALUES (?, ?, ?, 'admin', ?, ?)`,
+      ).run(
+        'user-manager',
+        'samad@newportspecialty.demo',
+        'Samad Alam',
+        'SA',
+        bcrypt.hashSync('demo-only-not-for-production', 10),
+      )
+    }
   }
 
   const keyCount = db.prepare('SELECT COUNT(*) AS c FROM api_keys').get() as { c: number }
@@ -83,6 +134,60 @@ export function seedDatabase() {
         status: 'pending',
       })
     }
+  }
+
+  // Exactly one managerial master key (issued to Samad / security owner).
+  const mgrCount = db.prepare('SELECT COUNT(*) AS c FROM manager_keys').get() as { c: number }
+  if (mgrCount.c === 0) {
+    const mgrPlain = 'nwp_mgr_samad_newport_master_only'
+    db.prepare(
+      `INSERT INTO manager_keys (id, label, holder_name, key_prefix, key_hash, status)
+       VALUES (?, ?, ?, ?, ?, 'active')`,
+    ).run(
+      'mgr-master-1',
+      'Managerial master key',
+      'Samad Alam',
+      'nwp_mgr_',
+      hashToken(mgrPlain),
+    )
+  }
+
+  const noteCount = db.prepare('SELECT COUNT(*) AS c FROM notifications').get() as { c: number }
+  if (noteCount.c === 0) {
+    const insertNote = db.prepare(
+      `INSERT INTO notifications (id, direction, from_address, to_address, subject, body, read_flag, related_project)
+       VALUES (@id, @direction, @from_address, @to_address, @subject, @body, @read_flag, @related_project)`,
+    )
+    insertNote.run({
+      id: 'notif-1',
+      direction: 'inbound',
+      from_address: 'counsel@hargrovelane.demo',
+      to_address: 'dennis@newportspecialty.demo',
+      subject: 'Re: Project Guardian — NDA countersignature',
+      body: 'Dennis — the NDA is ready for countersignature. Please confirm board approval language before Friday.',
+      read_flag: 0,
+      related_project: 'Project Guardian',
+    })
+    insertNote.run({
+      id: 'notif-2',
+      direction: 'inbound',
+      from_address: 'mary@newportspecialty.demo',
+      to_address: 'dennis@newportspecialty.demo',
+      subject: 'Diligence pack — Project Beacon',
+      body: 'Uploaded the latest diligence pack. Outstanding: call accountant on broker comps.',
+      read_flag: 0,
+      related_project: 'Project Beacon',
+    })
+    insertNote.run({
+      id: 'notif-3',
+      direction: 'outbound',
+      from_address: 'dennis@newportspecialty.demo',
+      to_address: 'banker@orioncap.demo',
+      subject: 'Follow-up: Project Orion management call',
+      body: 'Confirming Thursday 2pm ET for the management update call. Please send updated NWP bridge.',
+      read_flag: 1,
+      related_project: 'Project Orion',
+    })
   }
 
   const oppCount = db.prepare('SELECT COUNT(*) AS c FROM opportunities').get() as { c: number }

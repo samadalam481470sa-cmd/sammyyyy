@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-brand: "Libre Baskerville", Georgia, serif;
-  --font-sans: "Source Sans 3", ui-sans-serif, sans-serif;
+  --font-brand: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, sans-serif;
 
   --color-navy-950: #06101f;
   --color-navy-900: #0b1f3a;

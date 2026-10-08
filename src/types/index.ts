@@ -105,6 +105,13 @@ export interface AuthUser {
   name: string
   role: string
   initials: string
+  /** How the session was established */
+  authMethod?: 'demo' | 'api_key' | 'manager_key' | 'password'
+  apiKeyId?: string | null
+  apiKeySlot?: number | null
+  apiKeyLabel?: string | null
+  /** True only for the single managerial master key holder */
+  isManager?: boolean
 }
 
 export type OpportunityUpdate = Partial<
