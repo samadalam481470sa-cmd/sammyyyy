@@ -1,0 +1,250 @@
+import { useMemo, useState } from "react";
+import type { Profile, Question, ScanSnapshot } from "@fillglen/core";
+import { scoreMatch } from "@fillglen/core";
+
+export type FilterTab = "all" | "needs-you" | "filled";
+
+export interface DraftState {
+  questionId: string;
+  text: string;
+  usedFacts: string[];
+  refused: boolean;
+  reason?: string;
+}
+
+export interface QuestionWindowProps {
+  snapshot: ScanSnapshot | null;
+  profile: Profile | null;
+  paused: boolean;
+  popout?: boolean;
+  drafts?: Record<string, DraftState>;
+  onFillPage: () => void;
+  onFillOne: (id: string, value: string) => void;
+  onFocus: (id: string) => void;
+  onSaveAnswer: (pattern: string, answer: string) => void;
+  onUndo: (id?: string) => void;
+  onPause: () => void;
+  onDraft: (id: string) => void;
+  onInsertDraft: (id: string, text: string) => void;
+  onPopout?: () => void;
+  onEdit: (id: string, value: string) => void;
+}
+
+const STATUS_LABEL: Record<Question["status"], string> = {
+  filled: "Filled",
+  "needs-review": "Needs review",
+  "needs-you": "Needs you",
+  "ai-draft-ready": "AI draft ready",
+  skipped: "Skipped",
+  scanning: "Scanning",
+};
+
+export function QuestionWindow(props: QuestionWindowProps) {
+  const [tab, setTab] = useState<FilterTab>("all");
+  const questions = props.snapshot?.questions ?? [];
+  const filtered = questions.filter((q) => {
+    if (tab === "needs-you") return q.status === "needs-you" || q.status === "needs-review";
+    if (tab === "filled") return q.status === "filled" || q.status === "ai-draft-ready";
+    return true;
+  });
+  const answered = questions.filter((q) => q.value && q.status !== "needs-you").length;
+  const requiredEmpty = questions.filter((q) => q.required && !q.value);
+  const match = useMemo(() => {
+    if (!props.snapshot || !props.profile) return null;
+    return scoreMatch(props.snapshot.job.description || props.snapshot.job.title, props.profile);
+  }, [props.snapshot, props.profile]);
+
+  if (props.snapshot?.blockedReason === "linkedin-easy-apply") {
+    return (
+      <Shell>
+        <Empty
+          title="LinkedIn Easy Apply is off-limits"
+          body="Fillglen never runs on LinkedIn. LinkedIn’s terms ban automation, including Easy Apply."
+        />
+      </Shell>
+    );
+  }
+
+  if (!props.snapshot) {
+    return (
+      <Shell>
+        <Empty
+          title="No form on this page"
+          body="Open a Greenhouse, Lever, Ashby, Workday, SmartRecruiters, or iCIMS application. The live list appears as questions show up."
+        />
+      </Shell>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <Shell>
+        <JobHeader job={props.snapshot.job} match={match?.score} />
+        <Empty title="Scanning…" body="Looking for fields, including shadow DOM and this frame." />
+      </Shell>
+    );
+  }
+
+  const done = requiredEmpty.length === 0 && questions.length > 0;
+
+  return (
+    <Shell>
+      <JobHeader job={props.snapshot.job} match={match?.score} />
+      <div className="progress">
+        <div className="progress-top">
+          <span>
+            {answered} of {questions.length} answered
+          </span>
+          {props.snapshot.job.stepTotal ? (
+            <span>
+              Step {props.snapshot.job.stepIndex ?? "?"} of {props.snapshot.job.stepTotal}
+              {props.snapshot.job.stepLabel ? `: ${props.snapshot.job.stepLabel}` : ""}
+            </span>
+          ) : null}
+        </div>
+        <div className="bar">
+          <i style={{ width: `${questions.length ? (answered / questions.length) * 100 : 0}%` }} />
+        </div>
+      </div>
+      <div className="toolbar">
+        <button className="primary" onClick={props.onFillPage} disabled={props.paused}>
+          Fill this step
+        </button>
+        <button onClick={() => props.onUndo()}>Undo page</button>
+        <button onClick={props.onPause}>{props.paused ? "Resume site" : "Pause this site"}</button>
+        {props.onPopout && !props.popout ? <button onClick={props.onPopout}>Pop out</button> : null}
+      </div>
+      <div className="tabs">
+        {(["all", "needs-you", "filled"] as FilterTab[]).map((t) => (
+          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+            {t === "all" ? "All" : t === "needs-you" ? "Needs you" : "Filled"}
+          </button>
+        ))}
+      </div>
+      {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
+      {done ? <p className="banner done">Every required question has an answer. You still click Submit yourself.</p> : null}
+      <ul className="qlist">
+        {filtered.map((q) => (
+          <QuestionRow
+            key={q.id}
+            q={q}
+            draft={props.drafts?.[q.id]}
+            onFocus={() => props.onFocus(q.id)}
+            onEdit={(v) => props.onEdit(q.id, v)}
+            onSave={() => props.onSaveAnswer(q.label, q.value)}
+            onUndo={() => props.onUndo(q.id)}
+            onDraft={() => props.onDraft(q.id)}
+            onInsert={() => props.drafts?.[q.id]?.text && props.onInsertDraft(q.id, props.drafts[q.id].text)}
+          />
+        ))}
+      </ul>
+      <button
+        className="final-check"
+        onClick={() => {
+          const first = requiredEmpty[0];
+          if (first) props.onFocus(first.id);
+        }}
+      >
+        Final check — {requiredEmpty.length} required still empty. You submit the form.
+      </button>
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fg-root">
+      <header className="fg-brand">
+        <Logo />
+        <div>
+          <strong>Fillglen</strong>
+          <span>Live question window</span>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function JobHeader({ job, match }: { job: ScanSnapshot["job"]; match?: number }) {
+  return (
+    <section className="job">
+      <h1>{job.title || "Application"}</h1>
+      <p>
+        {job.company || "Company"} · {job.board}
+        {match != null ? ` · Match ${match}` : ""}
+      </p>
+    </section>
+  );
+}
+
+function Empty({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="empty">
+      <h2>{title}</h2>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function QuestionRow({
+  q,
+  draft,
+  onFocus,
+  onEdit,
+  onSave,
+  onUndo,
+  onDraft,
+  onInsert,
+}: {
+  q: Question;
+  draft?: DraftState;
+  onFocus: () => void;
+  onEdit: (v: string) => void;
+  onSave: () => void;
+  onUndo: () => void;
+  onDraft: () => void;
+  onInsert: () => void;
+}) {
+  const writable = q.kind === "textarea" || q.type === "motivation" || q.type === "behavioral" || q.type === "coverLetter";
+  return (
+    <li className={`qrow ${q.status}`}>
+      <button className="qlabel" onClick={onFocus}>
+        {q.label}
+        {q.required ? <em>required</em> : null}
+      </button>
+      <textarea value={q.value} onChange={(e) => onEdit(e.target.value)} rows={q.value.length > 80 || writable ? 3 : 1} />
+      <div className="meta">
+        <span>{q.source === "none" ? "—" : q.source}</span>
+        <span>{STATUS_LABEL[q.status]}</span>
+        <span>{q.confidence === "high" ? "High" : "Check this"}</span>
+      </div>
+      {q.error ? <p className="err">{q.error}</p> : null}
+      {draft ? (
+        <div className="draft">
+          {draft.refused ? <p>{draft.reason}</p> : <p>{draft.text}</p>}
+          {draft.usedFacts?.length ? <small>Facts used: {draft.usedFacts.join(" · ")}</small> : null}
+          {!draft.refused && draft.text ? <button onClick={onInsert}>Insert</button> : null}
+        </div>
+      ) : null}
+      <div className="row-actions">
+        <button onClick={onSave} disabled={!q.value}>
+          Save to library
+        </button>
+        <button onClick={onUndo}>Undo</button>
+        {writable ? <button onClick={onDraft}>Draft with AI</button> : null}
+      </div>
+    </li>
+  );
+}
+
+export function Logo() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
+      <rect width="32" height="32" rx="8" fill="#1b3a2f" />
+      <path d="M6 22c4-8 6-12 10-12s6 4 10 12" fill="none" stroke="#e8c9a8" strokeWidth="2" />
+      <path d="M8 22h16" stroke="#d9763a" strokeWidth="2" />
+      <circle cx="16" cy="12" r="2" fill="#f6f1e8" />
+    </svg>
+  );
+}

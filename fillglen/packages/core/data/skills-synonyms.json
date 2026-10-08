@@ -1,0 +1,13 @@
+{
+  "javascript": ["js", "ecmascript", "es6", "node.js", "nodejs"],
+  "typescript": ["ts"],
+  "python": ["py"],
+  "react": ["react.js", "reactjs"],
+  "aws": ["amazon web services", "aws ec2", "ec2", "s3", "lambda"],
+  "postgresql": ["postgres", "psql"],
+  "sql": ["mysql", "t-sql", "pl/sql"],
+  "docker": ["containers"],
+  "kubernetes": ["k8s"],
+  "machine learning": ["ml", "scikit-learn"],
+  "ci/cd": ["github actions", "gitlab ci", "jenkins"]
+}

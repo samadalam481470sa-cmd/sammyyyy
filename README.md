@@ -1,5 +1,8 @@
 # Job search toolkit
 
+**Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, and dashboard. It never submits, never invents facts, and never runs on LinkedIn Easy Apply. See [`fillglen/README.md`](fillglen/README.md).
+
+
 Two components that work together to make applying to jobs fast, without
 faking anything or fighting anti-bot systems.
 

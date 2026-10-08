@@ -15,3 +15,5 @@ job-finder/users/
 
 node_modules/
 .DS_Store
+fillglen/**/dist/
+fillglen/**/.data/

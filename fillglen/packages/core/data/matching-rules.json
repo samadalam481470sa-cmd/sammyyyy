@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "notes": "Remote-updatable DATA, not executable code. Fillglen ships a bundled copy.",
+  "selfIdTypes": ["gender", "race", "veteran", "disability"],
+  "neverAiTypes": ["gender", "race", "veteran", "disability", "workAuthorization", "visaSponsorship"],
+  "finalSubmitPatterns": [
+    "submit application",
+    "submit your application",
+    "send application",
+    "finish application",
+    "confirm and submit"
+  ],
+  "stepAdvancePatterns": [
+    "save and continue",
+    "continue",
+    "next",
+    "next step"
+  ],
+  "linkedinEasyApply": {
+    "hosts": ["linkedin.com", "www.linkedin.com"],
+    "pathHints": ["/easy-apply", "easyApply", "easy-apply"],
+    "copyHints": ["easy apply"]
+  },
+  "fields": [
+    { "type": "email", "patterns": ["email", "e-mail", "email address"] },
+    { "type": "phone", "patterns": ["phone", "mobile", "cell", "telephone"] },
+    { "type": "firstName", "patterns": ["first name", "given name", "legal first"] },
+    { "type": "lastName", "patterns": ["last name", "surname", "family name"] },
+    { "type": "fullName", "patterns": ["full name", "your name", "legal name"] },
+    { "type": "preferredName", "patterns": ["preferred name", "nickname", "chosen name"] },
+    { "type": "address", "patterns": ["street address", "address line", "mailing address"] },
+    { "type": "city", "patterns": ["city", "town"] },
+    { "type": "state", "patterns": ["state", "province", "region"] },
+    { "type": "zip", "patterns": ["zip", "postal", "postcode"] },
+    { "type": "country", "patterns": ["country"] },
+    { "type": "linkedin", "patterns": ["linkedin"] },
+    { "type": "github", "patterns": ["github"] },
+    { "type": "portfolio", "patterns": ["portfolio", "personal site", "website", "url"] },
+    { "type": "resume", "patterns": ["resume", "cv", "curriculum"] },
+    { "type": "coverLetter", "patterns": ["cover letter"] },
+    { "type": "workAuthorization", "patterns": ["authorized to work", "legally authorized", "work authorization", "eligible to work"] },
+    { "type": "visaSponsorship", "patterns": ["visa sponsorship", "require sponsorship", "need sponsorship", "h-1b"] },
+    { "type": "salary", "patterns": ["salary", "compensation", "expected pay", "pay expectation"] },
+    { "type": "startDate", "patterns": ["start date", "available to start", "earliest start"] },
+    { "type": "noticePeriod", "patterns": ["notice period", "when can you start"] },
+    { "type": "relocation", "patterns": ["willing to relocate", "relocation"] },
+    { "type": "remote", "patterns": ["remote", "hybrid", "onsite", "on-site"] },
+    { "type": "school", "patterns": ["school", "university", "college"] },
+    { "type": "degree", "patterns": ["degree", "qualification"] },
+    { "type": "major", "patterns": ["major", "field of study", "area of study"] },
+    { "type": "gpa", "patterns": ["gpa", "grade point"] },
+    { "type": "company", "patterns": ["employer", "company name"] },
+    { "type": "jobTitle", "patterns": ["job title", "position title", "role title"] },
+    { "type": "gender", "patterns": ["gender", "sex"] },
+    { "type": "race", "patterns": ["race", "ethnicity", "hispanic", "latino"] },
+    { "type": "veteran", "patterns": ["veteran", "protected veteran", "military"] },
+    { "type": "disability", "patterns": ["disability", "disabled"] },
+    { "type": "motivation", "patterns": ["why do you want", "why this company", "why this role", "why are you interested"] },
+    { "type": "behavioral", "patterns": ["tell us about a time", "describe a time", "give an example of"] }
+  ]
+}

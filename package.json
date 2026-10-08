@@ -8,7 +8,8 @@
     "discover": "node job-finder/src/index.js",
     "discover:all": "node job-finder/src/multiuser.js",
     "build:extension": "node scripts/build-extension.js",
-    "test": "node --test job-finder/test/*.test.js web/test/*.test.js"
+    "test": "node --test job-finder/test/*.test.js web/test/*.test.js",
+    "test:fillglen": "npm test --prefix fillglen"
   },
   "engines": {
     "node": ">=20"
