@@ -3,6 +3,7 @@ import {
   diffQuestions,
   EMPTY_PROFILE,
   feedMetaForUrl,
+  mayAdvance,
   planPage,
   shouldBlockPage,
   type Profile,
@@ -13,6 +14,7 @@ import {
   clickAdvance,
   clickMatchingDropdown,
   detectCaptcha,
+  findAdvanceControl,
   flashAndScroll,
   readWorkdayStep,
   scanDocument,
@@ -157,7 +159,8 @@ function boot() {
   async function keepCycle() {
     if (window !== window.top) return;
     const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
-    if (!stored.keepApplying || paused || blocked) return;
+    const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
+    if (!stored.keepApplying || paused || originPaused || blocked) return;
     if (detectCaptcha(document)) {
       if (!waitingOnCaptcha) {
         waitingOnCaptcha = true;
@@ -183,6 +186,15 @@ function boot() {
     }
     await new Promise((r) => setTimeout(r, 450));
     const stillEmpty = questions.filter((q) => q.required && !q.value);
+    const found = findAdvanceControl(document, "keep-applying");
+    if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
+      stuckTicks += 1;
+      if (stuckTicks >= 8) {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+      }
+      return;
+    }
     const clicked = clickAdvance("keep-applying");
     if (clicked?.kind === "next") {
       stuckTicks = 0;

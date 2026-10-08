@@ -1,5 +1,5 @@
 import { classifyQuestion } from "./classify.js";
-import { classifyAdvanceLabel, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
+import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
 import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
 import { stableQuestionId } from "./questionId.js";
 import { normalize } from "./fuzzy.js";
@@ -69,7 +69,8 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
   for (const el of found) {
     if (!visible(el)) continue;
     if (el instanceof HTMLInputElement && ["hidden", "submit", "button", "image"].includes(el.type)) continue;
-    if (isFinalSubmitLabel(el.getAttribute("value") || el.textContent || "")) continue;
+    const controlLabel = el.getAttribute("value") || el.textContent || "";
+    if (isFinalSubmitLabel(controlLabel) || classifyAdvanceLabel(controlLabel)) continue;
     const label = labelFor(el);
     if (!label && kindOf(el) === "text" && !(el instanceof HTMLInputElement)) continue;
     const classified = classifyQuestion(
@@ -199,8 +200,12 @@ export function clickMatchingDropdown(id: string, value: string): boolean {
 }
 
 export function detectCaptcha(doc: Document): boolean {
-  const iframes = [...doc.querySelectorAll("iframe")].map((f) => f.src || "");
-  return pageLooksLikeCaptcha(doc.body?.innerText?.slice(0, 4000) || "", iframes);
+  const challengeFrames = [...doc.querySelectorAll("iframe")].filter((f) => {
+    const r = f.getBoundingClientRect();
+    return isCaptchaChallengeFrame(f.src || "", r.width, r.height);
+  });
+  if (challengeFrames.length) return true;
+  return pageLooksLikeCaptcha(doc.body?.innerText?.slice(0, 4000) || "", []);
 }
 
 export function findAdvanceControl(

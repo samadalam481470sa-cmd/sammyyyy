@@ -1,6 +1,6 @@
 # Job search toolkit
 
-**Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, dashboard, and 24/7 local job finder. It never submits, never invents facts, and never runs on LinkedIn Easy Apply. See [`fillglen/README.md`](fillglen/README.md).
+**Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, dashboard, and 24/7 local job finder. It never invents facts and never runs on LinkedIn Easy Apply. Final Submit is only clicked after you turn on **Autofill & keep applying**. CAPTCHAs wait for you. See [`fillglen/README.md`](fillglen/README.md).
 
 **Download the Chrome extension:**
 [**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip)

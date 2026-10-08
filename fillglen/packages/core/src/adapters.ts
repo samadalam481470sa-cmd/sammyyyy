@@ -1,6 +1,10 @@
 import type { BoardAdapter, JobMeta } from "./types.js";
 
-function meta(board: string, url: string, extra: Partial<JobMeta> = {}): JobMeta {
+function meta(
+  board: string,
+  url: string,
+  extra: Partial<JobMeta> & { heading?: string; bodyText?: string } = {}
+): JobMeta {
   return {
     company: extra.company || guessCompany(url),
     title: extra.title || extra.heading || "",

@@ -2,7 +2,7 @@
 
 Fillglen is a job-application platform with a **live question window** that sits beside the form, a Chrome extension that fills from your profile, a dashboard for tracking, and a small API for accounts and AI drafts.
 
-It never clicks the final Submit button. It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes LinkedIn or Indeed.
+It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes LinkedIn or Indeed. Final Submit is only clicked in **Autofill & keep applying** after you turn that on. CAPTCHAs wait for you — they are never solved automatically.
 
 ## Name
 
@@ -40,7 +40,7 @@ npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
 
 Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
 
-**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Next/Submit, then the next job. If a CAPTCHA appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
+**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then the next job. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
 
 Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/keep-applying-autofill-0208
 

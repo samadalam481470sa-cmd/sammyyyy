@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "Fillglen",
   version: "0.1.0",
-  description: "Live question window for job applications. Fills from your profile. Never submits. Never runs on LinkedIn Easy Apply.",
+  description: "Live question window for job applications. Fills from your profile. Keep applying submits only after you turn it on. Never LinkedIn Easy Apply. Never solves CAPTCHAs.",
   icons: {
     "16": "public/icon16.png",
     "32": "public/icon32.png",

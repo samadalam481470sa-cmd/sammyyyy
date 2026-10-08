@@ -5,7 +5,7 @@ export function isFinalSubmitLabel(label: string): boolean {
   const n = normalize(label);
   if (!n) return false;
   if (rules.finalSubmitPatterns.some((p) => n === normalize(p) || n.includes(normalize(p)))) return true;
-  if (n === "submit" || n === "apply" || n === "apply now") return true;
+  if (n === "submit") return true;
   return false;
 }
 

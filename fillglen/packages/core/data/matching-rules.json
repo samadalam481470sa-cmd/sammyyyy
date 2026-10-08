@@ -17,7 +17,11 @@
     "next",
     "next step",
     "continue application",
-    "review and continue"
+    "review and continue",
+    "apply",
+    "apply now",
+    "apply for this job",
+    "start application"
   ],
   "linkedinEasyApply": {
     "hosts": ["linkedin.com", "www.linkedin.com"],

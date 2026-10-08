@@ -1,6 +1,7 @@
 import {
   adapterFor,
   EMPTY_PROFILE,
+  canonicalJobUrl,
   fetchBuiltInJobQueue,
   isSupportedApplyUrl,
   nextQueueItem,
@@ -115,8 +116,11 @@ chrome.runtime.onConnect.addListener((port) => {
         if (!snap) return;
         sendToTab(tabId, { type: "fill-plans", plans: planPage(snap.questions, profile) });
       }
-      if (msg.type === "fill-one" || msg.type === "insert-draft" || msg.type === "edit-value") {
-        sendToTab(tabId, { type: "fill-one", questionId: msg.questionId, value: msg.value ?? (msg as { text?: string }).text ?? "" });
+      if (msg.type === "fill-one" || msg.type === "edit-value") {
+        sendToTab(tabId, { type: "fill-one", questionId: msg.questionId, value: msg.value });
+      }
+      if (msg.type === "insert-draft") {
+        sendToTab(tabId, { type: "fill-one", questionId: msg.questionId, value: msg.text });
       }
       if (msg.type === "focus") sendToTab(tabId, { type: "focus", questionId: msg.questionId });
       if (msg.type === "undo") sendToTab(tabId, { type: "undo", questionId: msg.questionId });
@@ -275,9 +279,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== "fillglen-keep") return;
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying) return;
-    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-      const id = tabs[0]?.id;
-      if (id) sendToTab(id, { type: "keep-tick" });
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs) {
+        if (t.id && looksApply(t.url)) sendToTab(t.id, { type: "keep-tick" });
+      }
     });
   });
 });
@@ -299,8 +304,10 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     const seen = new Set<string>();
     const queue: ApplyQueueItem[] = [];
     for (const j of [...lookup, ...builtIn]) {
-      if (!j?.url || seen.has(j.url) || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url)) continue;
-      seen.add(j.url);
+      if (!j?.url || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url)) continue;
+      const key = canonicalJobUrl(j.url);
+      if (seen.has(key)) continue;
+      seen.add(key);
       queue.push({ url: j.url, title: j.title || "Job", company: j.company || "", source: j.source });
     }
     await chrome.storage.local.set({ applyQueue: queue });
@@ -325,7 +332,7 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
     chrome.action.setBadgeText({ text: "WAIT" });
     chrome.notifications?.create("fillglen-captcha", {
       type: "basic",
-      iconUrl: "public/icon128.png",
+      iconUrl: chrome.runtime.getURL("public/icon128.png"),
       title: "Fillglen: CAPTCHA on screen",
       message: "Solve it yourself. Fillglen waits on this tab, then keeps applying. It never solves CAPTCHAs.",
     });
@@ -338,7 +345,7 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
   if (status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
     const next = nextQueueItem(applyQueue, currentUrl || "");
     const url = next?.url || applyQueue[0]?.url;
-    if (url && url !== currentUrl) {
+    if (url && canonicalJobUrl(url) !== canonicalJobUrl(currentUrl || "")) {
       setTimeout(() => chrome.tabs.update(tabId, { url }), 1200);
     }
   }

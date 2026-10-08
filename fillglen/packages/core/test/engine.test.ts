@@ -7,6 +7,8 @@ import { isFinalSubmitLabel, isStepAdvanceLabel, mayAutoClick } from "../src/sub
 import {
   captchaPolicy,
   classifyAdvanceLabel,
+  isCaptchaChallengeFrame,
+  mayAdvance,
   matchOption,
   nextQueueItem,
   pageLooksLikeCaptcha,
@@ -163,6 +165,8 @@ describe("linkedin and submit guards", () => {
     assert.equal(isFinalSubmitLabel("Submit Application"), true);
     assert.equal(mayAutoClick("Submit Application"), false);
     assert.equal(isFinalSubmitLabel("Submit"), true);
+    assert.equal(isFinalSubmitLabel("Apply"), false);
+    assert.equal(isStepAdvanceLabel("Apply"), true);
   });
   it("recognizes Workday step buttons without treating them as final submit", () => {
     assert.equal(isStepAdvanceLabel("Save and Continue"), true);
@@ -186,16 +190,29 @@ describe("dropdown and keep-applying loop", () => {
   });
   it("classifies next vs submit", () => {
     assert.equal(classifyAdvanceLabel("Save and Continue"), "next");
+    assert.equal(classifyAdvanceLabel("Apply"), "next");
+    assert.equal(classifyAdvanceLabel("Apply Now"), "next");
     assert.equal(classifyAdvanceLabel("Submit Application"), "submit");
   });
-  it("detects captcha copy", () => {
+  it("detects a visible captcha challenge, not a hidden recaptcha checkbox", () => {
     assert.equal(pageLooksLikeCaptcha("Please verify you are human"), true);
     assert.equal(pageLooksLikeCaptcha("First name"), false);
+    assert.equal(pageLooksLikeCaptcha("I'm not a robot First name"), false);
+    assert.equal(pageLooksLikeCaptcha("First name", ["https://www.google.com/recaptcha/api2/anchor"]), false);
+    assert.equal(pageLooksLikeCaptcha("First name", ["https://www.google.com/recaptcha/api2/bframe?x=1"]), true);
+    assert.equal(isCaptchaChallengeFrame("https://www.google.com/recaptcha/api2/anchor", 300, 80), false);
+    assert.equal(isCaptchaChallengeFrame("https://www.google.com/recaptcha/api2/bframe", 400, 500), true);
+    assert.equal(isCaptchaChallengeFrame("https://www.google.com/recaptcha/api2/bframe", 0, 0), false);
   });
   it("waits for a person to finish a CAPTCHA and never leaves the page", () => {
     assert.equal(captchaPolicy(true), "wait-for-human");
     assert.equal(captchaPolicy(false), "continue");
     assert.equal(shouldLeavePageOnCaptcha(), false);
+  });
+  it("does not submit while required fields are empty", () => {
+    assert.equal(mayAdvance("next", 2), true);
+    assert.equal(mayAdvance("submit", 2), false);
+    assert.equal(mayAdvance("submit", 0), true);
   });
   it("walks to the next sourced job in the queue", () => {
     const q = [
@@ -204,6 +221,7 @@ describe("dropdown and keep-applying loop", () => {
     ];
     assert.equal(nextQueueItem(q, q[0].url)?.url, q[1].url);
     assert.equal(nextQueueItem(q, q[1].url), null);
+    assert.equal(nextQueueItem(q, `${q[0].url}?gh_jid=1`)?.url, q[1].url);
   });
 });
 

@@ -79,7 +79,7 @@ function Popup() {
             }
             await chrome.runtime.sendMessage({ type: "start-keep-applying" });
             setKeepApplying(true);
-            setStatus("Keep applying is on. It pulls the built-in researched job list (no 24/7 server required), fills fields and dropdowns, clicks Next/Submit, then the next job while Chrome stays open. If a CAPTCHA appears, solve it on this screen — Fillglen waits, then continues. It never solves CAPTCHAs.");
+            setStatus("Keep applying is on. It pulls the built-in researched job list (no 24/7 server required), fills fields and dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then the next job while Chrome stays open. If a CAPTCHA challenge appears, solve it on this screen — Fillglen waits, then continues. It never solves CAPTCHAs.");
           }}
         >
           Autofill & keep applying
@@ -117,7 +117,7 @@ function Popup() {
         />
       </label>
       <p className="meta">
-        New local matches: {matches.count}. Search runs on the server, not in this popup.
+        New local matches: {matches.count}. Keep applying uses the built-in researched list in this extension; the 24/7 server is optional.
       </p>
       <ol className="qlist">
         {(matches.top || []).map((m) => (

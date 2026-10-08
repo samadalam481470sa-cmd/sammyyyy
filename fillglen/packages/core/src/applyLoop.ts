@@ -22,20 +22,38 @@ export function matchOption(value: string, options: string[]): string | null {
 }
 
 export function classifyAdvanceLabel(label: string): "next" | "submit" | null {
+  const n = normalize(label);
+  // Job-board "Apply" opens the form. Treat it as a step, not a finished submission.
+  if (/^(apply|apply now|apply for this job|start application)$/.test(n)) return "next";
   if (isFinalSubmitLabel(label)) return "submit";
   if (isStepAdvanceLabel(label)) return "next";
-  const n = normalize(label);
   if (/^(save and continue|continue|next|next step|save & continue|continue application)$/.test(n)) return "next";
-  if (/^(submit|apply|apply now|submit application)$/.test(n)) return "submit";
+  if (/^(submit|submit application|submit my application)$/.test(n)) return "submit";
   return null;
 }
 
+/**
+ * Only a visible challenge counts. ATS pages often load a hidden recaptcha
+ * checkbox iframe and the words "I'm not a robot" — those must not freeze the loop.
+ */
 export function pageLooksLikeCaptcha(text: string, iframeSrcs: string[] = []): boolean {
-  const blob = `${text} ${iframeSrcs.join(" ")}`.toLowerCase();
-  return (
-    /recaptcha|hcaptcha|funcaptcha|verify you are human|i.m not a robot|complete the captcha/.test(blob) ||
-    iframeSrcs.some((s) => /recaptcha|hcaptcha|arkoselabs|funcaptcha/i.test(s))
-  );
+  const blob = text.toLowerCase();
+  if (/verify you are human|complete the captcha|select all (images|squares|pictures)|hcaptcha challenge/.test(blob)) {
+    return true;
+  }
+  return iframeSrcs.some((s) => /recaptcha\/.*bframe|hcaptcha\.com\/captcha|arkoselabs|funcaptcha/i.test(s));
+}
+
+export function isCaptchaChallengeFrame(src: string, width = 0, height = 0): boolean {
+  if (!/recaptcha\/.*bframe|hcaptcha\.com\/captcha|arkoselabs|funcaptcha/i.test(src)) return false;
+  return width > 80 && height > 80;
+}
+
+/** Do not click final Submit while required fields are still empty. Next/Apply is fine. */
+export function mayAdvance(kind: "next" | "submit" | null, requiredEmpty: number): boolean {
+  if (kind === "next") return true;
+  if (kind === "submit") return requiredEmpty === 0;
+  return false;
 }
 
 /** Fillglen never solves CAPTCHAs. It waits on the open tab until a person finishes it. */
@@ -56,9 +74,19 @@ export interface ApplyQueueItem {
   source?: string;
 }
 
+export function canonicalJobUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}${u.pathname.replace(/\/$/, "")}`.toLowerCase();
+  } catch {
+    return url.split("?")[0].replace(/\/$/, "").toLowerCase();
+  }
+}
+
 export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): ApplyQueueItem | null {
   if (!queue.length) return null;
-  const i = queue.findIndex((q) => q.url === currentUrl);
+  const cur = canonicalJobUrl(currentUrl);
+  const i = queue.findIndex((q) => canonicalJobUrl(q.url) === cur);
   const next = i >= 0 ? queue[i + 1] : queue[0];
   return next || null;
 }
