@@ -63,7 +63,9 @@ export async function apiKeySignIn(apiKey: string) {
     storeSession(data.token, data.user)
     return data
   } catch (err) {
-    // Static demo fallbacks
+    const { findLocalIssuedKey, isLocalSlotRevoked } = await import('@/lib/demoStore')
+
+    // Static demo fallbacks — honor managerial revokes stored in localStorage
     if (apiKey === MANAGER_MASTER_KEY) {
       const user: AuthUser = {
         id: 'user-manager',
@@ -80,7 +82,37 @@ export async function apiKeySignIn(apiKey: string) {
       storeSession('local-demo', user)
       return { token: 'local-demo', user }
     }
+
+    const issued = findLocalIssuedKey(apiKey)
+    if (issued) {
+      if (issued.status === 'revoked' || isLocalSlotRevoked(issued.slot)) {
+        throw new Error(
+          'This API key has been revoked by the managerial key. Access denied.',
+        )
+      }
+      const user: AuthUser = {
+        id: 'user-dennis',
+        email: 'dennis@newportspecialty.demo',
+        name: 'Dennis DiCapua',
+        role: 'partner',
+        initials: 'DD',
+        authMethod: 'api_key',
+        isManager: false,
+        apiKeyId: `key-slot-${issued.slot}`,
+        apiKeySlot: issued.slot,
+        apiKeyLabel: `Slot ${issued.slot}`,
+      }
+      storeSession('local-demo', user)
+      return { token: 'local-demo', user }
+    }
+
+    // Legacy demo slot-1 fallback only if that slot is not revoked
     if (apiKey === DEMO_SLOT1_KEY) {
+      if (isLocalSlotRevoked(1)) {
+        throw new Error(
+          'This API key has been revoked by the managerial key. Access denied.',
+        )
+      }
       const user: AuthUser = {
         id: 'user-dennis',
         email: 'dennis@newportspecialty.demo',
@@ -294,10 +326,13 @@ export async function kickSession(id: string) {
 }
 
 export async function revokeApiKeySlot(slot: number) {
-  return apiFetch<{ ok: boolean; slot: number; status: string }>(
-    `/security/api-keys/${slot}/revoke`,
-    { method: 'POST', body: '{}' },
-  )
+  return apiFetch<{
+    ok: boolean
+    slot: number
+    status: string
+    sessionsTerminated?: number
+    notice?: string
+  }>(`/security/api-keys/${slot}/revoke`, { method: 'POST', body: '{}' })
 }
 
 export async function provisionApiKeySlot(slot: number, label?: string) {

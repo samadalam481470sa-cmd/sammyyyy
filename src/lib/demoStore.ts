@@ -54,3 +54,48 @@ export function loadDemoChangeHistory() {
     createdAt: string
   }>('change_history', [])
 }
+
+/** Issued local-demo API keys (plaintext → slot) so revoke can block login. */
+export type LocalIssuedKey = { slot: number; plaintext: string; status: 'active' | 'revoked' }
+
+export function loadLocalIssuedKeys(): LocalIssuedKey[] {
+  return loadDemoCollection<LocalIssuedKey>('issued_api_keys', [
+    {
+      slot: 1,
+      plaintext: 'nwp_demo_key_slot1_replace_me_by_security_team',
+      status: 'active',
+    },
+  ])
+}
+
+export function saveLocalIssuedKeys(keys: LocalIssuedKey[]): void {
+  saveDemoCollection('issued_api_keys', keys)
+}
+
+export function revokeLocalIssuedKey(slot: number): void {
+  const next = loadLocalIssuedKeys().map((k) =>
+    k.slot === slot ? { ...k, status: 'revoked' as const } : k,
+  )
+  // Ensure slot exists even if never provisioned in this browser
+  if (!next.some((k) => k.slot === slot)) {
+    next.push({ slot, plaintext: '', status: 'revoked' })
+  }
+  saveLocalIssuedKeys(next)
+}
+
+export function registerLocalIssuedKey(slot: number, plaintext: string): void {
+  const others = loadLocalIssuedKeys().filter((k) => k.slot !== slot)
+  saveLocalIssuedKeys([...others, { slot, plaintext, status: 'active' }])
+}
+
+export function findLocalIssuedKey(plaintext: string): LocalIssuedKey | undefined {
+  return loadLocalIssuedKeys().find((k) => k.plaintext && k.plaintext === plaintext)
+}
+
+export function isLocalSlotRevoked(slot: number): boolean {
+  const slots = loadDemoCollection<{ slot: number; status: string }>('api_key_slots', [])
+  const fromSlots = slots.find((s) => s.slot === slot)
+  if (fromSlots?.status === 'revoked') return true
+  const issued = loadLocalIssuedKeys().find((k) => k.slot === slot)
+  return issued?.status === 'revoked'
+}

@@ -148,6 +148,27 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(401).json({ error: 'Session expired' })
     }
 
+    // If this session was created with a partner API key, confirm the key is still active.
+    // Managerial revoke must immediately block further use even if a cookie/token remains.
+    if (session.auth_method === 'api_key' && session.api_key_id) {
+      const linked = db
+        .prepare(`SELECT status, slot FROM api_keys WHERE id = ?`)
+        .get(session.api_key_id) as { status: string; slot: number } | undefined
+      if (!linked || linked.status !== 'active') {
+        db.prepare('DELETE FROM sessions WHERE id = ?').run(session.session_id)
+        writeAudit(
+          session.user_id,
+          session.user_name,
+          'auth.blocked_revoked_key',
+          'api_key',
+          session.api_key_id,
+          `Blocked session — key slot ${linked?.slot ?? '?'} is ${linked?.status ?? 'missing'}`,
+          req,
+        )
+        return res.status(401).json({ error: 'API key has been revoked. Sign in is no longer allowed.' })
+      }
+    }
+
     const isManager = session.auth_method === 'manager_key'
     req.auth = {
       userId: session.user_id,

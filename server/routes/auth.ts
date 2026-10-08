@@ -128,13 +128,28 @@ authRouter.post('/api-key', authRateLimit, lockoutGuard, (req, res) => {
     })
   }
 
-  const key = db
-    .prepare(
-      `SELECT id, slot, label, status FROM api_keys WHERE key_hash = ? AND status = 'active'`,
+  // Look up by hash first so we can distinguish revoked vs unknown keys
+  const anyKey = db
+    .prepare(`SELECT id, slot, label, status FROM api_keys WHERE key_hash = ?`)
+    .get(hashed) as { id: string; slot: number; label: string; status: string } | undefined
+
+  if (anyKey && anyKey.status === 'revoked') {
+    recordAuthFailure(req.ip, req)
+    writeAudit(
+      null,
+      'anonymous',
+      'auth.api_key_revoked',
+      'api_key',
+      anyKey.id,
+      `Rejected login — slot ${anyKey.slot} was revoked by managerial key`,
+      req,
     )
-    .get(hashed) as
-    | { id: string; slot: number; label: string; status: string }
-    | undefined
+    return res
+      .status(401)
+      .json({ error: 'This API key has been revoked by the managerial key. Access denied.' })
+  }
+
+  const key = anyKey?.status === 'active' ? anyKey : undefined
 
   if (!key) {
     recordAuthFailure(req.ip, req)

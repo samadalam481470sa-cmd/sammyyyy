@@ -161,11 +161,12 @@ securityRouter.post('/api-keys/:slot/revoke', requireManager, (req, res) => {
     | undefined
   if (!key) return res.status(404).json({ error: 'Slot not found' })
 
+  // Keep key_hash so a later login attempt is recognized as revoked (not "unknown")
   db.prepare(
-    `UPDATE api_keys SET status = 'revoked', key_hash = NULL, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE api_keys SET status = 'revoked', updated_at = datetime('now') WHERE id = ?`,
   ).run(key.id)
-  // Kick any sessions that used this key
-  db.prepare(`DELETE FROM sessions WHERE api_key_id = ?`).run(key.id)
+  // Kick any sessions that used this key — they cannot keep working after revoke
+  const kicked = db.prepare(`DELETE FROM sessions WHERE api_key_id = ?`).run(key.id)
 
   writeAudit(
     req.auth!.userId,
@@ -173,10 +174,16 @@ securityRouter.post('/api-keys/:slot/revoke', requireManager, (req, res) => {
     'api_key.revoke',
     'api_key',
     key.id,
-    `Revoked slot ${slot}`,
+    `Revoked slot ${slot}; terminated ${kicked.changes} session(s). Future logins with this key are denied.`,
     req,
   )
-  res.json({ ok: true, slot, status: 'revoked' })
+  res.json({
+    ok: true,
+    slot,
+    status: 'revoked',
+    sessionsTerminated: kicked.changes,
+    notice: 'This key can no longer sign in. Provision the slot again to issue a replacement.',
+  })
 })
 
 const provisionSchema = z.object({

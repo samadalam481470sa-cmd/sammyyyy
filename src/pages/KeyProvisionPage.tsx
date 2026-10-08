@@ -7,7 +7,11 @@ import {
   getStoredSession,
   provisionApiKeySlot,
 } from '@/lib/api'
-import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import {
+  loadDemoCollection,
+  registerLocalIssuedKey,
+  saveDemoCollection,
+} from '@/lib/demoStore'
 
 type Slot = {
   id: string
@@ -78,6 +82,7 @@ export function KeyProvisionPage() {
           : s,
       )
       saveDemoCollection('api_key_slots', next)
+      registerLocalIssuedKey(selectedSlot, plaintext)
       setSlots(next)
       setIssued(plaintext)
       setMessage('Key issued (local demo). Copy it now — it will not be shown again.')

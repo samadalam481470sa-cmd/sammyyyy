@@ -9,7 +9,11 @@ import {
   kickSession,
   revokeApiKeySlot,
 } from '@/lib/api'
-import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import {
+  loadDemoCollection,
+  revokeLocalIssuedKey,
+  saveDemoCollection,
+} from '@/lib/demoStore'
 
 type Slot = {
   id: string
@@ -76,18 +80,24 @@ export function KeyControlPage() {
 
   const onRevoke = async (slot: number) => {
     setMessage(null)
+    setError(null)
     if (local) {
       const next = slots.map((s) =>
         s.slot === slot ? { ...s, status: 'revoked', key_prefix: 'nwp_revoked_' } : s,
       )
       saveDemoCollection('api_key_slots', next)
+      revokeLocalIssuedKey(slot)
       setSlots(next)
-      setMessage(`Slot ${slot} revoked (local demo).`)
+      setMessage(
+        `Slot ${slot} revoked. That key can no longer sign in until you provision a replacement.`,
+      )
       return
     }
     try {
-      await revokeApiKeySlot(slot)
-      setMessage(`Slot ${slot} revoked. Related sessions kicked.`)
+      const result = await revokeApiKeySlot(slot)
+      setMessage(
+        `Slot ${slot} revoked. ${result.sessionsTerminated ?? 0} session(s) kicked — that key can no longer sign in.`,
+      )
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Revoke failed')
