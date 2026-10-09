@@ -61,6 +61,9 @@ export type QuestionType =
   | "race"
   | "veteran"
   | "disability"
+  | "transgender"
+  | "sexualOrientation"
+  | "firstGeneration"
   | "citizenship"
   | "consent"
   | "password"
@@ -192,12 +195,15 @@ export interface Preferences {
   unknownAnswerPolicy: "resume-then-no";
 }
 
-/** Defaults to Decline. Encrypt at rest. Never send to the AI model. */
+/** Remembered EEO answers. Encrypt at rest. Never send to the AI model. */
 export interface SelfIdentification {
   gender: string;
   race: string;
   veteran: string;
   disability: string;
+  transgender: string;
+  sexualOrientation: string;
+  firstGeneration: string;
 }
 
 export interface Profile {
@@ -288,7 +294,7 @@ export const EMPTY_PROFILE: Profile = {
     addressLine2: "",
     city: "",
     state: "",
-    zip: "",
+    zip: "75006",
     country: "United States",
     linkedin: "",
     github: "",
@@ -313,17 +319,50 @@ export const EMPTY_PROFILE: Profile = {
     unknownAnswerPolicy: "resume-then-no",
   },
   selfIdentification: {
-    gender: "Decline to self-identify",
-    race: "Decline to self-identify",
-    veteran: "I am not a protected veteran",
-    disability: "No, I don't have a disability",
+    gender: "Male",
+    race: "South Asian",
+    veteran: "No, I am not a veteran",
+    disability: "No",
+    transgender: "No",
+    sexualOrientation: "I don't wish to answer",
+    firstGeneration: "Yes",
   },
   rawResumeText: "",
 };
 
+/** Seeded so reworded EEO prompts still autofill the same answers. */
+export const DEFAULT_EEO_ANSWERS: SavedAnswer[] = [
+  { id: "eeo-gender", pattern: "gender identity", answer: "Male", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-trans", pattern: "identify as transgender", answer: "No", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-orientation", pattern: "sexual orientation", answer: "I don't wish to answer", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-race", pattern: "race/ethnicity", answer: "South Asian", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-veteran", pattern: "veteran status", answer: "No, I am not a veteran", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-disability", pattern: "i have a disability", answer: "No", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-first-gen", pattern: "first-generation professional", answer: "Yes", tags: ["eeo"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-country", pattern: "country code", answer: "United States", tags: ["contact"], useCount: 0, lastUsedAt: null },
+  { id: "eeo-zip", pattern: "zip code", answer: "75006", tags: ["contact"], useCount: 0, lastUsedAt: null },
+];
+
+function mergeEeoAnswers(existing: SavedAnswer[] | undefined): SavedAnswer[] {
+  const base = [...(existing || [])];
+  const patterns = new Set(base.map((a) => normalizeLoose(a.pattern)));
+  for (const row of DEFAULT_EEO_ANSWERS) {
+    const key = normalizeLoose(row.pattern);
+    if (patterns.has(key)) continue;
+    base.push({ ...row });
+    patterns.add(key);
+  }
+  return base;
+}
+
+function normalizeLoose(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 /** Fill missing fields with US-citizen product defaults without wiping a saved profile. */
 export function hydrateProfile(raw: Partial<Profile> | null | undefined): Profile {
   const p = raw || {};
+  const self = { ...EMPTY_PROFILE.selfIdentification, ...(p.selfIdentification || {}) };
   return {
     ...EMPTY_PROFILE,
     ...p,
@@ -331,6 +370,7 @@ export function hydrateProfile(raw: Partial<Profile> | null | undefined): Profil
       ...EMPTY_PROFILE.contact,
       ...(p.contact || {}),
       country: p.contact?.country || "United States",
+      zip: p.contact?.zip || "75006",
     },
     preferences: {
       ...EMPTY_PROFILE.preferences,
@@ -340,12 +380,12 @@ export function hydrateProfile(raw: Partial<Profile> | null | undefined): Profil
       usCitizen: p.preferences?.usCitizen !== false,
       unknownAnswerPolicy: "resume-then-no",
     },
-    selfIdentification: { ...EMPTY_PROFILE.selfIdentification, ...(p.selfIdentification || {}) },
+    selfIdentification: self,
     work: p.work || EMPTY_PROFILE.work,
     education: p.education || EMPTY_PROFILE.education,
     skills: p.skills || EMPTY_PROFILE.skills,
     documents: p.documents || EMPTY_PROFILE.documents,
-    answers: p.answers || EMPTY_PROFILE.answers,
+    answers: mergeEeoAnswers(p.answers),
     rawResumeText: p.rawResumeText || "",
   };
 }

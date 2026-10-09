@@ -91,16 +91,57 @@ export function pickDecline(options: string[]): string | null {
   return findByAliases(options, DECLINE);
 }
 
-export function pickDemographicOption(type: QuestionType | "consent" | "citizenship", preferred: string, options: string[] = []): string {
+const SOUTH_ASIAN = [
+  "south asian",
+  "asian indian",
+  "asian (south asian)",
+  "indian",
+  "asian",
+];
+
+const US_COUNTRY = [
+  "united states",
+  "united states of america",
+  "usa",
+  "us",
+  "u.s.",
+  "u.s.a.",
+  "+1",
+  "united states (+1)",
+  "usa (+1)",
+  "us (+1)",
+  "1",
+];
+
+export function pickDemographicOption(
+  type: QuestionType | "consent" | "citizenship" | "country",
+  preferred: string,
+  options: string[] = []
+): string {
   if (!options.length) return preferred;
   const usable = options.filter((o) => !isPlaceholderOption(o));
   if (preferred) {
     const direct = matchOption(preferred, usable);
     if (direct) return direct;
   }
-  if (type === "veteran") return findByAliases(usable, [...NOT_VETERAN, ...DECLINE]) || preferred;
+  if (type === "veteran") return findByAliases(usable, [...NOT_VETERAN, "no i am not a veteran", "no", ...DECLINE]) || preferred;
   if (type === "disability") return findByAliases(usable, [...NO_DISABILITY, ...DECLINE]) || preferred;
-  if (type === "gender" || type === "race") return pickDecline(usable) || preferred;
+  if (type === "gender") {
+    if (/decline|wish to answer|prefer not|do not wish/.test(normalize(preferred))) {
+      return findByAliases(usable, [...DECLINE, preferred]) || preferred;
+    }
+    return findByAliases(usable, [preferred, "male", ...DECLINE]) || preferred;
+  }
+  if (type === "race") {
+    if (/decline|wish to answer|prefer not|do not wish/.test(normalize(preferred))) {
+      return findByAliases(usable, [...DECLINE, preferred]) || preferred;
+    }
+    return findByAliases(usable, [...SOUTH_ASIAN, preferred, ...DECLINE]) || preferred;
+  }
+  if (type === "transgender") return findByAliases(usable, ["no", preferred, ...DECLINE]) || preferred;
+  if (type === "sexualOrientation") return findByAliases(usable, [...DECLINE, preferred]) || preferred;
+  if (type === "firstGeneration") return findByAliases(usable, ["yes", preferred]) || preferred;
+  if (type === "country") return findByAliases(usable, [...US_COUNTRY, preferred]) || preferred;
   if (type === "citizenship" || type === "workAuthorization") {
     return (
       findByAliases(usable, [...US_CITIZEN, "i am authorized", "authorized to work", "legally authorized", "eligible to work"]) ||
@@ -112,6 +153,16 @@ export function pickDemographicOption(type: QuestionType | "consent" | "citizens
     return findByAliases(usable, ["yes", "i agree", "i accept", "agree"]) || usable[0] || preferred;
   }
   return matchOption(preferred, usable) || preferred;
+}
+
+export function pickCountryAnswer(label: string, options?: string[]): string {
+  const n = normalize(label);
+  const codeish = /country code|dial(l)?ing code|phone country|calling code/.test(n);
+  if (!options?.length) return codeish ? "United States" : "United States";
+  const hit = pickDemographicOption("country", "United States", options);
+  if (hit) return hit;
+  if (codeish) return findByAliases(options, US_COUNTRY) || "United States";
+  return "United States";
 }
 
 export function pickCitizenAnswer(options?: string[]): string {
@@ -138,6 +189,37 @@ export function bestEffortAnswer(question: Question, profile: Profile): string {
   }
   if (question.type === "citizenship" || /citizen|nationality|us person|u s person/.test(label)) {
     return pickCitizenAnswer(options);
+  }
+  if (question.type === "country" || /country code|dial(l)?ing code|phone country|calling code|^country$/.test(label)) {
+    return pickCountryAnswer(question.label, options);
+  }
+  if (question.type === "zip" || /zip|postal/.test(label)) {
+    return profile.contact.zip || "75006";
+  }
+  if (question.type === "transgender" || /transgender/.test(label)) {
+    return pickDemographicOption("transgender", profile.selfIdentification.transgender || "No", options);
+  }
+  if (question.type === "sexualOrientation" || /sexual orientation/.test(label)) {
+    return pickDemographicOption(
+      "sexualOrientation",
+      profile.selfIdentification.sexualOrientation || "I don't wish to answer",
+      options
+    );
+  }
+  if (question.type === "firstGeneration" || /first.?generation/.test(label)) {
+    return pickDemographicOption("firstGeneration", profile.selfIdentification.firstGeneration || "Yes", options);
+  }
+  if (question.type === "gender" || /gender identity|what is your sex|^sex$/.test(label)) {
+    return pickDemographicOption("gender", profile.selfIdentification.gender || "Male", options);
+  }
+  if (question.type === "race" || /race|ethnicity/.test(label)) {
+    return pickDemographicOption("race", profile.selfIdentification.race || "South Asian", options);
+  }
+  if (question.type === "veteran" || /veteran/.test(label)) {
+    return pickDemographicOption("veteran", profile.selfIdentification.veteran || "No, I am not a veteran", options);
+  }
+  if (question.type === "disability" || /disability|disabled/.test(label)) {
+    return pickDemographicOption("disability", profile.selfIdentification.disability || "No", options);
   }
   if (/18 years|over 18|at least 18|age 18/.test(label)) {
     return matchOption("Yes", options) || "Yes";
@@ -196,6 +278,9 @@ const IDENTITY_TYPES = new Set<QuestionType>([
   "race",
   "veteran",
   "disability",
+  "transgender",
+  "sexualOrientation",
+  "firstGeneration",
   "citizenship",
   "consent",
   "password",

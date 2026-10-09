@@ -295,12 +295,18 @@ export function packedFromProfile(profile: Profile, prefer: PackedKind = "master
   );
 }
 
+function looksLikePdf(name: string, mime: string): boolean {
+  return /pdf/i.test(mime) || /\.pdf$/i.test(name);
+}
+
+/** Always attach a PDF — the original if the popup upload was PDF, else generated from that resume. */
 export function bytesForUpload(profile: Profile): PackedBytes {
   const packed = packedFromProfile(profile, "master-resume");
-  if (packed?.base64) {
+  if (packed?.base64 && looksLikePdf(packed.name || "", packed.mime || "")) {
+    const name = /\.pdf$/i.test(packed.name || "") ? packed.name! : `${(packed.name || "resume").replace(/\.[^.]+$/, "")}.pdf`;
     return {
-      name: packed.name || "resume.pdf",
-      mime: packed.mime || mimeForName(packed.name || "resume.pdf"),
+      name,
+      mime: PDF_MIME,
       bytes: base64ToBytes(packed.base64),
       text: packed.text || profile.rawResumeText,
     };

@@ -134,12 +134,16 @@ export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): Appl
   return rest.find((q) => q.url && !q.appliedAt) || null;
 }
 
-export const KEEP_FILL_GAP_MS = 8;
-export const KEEP_INTERVAL_MS = 90;
-export const KEEP_HEARTBEAT_MS = 400;
-export const KEEP_STUCK_TICKS = 8;
-export const KEEP_SCAN_BURST_MS = [40, 160, 400, 800];
-export const KEEP_MUTATION_DEBOUNCE_MS = 50;
+export const KEEP_FILL_GAP_MS = 18;
+export const KEEP_INTERVAL_MS = 240;
+export const KEEP_HEARTBEAT_MS = 500;
+export const KEEP_STUCK_TICKS = 10;
+export const KEEP_SCAN_BURST_MS = [120, 400, 900];
+export const KEEP_MUTATION_DEBOUNCE_MS = 220;
+/** Cap fields per tick so dropdown-heavy EEO pages do not freeze the tab. */
+export const KEEP_FIELDS_PER_TICK = 3;
+export const KEEP_COOLDOWN_MS = 140;
+export const KEEP_DROPDOWN_SETTLE_MS = 90;
 
 export type HandoffReason = "submitted" | "stuck" | "blocked" | "done-job";
 

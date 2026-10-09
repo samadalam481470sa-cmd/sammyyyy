@@ -6,10 +6,10 @@ import { isGoogleSignInLabel } from "./answers.js";
 export type FillPace = "fast" | "slow";
 export type ScreenKind = "act" | "never";
 
-export const KEEP_FAST_INTERVAL_MS = 90;
+export const KEEP_FAST_INTERVAL_MS = 240;
 export const KEEP_SLOW_INTERVAL_MS = 720;
-export const KEEP_SLOW_GAP_MS = 160;
-export const KEEP_SLOW_CHAR_MS = 42;
+export const KEEP_SLOW_GAP_MS = 120;
+export const KEEP_SLOW_CHAR_MS = 28;
 export const SCREEN_CLICK_BUDGET = 2;
 export const SCREEN_SKIP_MAX = 48;
 

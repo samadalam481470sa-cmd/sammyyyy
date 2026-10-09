@@ -34,7 +34,8 @@ import { buildAiPrompt, parseAiDraft } from "../src/ai.js";
 import { adapterFor, isSupportedApplyUrl } from "../src/adapters.js";
 import { isKnownAtsHost, looksLikeApplicationPage } from "../src/ats.js";
 import { bestSavedMatch, tokenSetRatio } from "../src/fuzzy.js";
-import { EMPTY_PROFILE, type Profile, type Question } from "../src/types.js";
+import { hydrateProfile, EMPTY_PROFILE, type Profile, type Question } from "../src/types.js";
+import { bytesForUpload } from "../src/resumeFiles.js";
 
 function q(partial: Partial<Question> & Pick<Question, "label" | "type">): Question {
   return {
@@ -102,11 +103,17 @@ describe("classify rules", () => {
   it("maps self-id gender/race/veteran/disability", () => {
     assert.equal(classifyQuestion({ label: "Gender" }).type, "gender");
     assert.equal(classifyQuestion({ label: "What is your Sex?" }).type, "gender");
+    assert.equal(classifyQuestion({ label: "How would you describe your gender identity (please select one)?" }).type, "gender");
+    assert.equal(classifyQuestion({ label: "I identify as transgender (please select one):" }).type, "transgender");
+    assert.equal(classifyQuestion({ label: "I identify my sexual orientation as (please select one):" }).type, "sexualOrientation");
     assert.equal(classifyQuestion({ label: "Race / ethnicity" }).type, "race");
     assert.equal(classifyQuestion({ label: "Yes, I have read and consent to the terms and conditions" }).type, "consent");
     assert.equal(classifyQuestion({ label: "Are you a US citizen?" }).type, "citizenship");
     assert.equal(classifyQuestion({ label: "Protected veteran status" }).type, "veteran");
     assert.equal(classifyQuestion({ label: "Disability status" }).type, "disability");
+    assert.equal(classifyQuestion({ label: "I identify as a first-generation professional (please select one):" }).type, "firstGeneration");
+    assert.equal(classifyQuestion({ label: "Country code" }).type, "country");
+    assert.equal(classifyQuestion({ label: "Zip code" }).type, "zip");
   });
   it("maps motivation and behavioral", () => {
     assert.equal(classifyQuestion({ label: "Why do you want to work here?" }).type, "motivation");
@@ -154,10 +161,19 @@ describe("resolve values", () => {
     assert.equal(plan.value, "Company careers page");
     assert.equal(plan.source, "saved");
   });
-  it("defaults self-id to decline", () => {
+  it("remembers gender Male and race South Asian for EEO autofill", () => {
     const plan = planFill(q({ label: "Gender", type: "gender" }), profile());
-    assert.match(plan.value, /Decline/);
+    assert.match(plan.value, /Male/i);
     assert.equal(plan.source, "profile");
+    const race = planFill(
+      q({
+        label: "I identify my race/ethnicity as (mark all that apply)",
+        type: "race",
+        options: ["White", "South Asian (inclusive of Indian)", "Decline to self-identify"],
+      }),
+      profile()
+    );
+    assert.match(race.value, /South Asian/i);
   });
   it("fills unknown questions with No when the resume has no match", () => {
     const plan = planFill(q({ label: "Do you have a forklift license?", type: "unknown", options: ["Yes", "No"] }), profile());
@@ -180,7 +196,7 @@ describe("resolve values", () => {
       }),
       profile()
     );
-    assert.match(sex.value, /wish to answer/i);
+    assert.match(sex.value, /^Male$/i);
     const veteran = planFill(
       q({
         label: "Are you a protected veteran?",
@@ -190,7 +206,7 @@ describe("resolve values", () => {
       }),
       profile()
     );
-    assert.match(veteran.value, /not a protected veteran/i);
+    assert.match(veteran.value, /not a (protected )?veteran/i);
     const terms = planFill(
       q({ label: "Yes, I have read and consent to the terms and conditions", type: "consent", kind: "checkbox" }),
       profile()
@@ -207,6 +223,43 @@ describe("resolve values", () => {
   it("answers work authorization from preferences", () => {
     const plan = planFill(q({ label: "Authorized?", type: "workAuthorization", options: ["Yes", "No"] }), profile());
     assert.equal(plan.value, "Yes");
+  });
+  it("fills country code as United States and zip as 75006", () => {
+    const country = planFill(
+      q({
+        label: "Country code",
+        type: "country",
+        kind: "select",
+        options: ["Select", "Canada (+1)", "United States (+1)", "Mexico (+52)"],
+      }),
+      profile()
+    );
+    assert.match(country.value, /United States/i);
+    const zip = planFill(q({ label: "Zip code", type: "zip" }), hydrateProfile({ contact: { ...EMPTY_PROFILE.contact } }));
+    assert.equal(zip.value, "75006");
+  });
+  it("autofills the screenshot EEO block from remembered answers", () => {
+    const p = hydrateProfile(profile());
+    const block = [
+      planFill(q({ label: "How would you describe your gender identity (please select one)?", type: "gender", options: ["Male", "Female", "I don't wish to answer"] }), p),
+      planFill(q({ label: "I identify as transgender (please select one):", type: "transgender", options: ["Yes", "No", "I don't wish to answer"] }), p),
+      planFill(q({ label: "I identify my sexual orientation as (please select one):", type: "sexualOrientation", options: ["Heterosexual", "I don't wish to answer"] }), p),
+      planFill(q({ label: "Veteran Status (please select one):", type: "veteran", options: ["Yes", "No, I am not a veteran"] }), p),
+      planFill(q({ label: "I have a disability (please select one):", type: "disability", options: ["Yes", "No"] }), p),
+      planFill(q({ label: "I identify as a first-generation professional (please select one):", type: "firstGeneration", options: ["Yes", "No"] }), p),
+    ];
+    assert.equal(block[0].value, "Male");
+    assert.equal(block[1].value, "No");
+    assert.match(block[2].value, /wish to answer/i);
+    assert.match(block[3].value, /not a veteran/i);
+    assert.equal(block[4].value, "No");
+    assert.equal(block[5].value, "Yes");
+  });
+  it("uploads a PDF for resume/CV file inputs", () => {
+    const packed = bytesForUpload(profile());
+    assert.equal(packed.mime, "application/pdf");
+    assert.match(packed.name, /\.pdf$/i);
+    assert.match(new TextDecoder().decode(packed.bytes).slice(0, 8), /%PDF/);
   });
 });
 
@@ -316,7 +369,7 @@ describe("dropdown and keep-applying loop", () => {
     const stuck = handoffPlan({ queue: q, currentUrl: q[0].url, reason: "stuck" });
     assert.equal(stuck.useWarmup, false);
     assert.ok(stuck.closeCurrentAfterMs < 100);
-    assert.ok(KEEP_INTERVAL_MS <= 200);
+    assert.ok(KEEP_INTERVAL_MS <= 400);
   });
 });
 

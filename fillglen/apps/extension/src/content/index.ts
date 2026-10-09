@@ -11,6 +11,9 @@ import {
   hydrateSession,
   bytesForUpload,
   fillPaceForPage,
+  KEEP_COOLDOWN_MS,
+  KEEP_DROPDOWN_SETTLE_MS,
+  KEEP_FIELDS_PER_TICK,
   KEEP_FILL_GAP_MS,
   KEEP_INTERVAL_MS,
   KEEP_MUTATION_DEBOUNCE_MS,
@@ -94,6 +97,7 @@ function boot() {
   let stuckTicks = 0;
   let waitingOnCaptcha = false;
   let keepBusy = false;
+  let keepCooldownUntil = 0;
   let googleClicked = false;
   let keepRestored = false;
   let persistTimer: number | undefined;
@@ -293,6 +297,7 @@ function boot() {
 
   async function keepCycle(_opts?: { allowHidden?: boolean }) {
     if (window !== window.top || keepBusy) return;
+    if (Date.now() < keepCooldownUntil) return;
     keepBusy = true;
     try {
       const stored = await chrome.storage.local.get([
@@ -419,17 +424,29 @@ function boot() {
       } catch {
         /* File/DataTransfer unavailable */
       }
-      const plans = planPage(questions, profile);
+      const plans = planPage(questions, profile).filter((plan) => {
+        if (!plan.value) return false;
+        const q = questions.find((x) => x.id === plan.questionId);
+        if (!q) return false;
+        if (fieldLooksFilled(q.kind, q.value)) return false;
+        return true;
+      });
+      const batch = plans.slice(0, KEEP_FIELDS_PER_TICK);
       let hadCustom = false;
-      for (const plan of plans) {
-        if (!plan.value) continue;
+      for (const plan of batch) {
         await applyOnePaced(plan.questionId, plan.value, pace);
         const q = questions.find((x) => x.id === plan.questionId);
         if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio" || q.kind === "checkbox")) {
           if (q.kind === "custom-select" || q.kind === "typeahead") hadCustom = true;
           clickMatchingDropdown(plan.questionId, plan.value);
+          await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
         }
-        if (pace === "slow") await new Promise((r) => setTimeout(r, KEEP_SLOW_GAP_MS));
+        await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : KEEP_FILL_GAP_MS));
+      }
+      // Still have empty fields — yield so the page can paint instead of freezing.
+      if (plans.length > batch.length) {
+        stuckTicks = 0;
+        return;
       }
       await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
       const after = scanDocument(document, frameId, profile);
@@ -467,6 +484,7 @@ function boot() {
       }
     } finally {
       keepBusy = false;
+      keepCooldownUntil = Date.now() + KEEP_COOLDOWN_MS;
       schedulePersist();
     }
   }
@@ -499,10 +517,11 @@ function boot() {
     scan("full");
     KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("full"), ms));
     const obs = new MutationObserver(() => {
+      if (keepBusy) return;
       clearTimeout((obs as unknown as { t?: number }).t);
       (obs as unknown as { t?: number }).t = window.setTimeout(() => {
         scan("delta");
-        if (!paused) keepCycle().catch(() => {});
+        if (!paused && !keepBusy && Date.now() >= keepCooldownUntil) keepCycle().catch(() => {});
       }, KEEP_MUTATION_DEBOUNCE_MS) as unknown as number;
     });
     obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });

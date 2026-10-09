@@ -1,4 +1,4 @@
-import { bestEffortAnswer, pickCitizenAnswer, pickDemographicOption } from "./answers.js";
+import { bestEffortAnswer, pickCitizenAnswer, pickCountryAnswer, pickDemographicOption } from "./answers.js";
 import { classifyAiBucket, isSelfId } from "./classify.js";
 import { bestSavedMatch } from "./fuzzy.js";
 import { splitName, type FillPlan, type Profile, type Question, type QuestionType } from "./types.js";
@@ -33,9 +33,9 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
     case "state":
       return c.state;
     case "zip":
-      return c.zip;
+      return c.zip || "75006";
     case "country":
-      return c.country;
+      return options?.length ? pickCountryAnswer("country", options) : c.country || "United States";
     case "linkedin":
       return c.linkedin;
     case "github":
@@ -81,13 +81,23 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
     case "workEnd":
       return latestJob?.endDate ?? "";
     case "gender":
-      return pickDemographicOption("gender", profile.selfIdentification.gender, options);
+      return pickDemographicOption("gender", profile.selfIdentification.gender || "Male", options);
     case "race":
-      return pickDemographicOption("race", profile.selfIdentification.race, options);
+      return pickDemographicOption("race", profile.selfIdentification.race || "South Asian", options);
     case "veteran":
-      return pickDemographicOption("veteran", profile.selfIdentification.veteran, options);
+      return pickDemographicOption("veteran", profile.selfIdentification.veteran || "No, I am not a veteran", options);
     case "disability":
-      return pickDemographicOption("disability", profile.selfIdentification.disability, options);
+      return pickDemographicOption("disability", profile.selfIdentification.disability || "No", options);
+    case "transgender":
+      return pickDemographicOption("transgender", profile.selfIdentification.transgender || "No", options);
+    case "sexualOrientation":
+      return pickDemographicOption(
+        "sexualOrientation",
+        profile.selfIdentification.sexualOrientation || "I don't wish to answer",
+        options
+      );
+    case "firstGeneration":
+      return pickDemographicOption("firstGeneration", profile.selfIdentification.firstGeneration || "Yes", options);
     default:
       return "";
   }
