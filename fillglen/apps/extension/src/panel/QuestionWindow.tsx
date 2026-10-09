@@ -3,6 +3,7 @@ import type { ApplyQueueItem, Profile, Question, ScanSnapshot } from "@fillglen/
 import { scoreMatch } from "@fillglen/core";
 import { CopyrightNotice, Logo } from "../brand";
 import { DatabaseView } from "../shared/DatabaseView";
+import { ResumeFiles } from "../shared/ResumeFiles";
 
 export type FilterTab = "all" | "needs-you" | "filled" | "live" | "database";
 
@@ -295,7 +296,16 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <p className="banner done">Every required question has an answer. Turn on Keep applying to submit and continue 24/7.</p>
       ) : null}
       {props.keepApplying ? (
-        <p className="banner done">Keep applying is on 24/7 while Chrome is open. It uses last resume when you have applied on this board before, otherwise it signs up, saves the login to Chrome, fills, submits, then opens the next listing. A CAPTCHA waits for you — Fillglen will not solve it.</p>
+        <p className="banner done">Keep applying is on 24/7 while Chrome is open. It uses last resume when you have applied on this board before, otherwise it signs up, saves the login to Chrome, fills, submits, then opens the next listing. If a page looks like it detected automation, Fillglen slows down and keeps going. A CAPTCHA waits for you — Fillglen will not solve it.</p>
+      ) : null}
+      {props.profile ? (
+        <ResumeFiles
+          profile={props.profile}
+          paste={props.profile.rawResumeText}
+          onProfile={(next) => persistLocal("profile", next)}
+          onPaste={(text) => persistLocal("popupPaste", text)}
+          onStatus={(text) => persistLocal("popupStatus", text)}
+        />
       ) : null}
       <ul className="qlist">
         {filtered.map((q) => (

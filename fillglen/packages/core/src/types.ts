@@ -161,6 +161,8 @@ export interface DocumentFile {
   name: string;
   applicationId?: string;
   text: string;
+  mime?: string;
+  base64?: string;
 }
 
 export interface SavedAnswer {

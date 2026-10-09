@@ -409,6 +409,7 @@ export function shortFactualAnswer(profile: Profile, questionLabel: string): str
 
 export function fieldLooksFilled(kind: Question["kind"], value: string): boolean {
   const v = (value || "").trim();
+  if (kind === "file") return Boolean(v) && v !== "false";
   if (!v || v === "false" || v === "off" || v === "0") return false;
   if (isPlaceholderOption(v)) return false;
   return true;

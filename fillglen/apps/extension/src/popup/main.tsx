@@ -11,6 +11,7 @@ import {
 } from "@fillglen/core";
 import { CopyrightNotice, Wordmark } from "../brand";
 import { DatabaseView } from "../shared/DatabaseView";
+import { ResumeFiles } from "../shared/ResumeFiles";
 import "../panel/styles.css";
 
 type Match = ApplyQueueItem;
@@ -24,7 +25,8 @@ function Popup() {
   const [liveJobs, setLiveJobs] = useState<Match[]>([]);
   const [keepApplying, setKeepApplying] = useState(false);
   const [discover, setDiscover] = useState<DiscoverStatus>(EMPTY_DISCOVER);
-  const [busy, setBusy] = useState(false);
+  const [parseBusy, setParseBusy] = useState(false);
+  const [keepBusy, setKeepBusy] = useState(false);
   const [view, setView] = useState<View>("home");
   const [harvestedAt, setHarvestedAt] = useState("");
   const [dbTotal, setDbTotal] = useState(0);
@@ -151,7 +153,7 @@ function Popup() {
           <button className="primary" onClick={() => persistUi({ view: "live" })}>
             Live jobs
           </button>
-          <button disabled={busy} onClick={() => refreshQueue()}>
+          <button disabled={parseBusy} onClick={() => refreshQueue()}>
             Refresh
           </button>
           <button className="primary" onClick={() => persistUi({ view: "database" })}>
@@ -246,32 +248,39 @@ function Popup() {
       <section className="fg-card">
         <div className="fg-card-head">
           <strong>Resume</strong>
-          <span>Paste, then parse. Matches follow this resume. Saved automatically.</span>
+          <span>Paste or upload PDF/DOCX. Matches follow this resume. Saved automatically.</span>
         </div>
         <textarea
           rows={9}
-          placeholder="Paste the full resume text here"
+          placeholder="Paste the full resume text here, or upload a PDF / DOCX below"
           value={paste}
           onChange={(e) => persistUi({ paste: e.target.value })}
+        />
+        <ResumeFiles
+          profile={profile}
+          paste={paste}
+          onProfile={(next) => save(next)}
+          onPaste={(text) => persistUi({ paste: text })}
+          onStatus={(text) => persistUi({ status: text })}
         />
         <div className="toolbar">
           <button
             className="primary"
-            disabled={busy}
+            disabled={parseBusy}
             onClick={async () => {
               if (!paste.trim()) {
-                persistUi({ status: "Paste a resume first." });
+                persistUi({ status: "Paste a resume first, or upload a PDF / DOCX." });
                 return;
               }
-              setBusy(true);
+              setParseBusy(true);
               const parsed = hydrateProfile(parseResumeText(paste));
-              save({ ...parsed, rawResumeText: paste });
+              save({ ...parsed, rawResumeText: paste, documents: profile.documents });
               persistUi({ status: "Parsed. Ranking Texas IT jobs to this resume…" });
               try {
                 await refreshQueue();
                 persistUi({ status: "Resume saved. Jobs below are ranked to this resume. Texas IT first." });
               } finally {
-                setBusy(false);
+                setParseBusy(false);
               }
             }}
           >
@@ -293,27 +302,55 @@ function Popup() {
               onChange={(e) => save({ ...profile, contact: { ...profile.contact, email: e.target.value } })}
             />
           </label>
+          <label>
+            Phone
+            <input
+              value={profile.contact.phone}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, phone: e.target.value } })}
+            />
+          </label>
+          <label>
+            City
+            <input
+              value={profile.contact.city}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, city: e.target.value } })}
+            />
+          </label>
+          <label>
+            State
+            <input
+              value={profile.contact.state}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, state: e.target.value } })}
+            />
+          </label>
+          <label>
+            LinkedIn
+            <input
+              value={profile.contact.linkedin}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, linkedin: e.target.value } })}
+            />
+          </label>
         </div>
       </section>
 
       <div className="toolbar fg-actions">
         <button
           className="primary"
-          disabled={busy}
+          disabled={keepBusy}
           onClick={async () => {
-            if (!profile.contact.legalName && !paste) {
-              persistUi({ status: "Paste a resume and parse it first." });
+            if (!profile.contact.legalName && !paste && !profile.documents.length) {
+              persistUi({ status: "Paste or upload a resume first." });
               return;
             }
             if (paste && !profile.contact.email) {
               const parsed = hydrateProfile(parseResumeText(paste));
-              save({ ...parsed, rawResumeText: paste });
+              save({ ...parsed, rawResumeText: paste, documents: profile.documents });
             }
-            setBusy(true);
+            setKeepBusy(true);
             await chrome.runtime.sendMessage({ type: "start-keep-applying" });
             setKeepApplying(true);
             await refreshQueue();
-            setBusy(false);
+            setKeepBusy(false);
             persistUi({
               status:
                 "Keep applying is on 24/7 while Chrome is open. It fills, signs up or uses last resume, saves logins to Chrome, submits, then opens the next listing. Unknown questions use the resume, or No.",

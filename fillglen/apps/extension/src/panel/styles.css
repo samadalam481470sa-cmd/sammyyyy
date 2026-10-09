@@ -94,3 +94,17 @@ label input { margin-top: 6px; }
 }
 .fg-legal p { margin: 0; }
 a { color: var(--pine); }
+.fg-files { margin-top: 12px; }
+.fg-drop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+}
+.fg-drop.on { border-color: var(--clay); background: #fff6ee; }
+.fg-file-dl { margin-top: 10px; }
+.fg-file-dl button { padding: 8px 10px; font-size: 12px; }

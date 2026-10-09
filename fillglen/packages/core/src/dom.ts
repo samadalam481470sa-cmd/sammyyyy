@@ -7,6 +7,7 @@ import {
 } from "./authGate.js";
 import { classifyQuestion } from "./classify.js";
 import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
+import { classifyScreenControl, KEEP_SLOW_CHAR_MS, type FillPace } from "./screenAct.js";
 import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
 import { stableQuestionId } from "./questionId.js";
 import { normalize } from "./fuzzy.js";
@@ -434,6 +435,71 @@ export function clickAppliedBefore(doc: Document, returning: boolean): "yes" | "
     return choice;
   }
   return null;
+}
+
+export function findFileInputs(doc: Document): HTMLInputElement[] {
+  return [...doc.querySelectorAll("input[type=file]")].filter((n) => {
+    const el = n as HTMLInputElement;
+    if (el.disabled) return false;
+    const s = window.getComputedStyle(el);
+    return s.display !== "none";
+  }) as HTMLInputElement[];
+}
+
+export function attachFileToInput(el: HTMLInputElement, file: File): boolean {
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    el.files = dt.files;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return Boolean(el.files?.length);
+  } catch {
+    return false;
+  }
+}
+
+export function clickScreenAction(doc: Document): string | null {
+  for (const el of clickableControls(doc)) {
+    if (!visible(el)) continue;
+    const label = controlLabel(el);
+    if (classifyScreenControl(label) !== "act") continue;
+    if (classifyAdvanceLabel(label)) continue;
+    el.scrollIntoView({ block: "nearest" });
+    el.click();
+    return label;
+  }
+  return null;
+}
+
+export async function setFieldPaced(
+  id: string,
+  value: string,
+  pace: FillPace = "fast"
+): Promise<{ ok: boolean; readBack: string; error?: string }> {
+  if (pace !== "slow") return setFieldById(id, value);
+  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | HTMLSelectElement
+    | null;
+  if (!el) return { ok: false, readBack: "", error: "Field left the page." };
+  if (
+    el instanceof HTMLSelectElement ||
+    (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio" || el.type === "file" || el.type === "password"))
+  ) {
+    return setFieldById(id, value);
+  }
+  nativeSet(el, "");
+  let acc = "";
+  for (const ch of value) {
+    acc += ch;
+    nativeSet(el, acc);
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent("keyup", { key: ch, bubbles: true }));
+    await new Promise((r) => setTimeout(r, KEEP_SLOW_CHAR_MS));
+  }
+  return { ok: true, readBack: el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : value };
 }
 
 export function fillBoardLogin(doc: Document, email: string, password: string): { filledEmail: boolean; filledPassword: boolean } {

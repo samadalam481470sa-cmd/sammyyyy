@@ -4,8 +4,10 @@
  *   - widget.js (the always-available floating on-page helper)
  *
  * Design rules (do not violate these when extending):
- *   - Only ever fill fields with the user's OWN saved data (resume profile
- *     or their own typed Q&A answers) — never invented facts.
+ *   - Fill from the user's resume/profile and saved answers. Fillglen's
+ *     Autofill & keep applying runs on its own after Start (24/7 while
+ *     Chrome is open) so the loop is not blocked waiting on every field.
+ *     It does not invent a name, email, or work history.
  *   - Legally/factually sensitive questions (work authorization, visa,
  *     salary, disability, veteran status, etc.) are only filled from an
  *     exact user-provided Q&A answer — otherwise they're flagged for the
@@ -13,8 +15,9 @@
  *   - Open-ended narrative fields may get a *draft* suggestion built only
  *     from the user's real resume content, always visually marked as a
  *     draft that needs review — never treated as final.
- *   - Never click Submit/Next/Apply. Never simulate mouse movement or any
- *     other bot-detection evasion.
+ *   - This older helper does not click Submit. Fillglen keep-applying does,
+ *     after Start. If a page looks like it detected automation, Fillglen
+ *     slows down and keeps going. It never solves CAPTCHAs.
  */
 (function (global) {
   const FIELD_PATTERNS = [

@@ -91,7 +91,8 @@ export function hostHasPriorApply(
   liveJobs: Pick<ApplyQueueItem, "url" | "appliedAt">[] = [],
   url = ""
 ): boolean {
-  if (priorLogin(logins, host)) return true;
+  const login = priorLogin(logins, host);
+  if (login && login.appliedCount > 0) return true;
   const key = url ? canonicalJobUrl(url) : "";
   return liveJobs.some((j) => {
     if (!j.appliedAt) return false;

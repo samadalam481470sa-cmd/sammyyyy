@@ -44,6 +44,7 @@ describe("auth gate", () => {
     assert.ok(a.length >= 12);
     const made = loginForFill([], "https://austintexas.wd5.myworkdayjobs.com/x", "sam@example.com", "secret1");
     assert.equal(made.created, true);
+    assert.equal(hostHasPriorApply(host, made.logins, []), false);
     const again = loginForFill(made.logins, "https://austintexas.wd5.myworkdayjobs.com/y", "sam@example.com", "secret1");
     assert.equal(again.created, false);
     assert.equal(again.login.password, made.login.password);

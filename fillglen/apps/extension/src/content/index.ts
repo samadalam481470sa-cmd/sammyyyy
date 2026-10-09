@@ -8,10 +8,13 @@ import {
   hostHasPriorApply,
   hydrateProfile,
   hydrateSession,
+  bytesForUpload,
+  fillPaceForPage,
   KEEP_FILL_GAP_MS,
   KEEP_INTERVAL_MS,
   KEEP_MUTATION_DEBOUNCE_MS,
   KEEP_SCAN_BURST_MS,
+  KEEP_SLOW_GAP_MS,
   KEEP_STUCK_TICKS,
   loginForFill,
   loginHost,
@@ -33,20 +36,24 @@ import {
   type ScanSnapshot,
 } from "@fillglen/core";
 import {
+  attachFileToInput,
   clickAdvance,
   clickAppliedBefore,
   clickAuthGate,
   clickGoogleSignIn,
   clickMatchingDropdown,
+  clickScreenAction,
   clickVisibleGoogleAccount,
   collectAuthButtons,
   detectCaptcha,
   fillBoardLogin,
   findAdvanceControl,
+  findFileInputs,
   flashAndScroll,
   readWorkdayStep,
   scanDocument,
   setFieldById,
+  setFieldPaced,
 } from "../../../../packages/core/src/dom";
 import type { ToBackground, ToContent } from "../shared/messages";
 
@@ -247,10 +254,14 @@ function boot() {
   }
 
   function applyOne(id: string, value: string) {
+    applyOnePaced(id, value, "fast").catch(() => {});
+  }
+
+  async function applyOnePaced(id: string, value: string, pace: "fast" | "slow") {
     const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLInputElement | null;
     const prev = el ? el.value : "";
     undoStack.push({ id, prev });
-    const result = setFieldById(id, value);
+    const result = await setFieldPaced(id, value, pace);
     const q = last.find((x) => x.id === id);
     if (q) {
       q.value = result.readBack || value;
@@ -293,12 +304,14 @@ function boot() {
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
       if (shouldSkipWarmupFill(location.href, stored.warmupUrl as string | undefined)) return;
-      const pageBlob = document.body?.innerText?.slice(0, 2500) || "";
+      const pageBlob = document.body?.innerText?.slice(0, 4000) || "";
+      const pace = fillPaceForPage(pageBlob);
       const applyPage =
         looksLikeApplicationPage(location.href, pageBlob) ||
         looksLikeAuthWall(pageBlob) ||
         Boolean(document.querySelector("input[type=password]")) ||
-        collectAuthButtons(document).length > 0;
+        collectAuthButtons(document).length > 0 ||
+        findFileInputs(document).length > 0;
       if (!applyPage && !/accounts\.google\.com/i.test(location.host)) return;
       if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
@@ -314,6 +327,12 @@ function boot() {
       if (waitingOnCaptcha) {
         waitingOnCaptcha = false;
         post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
+      }
+      const acted = clickScreenAction(document);
+      if (acted) {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "fill", url, detail: acted });
+        if (pace === "slow") await new Promise((r) => setTimeout(r, KEEP_SLOW_GAP_MS));
       }
       const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
       const logins = (Array.isArray(stored.boardLogins) ? stored.boardLogins : []) as BoardLogin[];
@@ -379,18 +398,34 @@ function boot() {
         post({ type: "keep-status", status: "fill", url, detail: "google sign-in" });
         return;
       }
+      try {
+        const packed = bytesForUpload(profile);
+        const copy = new Uint8Array(packed.bytes.byteLength);
+        copy.set(packed.bytes);
+        const file = new File([copy], packed.name, { type: packed.mime });
+        for (const input of findFileInputs(document)) {
+          if (input.files && input.files.length) continue;
+          if (attachFileToInput(input, file)) {
+            stuckTicks = 0;
+            post({ type: "keep-status", status: "fill", url, detail: `uploaded ${packed.name}` });
+          }
+        }
+      } catch {
+        /* File/DataTransfer unavailable */
+      }
       const plans = planPage(questions, profile);
       let hadCustom = false;
       for (const plan of plans) {
         if (!plan.value) continue;
-        applyOne(plan.questionId, plan.value);
+        await applyOnePaced(plan.questionId, plan.value, pace);
         const q = questions.find((x) => x.id === plan.questionId);
         if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio" || q.kind === "checkbox")) {
           if (q.kind === "custom-select" || q.kind === "typeahead") hadCustom = true;
           clickMatchingDropdown(plan.questionId, plan.value);
         }
+        if (pace === "slow") await new Promise((r) => setTimeout(r, KEEP_SLOW_GAP_MS));
       }
-      await new Promise((r) => setTimeout(r, hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
+      await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
       const after = scanDocument(document, frameId, profile);
       const stillEmpty = after.filter((q) => q.required && q.type !== "password" && !fieldLooksFilled(q.kind, q.value));
       const found = findAdvanceControl(document, "keep-applying");
