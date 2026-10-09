@@ -70,7 +70,7 @@ function boot() {
   let waitingOnCaptcha = false;
   let keepBusy = false;
   let googleClicked = false;
-  let overlayApplied = false;
+  let keepRestored = false;
   let persistTimer: number | undefined;
 
   function connect() {
@@ -145,15 +145,16 @@ function boot() {
     const mem = await savedSession();
     const saved = snapshotForUrl(mem, location.href);
     const merged = overlaySavedValues(questions, saved?.questions || []);
-    if (overlayApplied) return merged;
-    overlayApplied = true;
-    const keep = pageKeepForUrl(mem, location.href);
-    if (keep) {
-      stuckTicks = keep.stuckTicks;
-      googleClicked = keep.googleClicked;
-      waitingOnCaptcha = keep.waitingOnCaptcha;
-      if (keep.undoStack?.length) {
-        undoStack.splice(0, undoStack.length, ...keep.undoStack);
+    if (!keepRestored) {
+      keepRestored = true;
+      const keep = pageKeepForUrl(mem, location.href);
+      if (keep) {
+        stuckTicks = keep.stuckTicks;
+        googleClicked = keep.googleClicked;
+        waitingOnCaptcha = keep.waitingOnCaptcha;
+        if (keep.undoStack?.length) {
+          undoStack.splice(0, undoStack.length, ...keep.undoStack);
+        }
       }
     }
     for (const q of merged) {
@@ -418,7 +419,7 @@ function boot() {
       persistPage("hide");
       return;
     }
-    overlayApplied = false;
+    keepRestored = false;
     whenReady(() => {
       watchPage();
       scan("full").catch(() => {});
@@ -430,7 +431,7 @@ function boot() {
     });
   });
   window.addEventListener("pageshow", () => {
-    overlayApplied = false;
+    keepRestored = false;
     persistPage("scan");
     if (!isVisibleTab()) return;
     scan("full").catch(() => {});
