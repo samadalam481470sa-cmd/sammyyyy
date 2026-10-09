@@ -29,7 +29,8 @@ What the bot does first
 
 It will not
   Solve CAPTCHAs. Run on LinkedIn Easy Apply. Invent facts that are not
-  on your resume. Click logout / pay / donate.
+  on your resume. Click logout / pay / donate. Leave a listing before
+  that application is submitted.
 
 Defaults
   Country = United States. Zip = 75006 if blank.

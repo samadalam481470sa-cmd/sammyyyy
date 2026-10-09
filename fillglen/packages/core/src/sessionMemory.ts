@@ -20,6 +20,8 @@ export interface PageKeepState {
   googleClicked: boolean;
   waitingOnCaptcha: boolean;
   undoStack: { id: string; prev: string }[];
+  clickedSubmitAt?: number;
+  leavingJob?: boolean;
   savedAt: string;
 }
 
@@ -213,6 +215,8 @@ export function rememberPageKeep(mem: SessionMemory, state: Omit<PageKeepState, 
     googleClicked: Boolean(state.googleClicked),
     waitingOnCaptcha: Boolean(state.waitingOnCaptcha),
     undoStack: (state.undoStack || []).slice(-80),
+    clickedSubmitAt: state.clickedSubmitAt || 0,
+    leavingJob: Boolean(state.leavingJob),
     savedAt: state.savedAt || nowIso(),
   };
   return {

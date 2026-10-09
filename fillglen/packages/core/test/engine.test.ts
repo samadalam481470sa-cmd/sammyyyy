@@ -364,11 +364,11 @@ describe("dropdown and keep-applying loop", () => {
     });
     assert.equal(plan.next?.url, q[1].url);
     assert.equal(plan.useWarmup, true);
-    assert.equal(plan.closeCurrentAfterMs, 450);
+    assert.equal(plan.closeCurrentAfterMs, 800);
     assert.equal(plan.prefetchUrl, q[2].url);
     const stuck = handoffPlan({ queue: q, currentUrl: q[0].url, reason: "stuck" });
+    assert.equal(stuck.next, null);
     assert.equal(stuck.useWarmup, false);
-    assert.ok(stuck.closeCurrentAfterMs < 100);
     assert.ok(KEEP_INTERVAL_MS <= 400);
   });
 });

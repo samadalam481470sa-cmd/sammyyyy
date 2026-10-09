@@ -7,6 +7,12 @@ import {
   analysisIsFresh,
   analysisSummary,
   analyzeApplyPage,
+  cycleOverBudget,
+  keepBusyExpired,
+  looksLikeConfirmationCopy,
+  looksLikeConfirmationUrl,
+  mayHandoffToNextJob,
+  submitWaitElapsed,
   buildAutofillBatch,
   fieldLooksFilled,
   fillBudgetForAnalysis,
@@ -31,6 +37,7 @@ import {
   shouldAutofillPlan,
   trimScreenSkip,
   type PageAnalysis,
+  type SubmitEvidence,
   loginForFill,
   loginHost,
   looksLikeApplicationPage,
@@ -111,6 +118,9 @@ function boot() {
   let persistTimer: number | undefined;
   let screenSkip: string[] = [];
   let lastAnalysis: PageAnalysis | null = null;
+  let clickedSubmitAt = 0;
+  let leavingJob = false;
+  let keepBusySince = 0;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -193,6 +203,8 @@ function boot() {
         stuckTicks = keep.stuckTicks;
         googleClicked = keep.googleClicked;
         waitingOnCaptcha = keep.waitingOnCaptcha;
+        if (keep.clickedSubmitAt) clickedSubmitAt = keep.clickedSubmitAt;
+        if (keep.leavingJob) leavingJob = true;
         if (keep.undoStack?.length) {
           undoStack.splice(0, undoStack.length, ...keep.undoStack);
         }
@@ -219,6 +231,8 @@ function boot() {
         googleClicked,
         waitingOnCaptcha,
         undoStack: undoStack.slice(-80),
+        clickedSubmitAt,
+        leavingJob,
       },
     });
     if (reason === "hide" || !port) {
@@ -226,7 +240,15 @@ function boot() {
       chrome.runtime
         .sendMessage({
           type: "page-keep",
-          keep: { url: pageUrl, stuckTicks, googleClicked, waitingOnCaptcha, undoStack: undoStack.slice(-80) },
+          keep: {
+            url: pageUrl,
+            stuckTicks,
+            googleClicked,
+            waitingOnCaptcha,
+            undoStack: undoStack.slice(-80),
+            clickedSubmitAt,
+            leavingJob,
+          },
         })
         .catch(() => {});
     }
@@ -318,10 +340,30 @@ function boot() {
     persistPage("typed");
   }
 
+  function tryFinishSubmitted(evidence: SubmitEvidence, detail: string) {
+    const gate = mayHandoffToNextJob({ reason: "submitted", evidence });
+    if (!gate.ok) return false;
+    leavingJob = true;
+    stuckTicks = 0;
+    post({ type: "keep-status", status: "submitted", url, detail, submitEvidence: evidence });
+    return true;
+  }
+
   async function keepCycle(_opts?: { allowHidden?: boolean }) {
-    if (window !== window.top || keepBusy) return;
+    if (window !== window.top) return;
+    if (leavingJob) return;
+    if (keepBusy) {
+      if (keepBusyExpired(keepBusySince)) {
+        keepBusy = false;
+        keepBusySince = 0;
+      } else {
+        return;
+      }
+    }
     if (Date.now() < keepCooldownUntil) return;
     keepBusy = true;
+    keepBusySince = Date.now();
+    const cycleStarted = Date.now();
     try {
       const stored = await chrome.storage.local.get([
         "keepApplying",
@@ -374,10 +416,24 @@ function boot() {
       }
       if (early.action === "skip" && !/accounts\.google\.com/i.test(location.host)) return;
       if (early.action === "wait" && early.stage === "loading") return;
-      if (early.action === "handoff") {
-        stuckTicks = 0;
-        post({ type: "keep-status", status: "submitted", url, detail: analysisSummary(early) });
-        return;
+      if (clickedSubmitAt || early.action === "handoff") {
+        const evidence: SubmitEvidence = {
+          clickedSubmit: clickedSubmitAt > 0,
+          confirmationPage: early.stage === "submitted" || looksLikeConfirmationCopy(pageBlob),
+          confirmationUrl: looksLikeConfirmationUrl(url),
+        };
+        if (early.action === "handoff" && !clickedSubmitAt && !evidence.confirmationUrl) {
+          // Job-description "thank you" copy is not a submit.
+        } else if (
+          evidence.confirmationPage ||
+          evidence.confirmationUrl ||
+          (clickedSubmitAt > 0 && submitWaitElapsed(clickedSubmitAt) && !earlyFacts.hasSubmit)
+        ) {
+          if (tryFinishSubmitted(evidence, analysisSummary(early))) return;
+        } else if (clickedSubmitAt) {
+          post({ type: "keep-status", status: "fill", url, detail: "waiting for submit confirmation" });
+          return;
+        }
       }
       if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
@@ -395,6 +451,7 @@ function boot() {
         post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
       }
       for (let n = 0; n < SCREEN_CLICK_BUDGET; n++) {
+        if (cycleOverBudget(cycleStarted)) break;
         const acted = clickScreenAction(document, screenSkip);
         if (!acted) break;
         screenSkip = trimScreenSkip([...screenSkip, acted.fingerprint]);
@@ -485,10 +542,19 @@ function boot() {
         filledCount: questions.filter((q) => fieldLooksFilled(q.kind, q.value)).length,
       });
       lastAnalysis = late;
-      if (late.action === "handoff") {
-        stuckTicks = 0;
-        post({ type: "keep-status", status: "submitted", url, detail: analysisSummary(late) });
-        return;
+      if (late.action === "handoff" && (clickedSubmitAt || looksLikeConfirmationUrl(url))) {
+        if (
+          tryFinishSubmitted(
+            {
+              clickedSubmit: clickedSubmitAt > 0,
+              confirmationPage: true,
+              confirmationUrl: looksLikeConfirmationUrl(url),
+            },
+            analysisSummary(late)
+          )
+        ) {
+          return;
+        }
       }
       const fillLimit = late.action === "fill" ? fillBudgetForAnalysis(late) : KEEP_FIELDS_PER_TICK;
       const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, fillLimit);
@@ -496,6 +562,10 @@ function boot() {
       let hadCustom = false;
       let verified = 0;
       for (const { plan, question: q } of ready) {
+        if (cycleOverBudget(cycleStarted)) {
+          stuckTicks = 0;
+          return;
+        }
         const useDropdown = fieldShouldUseDropdown(q.kind, q.type);
         let readBack = "";
         if (useDropdown) {
@@ -557,11 +627,12 @@ function boot() {
       }
       if (clicked?.kind === "submit") {
         stuckTicks = 0;
+        clickedSubmitAt = Date.now();
         const existing = priorLogin(logins, host);
         if (existing) {
           await chrome.storage.local.set({ boardLogins: upsertBoardLogin(logins, { ...existing, applied: true }) });
         }
-        post({ type: "keep-status", status: "submitted", url });
+        post({ type: "keep-status", status: "fill", url, detail: "clicked submit — waiting for confirmation" });
         return;
       }
       if (stillEmpty.length) {
@@ -573,6 +644,7 @@ function boot() {
       }
     } finally {
       keepBusy = false;
+      keepBusySince = 0;
       keepCooldownUntil = Date.now() + KEEP_COOLDOWN_MS;
       schedulePersist();
     }
@@ -581,7 +653,14 @@ function boot() {
   function startKeepLoop() {
     if (keepTimer || window !== window.top) return;
     keepTimer = window.setInterval(() => {
-      keepCycle().catch(() => {});
+      if (keepBusy && keepBusyExpired(keepBusySince)) {
+        keepBusy = false;
+        keepBusySince = 0;
+      }
+      keepCycle().catch(() => {
+        keepBusy = false;
+        keepBusySince = 0;
+      });
     }, KEEP_INTERVAL_MS);
   }
 
@@ -606,7 +685,7 @@ function boot() {
     scan("full");
     KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("full"), ms));
     const obs = new MutationObserver(() => {
-      if (keepBusy) return;
+      if (keepBusy || leavingJob) return;
       clearTimeout((obs as unknown as { t?: number }).t);
       (obs as unknown as { t?: number }).t = window.setTimeout(() => {
         scan("delta");

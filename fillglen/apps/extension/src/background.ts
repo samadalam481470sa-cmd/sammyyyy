@@ -11,9 +11,12 @@ import {
   isSupportedApplyUrl,
   looksLikeApplicationPage,
   handoffPlan,
+  KEEP_HANDOFF_SETTLE_MS,
+  mayHandoffToNextJob,
   planPage,
   shouldBlockPage,
   type ApplyQueueItem,
+  type SubmitEvidence,
   type EmployerRecord,
   type Profile,
   type ScanSnapshot,
@@ -160,7 +163,7 @@ chrome.runtime.onConnect.addListener((port) => {
         await pushState(tabId);
       }
       if (msg.type === "keep-status") {
-        await onKeepStatus(tabId, msg.status, msg.url, msg.detail);
+        await onKeepStatus(tabId, msg.status, msg.url, msg.detail, msg.submitEvidence);
       }
       if (msg.type === "store-board-password") {
         await storePasswordInChrome(tabId, msg.email, msg.password, msg.url || port.sender?.tab?.url || "");
@@ -651,9 +654,9 @@ chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendRespo
   }
   if (msg?.type === "keep-status") {
     const tabId = _sender.tab?.id;
-    const payload = msg as { status?: KeepStatus; url?: string; detail?: string };
+    const payload = msg as { status?: KeepStatus; url?: string; detail?: string; submitEvidence?: SubmitEvidence };
     if (tabId != null && payload.status) {
-      onKeepStatus(tabId, payload.status, payload.url, payload.detail)
+      onKeepStatus(tabId, payload.status, payload.url, payload.detail, payload.submitEvidence)
         .then(() => sendResponse({ ok: true }))
         .catch(() => sendResponse({ ok: false }));
       return true;
@@ -854,7 +857,7 @@ async function goToNextJob(fromTabId: number, currentUrl: string, reason: "submi
       warmupUrl = null;
       await saveWarmup(null, null).catch(() => {});
       await chrome.tabs.update(warmed, { active: true }).catch(() => chrome.tabs.update(fromTabId, { url: nextUrl }));
-      sendToTab(warmed, { type: "keep-tick" });
+      setTimeout(() => sendToTab(warmed, { type: "keep-tick" }), KEEP_HANDOFF_SETTLE_MS);
       setTimeout(() => chrome.tabs.remove(fromTabId).catch(() => {}), plan.closeCurrentAfterMs);
       if (plan.prefetchUrl) warmup(plan.prefetchUrl).catch(() => {});
       return;
@@ -907,7 +910,13 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
 startLiveAlarm();
 startDbAlarm();
 
-async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
+async function onKeepStatus(
+  tabId: number,
+  status: KeepStatus,
+  currentUrl?: string,
+  _detail?: string,
+  submitEvidence?: SubmitEvidence
+) {
   const snap = snapshots.get(tabId) || (currentUrl ? await snapFor(tabId, currentUrl) : undefined);
   await saveKeep(status, currentUrl || snap?.job.url || "", _detail, tabId).catch(() => {});
   const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
@@ -927,8 +936,18 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
     chrome.action.setBadgeText({ text: "ON" });
     return;
   }
-  if (status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
-    if (currentUrl && status === "submitted") {
+  if (status === "stuck") {
+    chrome.action.setBadgeText({ text: "…" });
+    return;
+  }
+  if (status === "blocked" || status === "submitted" || status === "done-job") {
+    const reason = status === "blocked" ? "blocked" : status === "done-job" ? "done-job" : "submitted";
+    const gate = mayHandoffToNextJob({ reason, evidence: submitEvidence });
+    if (!gate.ok) {
+      chrome.action.setBadgeText({ text: "ON" });
+      return;
+    }
+    if (currentUrl && reason === "submitted") {
       const now = new Date().toISOString();
       const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
       const marked = (applyQueue as ApplyQueueItem[]).map((j) =>
@@ -940,6 +959,6 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
       });
       ingestFromStorage().catch(() => {});
     }
-    goToNextJob(tabId, currentUrl || "", status).catch(() => {});
+    goToNextJob(tabId, currentUrl || "", reason).catch(() => {});
   }
 }

@@ -151,16 +151,16 @@ export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): Appl
   return rest.find((q) => q.url && !q.appliedAt) || null;
 }
 
-export const KEEP_FILL_GAP_MS = 18;
-export const KEEP_INTERVAL_MS = 240;
+export const KEEP_FILL_GAP_MS = 16;
+export const KEEP_INTERVAL_MS = 260;
 export const KEEP_HEARTBEAT_MS = 500;
 export const KEEP_STUCK_TICKS = 10;
 export const KEEP_SCAN_BURST_MS = [120, 400, 900];
-export const KEEP_MUTATION_DEBOUNCE_MS = 220;
+export const KEEP_MUTATION_DEBOUNCE_MS = 280;
 /** Cap fields per tick so dropdown-heavy EEO pages do not freeze the tab. */
 export const KEEP_FIELDS_PER_TICK = 3;
-export const KEEP_COOLDOWN_MS = 140;
-export const KEEP_DROPDOWN_SETTLE_MS = 140;
+export const KEEP_COOLDOWN_MS = 160;
+export const KEEP_DROPDOWN_SETTLE_MS = 120;
 
 export type HandoffReason = "submitted" | "stuck" | "blocked" | "done-job";
 
@@ -182,12 +182,16 @@ export function handoffPlan(input: {
   warmupTabId?: number | null;
   reason: HandoffReason;
 }): HandoffPlan {
+  // Stuck never starts the next listing — finish/submit this application first.
+  if (input.reason === "stuck") {
+    return { next: null, useWarmup: false, closeCurrentAfterMs: 0, prefetchUrl: null };
+  }
   const next = nextQueueItem(input.queue, input.currentUrl);
   if (!next) return { next: null, useWarmup: false, closeCurrentAfterMs: 0, prefetchUrl: null };
   const useWarmup = Boolean(
     input.warmupTabId && input.warmupUrl && canonicalJobUrl(input.warmupUrl) === canonicalJobUrl(next.url)
   );
-  const closeCurrentAfterMs = input.reason === "submitted" ? 450 : 60;
+  const closeCurrentAfterMs = input.reason === "submitted" || input.reason === "done-job" ? 800 : 120;
   const after = nextQueueItem(input.queue, next.url);
   const prefetchUrl =
     after && canonicalJobUrl(after.url) !== canonicalJobUrl(input.currentUrl) ? after.url : null;

@@ -1,4 +1,4 @@
-import type { DbQuery, FillPlan, Profile, Question, ScanSnapshot } from "@fillglen/core";
+import type { DbQuery, FillPlan, Profile, Question, ScanSnapshot, SubmitEvidence } from "@fillglen/core";
 
 export type KeepStatus =
   | "fill"
@@ -16,6 +16,8 @@ export type PageKeepPayload = {
   googleClicked: boolean;
   waitingOnCaptcha: boolean;
   undoStack: { id: string; prev: string }[];
+  clickedSubmitAt?: number;
+  leavingJob?: boolean;
 };
 
 export type ToBackground =
@@ -26,7 +28,7 @@ export type ToBackground =
   | { type: "open-panel" }
   | { type: "open-panel-database" }
   | { type: "create-application"; snapshot: ScanSnapshot }
-  | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string }
+  | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string; submitEvidence?: SubmitEvidence }
   | { type: "page-keep"; keep: PageKeepPayload }
   | { type: "persist-now"; snapshot?: ScanSnapshot; questions?: Question[] }
   | { type: "store-board-password"; email: string; password: string; url?: string };

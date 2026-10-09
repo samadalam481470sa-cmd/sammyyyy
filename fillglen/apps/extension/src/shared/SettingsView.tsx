@@ -62,11 +62,12 @@ export function SettingsView({ onBack, lastAnalysis }: SettingsViewProps) {
         <li>LinkedIn Easy Apply is blocked.</li>
         <li>Country defaults to United States. Zip defaults to 75006 if you leave it blank.</li>
         <li>Workday “Use last application” only after a real submit at that same company.</li>
+        <li>It does not open the next listing until this application is submitted and confirmed.</li>
       </ul>
 
       <p className="meta">
-        Keep Chrome open. If a tab looks frozen, Pause then Start again — the bot yields between fields so
-        the page can paint.
+        The bot yields every tick so pages do not freeze, waits for submit confirmation, then switches
+        smoothly to the next job.
       </p>
     </section>
   );

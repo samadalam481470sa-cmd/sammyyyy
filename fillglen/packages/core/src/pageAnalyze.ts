@@ -90,7 +90,7 @@ export function analyzeApplyPage(facts: PageFacts): PageAnalysis {
     return pack("loading", "wait", board, ["page-still-loading"], false, fingerprint, 0);
   }
 
-  if (SUBMITTED.test(blob) && fields < 3) {
+  if (looksLikeConfirmationCopy(blob) && fields < 3) {
     return pack("submitted", "handoff", board, ["confirmation-page"], true, fingerprint, 0);
   }
 
@@ -161,4 +161,8 @@ export function fillBudgetForAnalysis(analysis: PageAnalysis): number {
 export function analysisSummary(analysis: PageAnalysis): string {
   const board = analysis.board ? analysis.board.replace(/^\./, "") : "generic";
   return `${analysis.stage} → ${analysis.action} · ${board} · ${analysis.reasons.slice(0, 3).join(", ")}`;
+}
+
+export function looksLikeConfirmationCopy(text: string): boolean {
+  return SUBMITTED.test(text || "");
 }
