@@ -1,0 +1,35 @@
+Fillglen assistant — how to use this zip
+========================================
+
+1. Unzip fillglen-assistant.zip.
+2. Chrome → chrome://extensions → Developer mode ON.
+3. Load unpacked → select the fillglen-assistant folder.
+4. Pin Fillglen. Open the popup.
+5. Paste or upload your resume (PDF/DOCX). Click Parse resume.
+6. Check Name, Email, Phone, Zip, Country.
+7. Click Start auto bot. Leave Chrome open.
+
+Start / Pause
+  One button. Start fills the open application from your resume, submits
+  when required fields are done, then opens the next listing. Pause stops it.
+
+Live jobs
+  Listings found and ranked to this resume.
+
+Database
+  Search jobs and employers stored in this extension. It does not open
+  another website.
+
+Settings
+  This guide, plus the last page the bot read.
+
+What the bot does first
+  It analyzes the page (board, fields, auth, CAPTCHA, Next/Submit) before
+  typing or clicking. Junk UI such as Progress scrubber stays hidden.
+
+It will not
+  Solve CAPTCHAs. Run on LinkedIn Easy Apply. Invent facts that are not
+  on your resume. Click logout / pay / donate.
+
+Defaults
+  Country = United States. Zip = 75006 if blank.

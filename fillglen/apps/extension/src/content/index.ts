@@ -4,8 +4,12 @@ import {
   EMPTY_PROFILE,
   ensureVaultSecret,
   feedMetaForUrl,
+  analysisIsFresh,
+  analysisSummary,
+  analyzeApplyPage,
   buildAutofillBatch,
   fieldLooksFilled,
+  fillBudgetForAnalysis,
   fillMatchedIntent,
   filterRealQuestions,
   hostHasPriorApply,
@@ -23,15 +27,14 @@ import {
   KEEP_SCAN_BURST_MS,
   KEEP_SLOW_GAP_MS,
   KEEP_STUCK_TICKS,
-  looksLikeJobListingCopy,
   SCREEN_CLICK_BUDGET,
   shouldAutofillPlan,
   trimScreenSkip,
+  type PageAnalysis,
   loginForFill,
   loginHost,
   looksLikeApplicationPage,
   looksLikeAppliedBeforePrompt,
-  looksLikeAuthWall,
   mayAdvance,
   overlaySavedValues,
   pageKeepForUrl,
@@ -107,6 +110,7 @@ function boot() {
   let keepRestored = false;
   let persistTimer: number | undefined;
   let screenSkip: string[] = [];
+  let lastAnalysis: PageAnalysis | null = null;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -335,14 +339,46 @@ function boot() {
       if (shouldSkipWarmupFill(location.href, stored.warmupUrl as string | undefined)) return;
       const pageBlob = document.body?.innerText?.slice(0, 4000) || "";
       const pace = fillPaceForPage(pageBlob);
-      const applyPage =
-        looksLikeApplicationPage(location.href, pageBlob) ||
-        looksLikeAuthWall(pageBlob) ||
-        looksLikeJobListingCopy(pageBlob) ||
-        Boolean(document.querySelector("input[type=password]")) ||
-        collectAuthButtons(document).length > 0 ||
-        findFileInputs(document).length > 0;
-      if (!applyPage && !/accounts\.google\.com/i.test(location.host)) return;
+      const authButtonsEarly = collectAuthButtons(document);
+      const hasPasswordEarly = Boolean(document.querySelector("input[type=password]"));
+      const fileCount = findFileInputs(document).length;
+      const visibleEarly = [...document.querySelectorAll("input, textarea, select")].filter((n) => {
+        const el = n as HTMLInputElement;
+        if (el.type === "hidden" || el.disabled) return false;
+        const s = window.getComputedStyle(el);
+        return s.display !== "none" && s.visibility !== "hidden";
+      }).length;
+      const advanceEarly = findAdvanceControl(document, "keep-applying");
+      const earlyFacts = {
+        url,
+        title: document.title,
+        bodyText: pageBlob,
+        readyState: document.readyState,
+        visibleFieldCount: visibleEarly,
+        hasPassword: hasPasswordEarly,
+        hasFileInput: fileCount > 0,
+        authButtonCount: authButtonsEarly.length,
+        captcha: detectCaptcha(document),
+        hasNext: advanceEarly?.kind === "next",
+        hasSubmit: advanceEarly?.kind === "submit",
+        hasApplyCta: /apply now|start application|apply for this job/i.test(pageBlob),
+      };
+      const early = analyzeApplyPage(earlyFacts);
+      if (!analysisIsFresh(lastAnalysis, earlyFacts) || early.action !== lastAnalysis?.action) {
+        lastAnalysis = early;
+        try {
+          chrome.storage.local.set({ lastPageAnalysis: analysisSummary(early) });
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      if (early.action === "skip" && !/accounts\.google\.com/i.test(location.host)) return;
+      if (early.action === "wait" && early.stage === "loading") return;
+      if (early.action === "handoff") {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "submitted", url, detail: analysisSummary(early) });
+        return;
+      }
       if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
         return;
@@ -443,7 +479,19 @@ function boot() {
       } catch {
         /* File/DataTransfer unavailable */
       }
-      const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, KEEP_FIELDS_PER_TICK);
+      const late = analyzeApplyPage({
+        ...earlyFacts,
+        requiredEmpty: questions.filter((q) => q.required && !fieldLooksFilled(q.kind, q.value)).length,
+        filledCount: questions.filter((q) => fieldLooksFilled(q.kind, q.value)).length,
+      });
+      lastAnalysis = late;
+      if (late.action === "handoff") {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "submitted", url, detail: analysisSummary(late) });
+        return;
+      }
+      const fillLimit = late.action === "fill" ? fillBudgetForAnalysis(late) : KEEP_FIELDS_PER_TICK;
+      const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, fillLimit);
       last = realQuestions;
       let hadCustom = false;
       let verified = 0;

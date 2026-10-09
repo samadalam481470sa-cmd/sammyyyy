@@ -138,3 +138,7 @@ a { color: var(--pine); }
 .fg-drop.on { border-color: var(--clay); background: #fff6ee; }
 .fg-file-dl { margin-top: 10px; }
 .fg-file-dl button { padding: 8px 10px; font-size: 12px; }
+.fg-settings-h { font-size: 15px; margin: 16px 0 8px; }
+.fg-settings-ol, .fg-settings-ul { margin: 0 0 8px; padding-left: 20px; color: var(--ink); }
+.fg-settings-ol li, .fg-settings-ul li { margin: 0 0 8px; }
+.fg-settings code { background: var(--cream); padding: 1px 6px; border-radius: 6px; font-size: 12px; }

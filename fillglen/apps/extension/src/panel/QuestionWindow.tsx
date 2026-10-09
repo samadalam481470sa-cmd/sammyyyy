@@ -4,8 +4,9 @@ import { filterRealQuestions, scoreMatch } from "@fillglen/core";
 import { CopyrightNotice, Logo } from "../brand";
 import { DatabaseView } from "../shared/DatabaseView";
 import { ResumeFiles } from "../shared/ResumeFiles";
+import { SettingsView } from "../shared/SettingsView";
 
-export type FilterTab = "all" | "needs-you" | "filled" | "live" | "database";
+export type FilterTab = "all" | "needs-you" | "filled" | "live" | "database" | "settings";
 
 export interface DraftState {
   questionId: string;
@@ -108,9 +109,12 @@ export function QuestionWindow(props: QuestionWindowProps) {
   const [tab, setTab] = useState<FilterTab>("all");
   const [storedLive, setStoredLive] = useState<ApplyQueueItem[]>([]);
   const [savedAt, setSavedAt] = useState("");
+  const [lastAnalysis, setLastAnalysis] = useState("");
   useEffect(() => {
     readLocal<FilterTab>("panelTab", "all", (v) => {
-      if (v === "all" || v === "needs-you" || v === "filled" || v === "live" || v === "database") setTab(v);
+      if (v === "all" || v === "needs-you" || v === "filled" || v === "live" || v === "database" || v === "settings") {
+        setTab(v);
+      }
     });
     readLocal<ApplyQueueItem[]>("liveJobs", [], (v) => {
       if (Array.isArray(v)) setStoredLive(v);
@@ -118,19 +122,24 @@ export function QuestionWindow(props: QuestionWindowProps) {
     readLocal<string>("sessionSavedAt", "", (v) => {
       if (typeof v === "string") setSavedAt(v);
     });
+    readLocal<string>("lastPageAnalysis", "", (v) => {
+      if (typeof v === "string") setLastAnalysis(v);
+    });
     const onChanged = chromeApi()?.storage?.onChanged;
     if (!onChanged) return;
     const onChange = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       if (area !== "local") return;
       if (Array.isArray(changes.liveJobs?.newValue)) setStoredLive(changes.liveJobs.newValue as ApplyQueueItem[]);
       if (typeof changes.sessionSavedAt?.newValue === "string") setSavedAt(changes.sessionSavedAt.newValue);
+      if (typeof changes.lastPageAnalysis?.newValue === "string") setLastAnalysis(changes.lastPageAnalysis.newValue);
       const nextTab = changes.panelTab?.newValue;
       if (
         nextTab === "all" ||
         nextTab === "needs-you" ||
         nextTab === "filled" ||
         nextTab === "live" ||
-        nextTab === "database"
+        nextTab === "database" ||
+        nextTab === "settings"
       ) {
         setTab(nextTab);
       }
@@ -156,6 +165,14 @@ export function QuestionWindow(props: QuestionWindowProps) {
     return scoreMatch(props.snapshot.job.description || props.snapshot.job.title, props.profile);
   }, [props.snapshot, props.profile]);
 
+  if (tab === "settings") {
+    return (
+      <Shell savedAt={savedAt}>
+        <SettingsView onBack={() => setTabPersist("all")} lastAnalysis={lastAnalysis} />
+      </Shell>
+    );
+  }
+
   if (tab === "database") {
     return (
       <Shell savedAt={savedAt}>
@@ -175,6 +192,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("database")}>
             Database
           </button>
+          <button onClick={() => setTabPersist("settings")}>Settings</button>
         </div>
         <LiveJobList
           jobs={liveJobs}
@@ -197,6 +215,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("database")}>
             Database
           </button>
+          <button onClick={() => setTabPersist("settings")}>Settings</button>
         </div>
         <Empty
           title="LinkedIn Easy Apply is off-limits"
@@ -216,6 +235,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("database")}>
             Database
           </button>
+          <button onClick={() => setTabPersist("settings")}>Settings</button>
         </div>
         <Empty
           title="No form on this page"
@@ -236,6 +256,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("database")}>
             Database
           </button>
+          <button onClick={() => setTabPersist("settings")}>Settings</button>
         </div>
         <Empty title="Scanning…" body="Looking for fields, including shadow DOM and this frame." />
       </Shell>
@@ -287,6 +308,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button className="primary" onClick={() => setTabPersist("database")}>
           Database
         </button>
+        <button onClick={() => setTabPersist("settings")}>Settings</button>
       </div>
       <div className="tabs">
         {(["all", "needs-you", "filled"] as const).map((t) => (
@@ -309,9 +331,11 @@ export function QuestionWindow(props: QuestionWindowProps) {
             <button className="primary" onClick={() => setTabPersist("database")}>
               Database
             </button>
+            <button onClick={() => setTabPersist("settings")}>Settings</button>
           </div>
           <p className="meta">
             {answered} real fields answered · {requiredEmpty.length} required still empty on this step.
+            {lastAnalysis ? ` · ${lastAnalysis}` : ""}
           </p>
         </>
       ) : (

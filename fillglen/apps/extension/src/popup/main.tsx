@@ -12,10 +12,11 @@ import {
 import { CopyrightNotice, Wordmark } from "../brand";
 import { DatabaseView } from "../shared/DatabaseView";
 import { ResumeFiles } from "../shared/ResumeFiles";
+import { SettingsView } from "../shared/SettingsView";
 import "../panel/styles.css";
 
 type Match = ApplyQueueItem;
-type View = "home" | "live" | "database";
+type View = "home" | "live" | "database" | "settings";
 
 function Popup() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
@@ -32,6 +33,7 @@ function Popup() {
   const [dbTotal, setDbTotal] = useState(0);
   const [savedAt, setSavedAt] = useState("");
   const [lastJob, setLastJob] = useState("");
+  const [lastAnalysis, setLastAnalysis] = useState("");
 
   useEffect(() => {
     chrome.storage.local.get(
@@ -51,6 +53,7 @@ function Popup() {
         "sessionSavedAt",
         "lastJobUrl",
         "lastKeepStatus",
+        "lastPageAnalysis",
       ],
       (r) => {
         if (r.profile) setProfile(hydrateProfile(r.profile));
@@ -59,11 +62,14 @@ function Popup() {
         if (Array.isArray(r.liveJobs)) setLiveJobs(r.liveJobs);
         if (typeof r.popupPaste === "string") setPaste(r.popupPaste);
         if (typeof r.popupStatus === "string") setStatus(r.popupStatus);
-        if (r.popupView === "live" || r.popupView === "home" || r.popupView === "database") setView(r.popupView);
+        if (r.popupView === "live" || r.popupView === "home" || r.popupView === "database" || r.popupView === "settings") {
+          setView(r.popupView);
+        }
         if (typeof r.liveJobsHarvestedAt === "string") setHarvestedAt(r.liveJobsHarvestedAt);
         if (r.dbCache?.total != null) setDbTotal(Number(r.dbCache.total) || 0);
         if (typeof r.sessionSavedAt === "string") setSavedAt(r.sessionSavedAt);
         if (typeof r.lastJobUrl === "string") setLastJob(r.lastJobUrl);
+        if (typeof r.lastPageAnalysis === "string") setLastAnalysis(r.lastPageAnalysis);
         setKeepApplying(Boolean(r.keepApplying));
         const base = r.apiBase || "http://127.0.0.1:8787";
         if (r.sessionToken) {
@@ -94,9 +100,15 @@ function Popup() {
       if (typeof changes.lastJobUrl?.newValue === "string") setLastJob(changes.lastJobUrl.newValue);
       if (typeof changes.popupPaste?.newValue === "string") setPaste(changes.popupPaste.newValue);
       if (typeof changes.popupStatus?.newValue === "string") setStatus(changes.popupStatus.newValue);
-      if (changes.popupView?.newValue === "live" || changes.popupView?.newValue === "home" || changes.popupView?.newValue === "database") {
+      if (
+        changes.popupView?.newValue === "live" ||
+        changes.popupView?.newValue === "home" ||
+        changes.popupView?.newValue === "database" ||
+        changes.popupView?.newValue === "settings"
+      ) {
         setView(changes.popupView.newValue);
       }
+      if (typeof changes.lastPageAnalysis?.newValue === "string") setLastAnalysis(changes.lastPageAnalysis.newValue);
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
@@ -134,6 +146,16 @@ function Popup() {
     await chrome.runtime.sendMessage({ type: "open-live-job", url });
   }
 
+  if (view === "settings") {
+    return (
+      <div className="fg-root fg-popup">
+        <Wordmark />
+        <SettingsView onBack={() => persistUi({ view: "home" })} lastAnalysis={lastAnalysis} />
+        <CopyrightNotice />
+      </div>
+    );
+  }
+
   if (view === "database") {
     return (
       <div className="fg-root fg-popup">
@@ -159,6 +181,7 @@ function Popup() {
           <button className="primary" onClick={() => persistUi({ view: "database" })}>
             Database
           </button>
+          <button onClick={() => persistUi({ view: "settings" })}>Settings</button>
         </div>
         <section className="fg-card">
           <div className="fg-card-head">
@@ -253,10 +276,11 @@ function Popup() {
         <button className="primary" onClick={() => persistUi({ view: "live" })}>
           Live jobs
         </button>
-        <button className="primary" onClick={() => persistUi({ view: "database" })}>
-          Database
-        </button>
-        <span className="meta">{liveJobs.length} saved · {dbTotal} in this extension</span>
+          <button className="primary" onClick={() => persistUi({ view: "database" })}>
+            Database
+          </button>
+          <button onClick={() => persistUi({ view: "settings" })}>Settings</button>
+          <span className="meta">{liveJobs.length} saved · {dbTotal} in this extension</span>
       </div>
 
       <section className="fg-card fg-discover">
