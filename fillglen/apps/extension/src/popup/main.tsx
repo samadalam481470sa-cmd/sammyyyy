@@ -411,7 +411,7 @@ function Popup() {
 
       <p className="meta fg-foot-note">
         {keepApplying
-          ? "Keep applying is on 24/7 while Chrome is open — hidden tabs keep filling."
+          ? "Keep applying is on 24/7 while Chrome is open — it fills from your saved profile, clicks the application screen, submits, and opens the next listing."
           : "Keep applying is off."}{" "}
         Switching tabs saves listings, typed answers, keep
         applying, and this window.

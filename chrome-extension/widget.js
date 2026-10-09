@@ -5,8 +5,10 @@
  *   - Fill Name / Email / Phone (from the saved resume)
  *   - Full Autofill + Job Fit Score (runs the same engine as the popup)
  *
- * Nothing here submits forms or simulates mouse movement — it only fills
- * fields the user explicitly asks it to fill, with their own real data.
+ * This older RF bubble fills from the saved resume when you click a button.
+ * Fully autonomous 24/7 submit / next-listing lives in the Fillglen Chrome
+ * widget (`fillglen-assistant`): after Autofill & keep applying it fills from
+ * your saved profile, clicks on-screen controls, submits, and moves on.
  */
 (function () {
   if (window.__resumeFitWidgetInjected) return;

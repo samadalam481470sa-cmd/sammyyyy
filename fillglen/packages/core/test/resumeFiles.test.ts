@@ -9,7 +9,14 @@ import {
   textToDocx,
   textToPdf,
 } from "../src/resumeFiles.js";
-import { classifyScreenControl, fillPaceForPage, pageLooksDetected, pickScreenAction } from "../src/screenAct.js";
+import {
+  classifyScreenControl,
+  fillPaceForPage,
+  looksLikeJobListingCopy,
+  pageLooksDetected,
+  pickScreenAction,
+  pickScreenActions,
+} from "../src/screenAct.js";
 import { EMPTY_PROFILE } from "../src/types.js";
 
 describe("resume files", () => {
@@ -61,8 +68,44 @@ describe("screen pace", () => {
   it("will click cookie and upload controls and will not click logout", () => {
     assert.equal(classifyScreenControl("Accept all cookies"), "act");
     assert.equal(classifyScreenControl("Upload resume"), "act");
+    assert.equal(classifyScreenControl("Add education"), "act");
     assert.equal(classifyScreenControl("Log out"), "never");
     assert.equal(classifyScreenControl("Withdraw application"), "never");
+    assert.equal(classifyScreenControl("Donate now"), "never");
+    assert.equal(classifyScreenControl("Pay now"), "never");
+    assert.equal(classifyScreenControl("Easy Apply"), "never");
     assert.equal(pickScreenAction([{ label: "Log out" }, { label: "Accept cookies" }])?.label, "Accept cookies");
+  });
+
+  it("does not steal Sign Up, last application, Next, or native file pickers", () => {
+    assert.equal(classifyScreenControl("Create Account"), null);
+    assert.equal(classifyScreenControl("Use My Last Application"), null);
+    assert.equal(classifyScreenControl("Sign Up"), null);
+    assert.equal(classifyScreenControl("Next"), null);
+    assert.equal(classifyScreenControl("Submit application"), null);
+    assert.equal(classifyScreenControl("Choose File"), null);
+    assert.equal(
+      pickScreenAction([{ label: "Create Account" }, { label: "Accept all cookies" }])?.label,
+      "Accept all cookies"
+    );
+  });
+
+  it("skips fingerprints so the same banner is not clicked forever", () => {
+    const buttons = [
+      { label: "Accept all cookies", automationId: "cookie" },
+      { label: "Add experience" },
+    ];
+    const first = pickScreenAction(buttons);
+    assert.equal(first?.label, "Accept all cookies");
+    const second = pickScreenAction(buttons, [first!.fingerprint]);
+    assert.equal(second?.label, "Add experience");
+    const none = pickScreenAction(buttons, [first!.fingerprint, second!.fingerprint]);
+    assert.equal(none, null);
+    assert.equal(pickScreenActions(buttons, [], 2).length, 2);
+  });
+
+  it("treats job-listing copy as work the loop should open", () => {
+    assert.equal(looksLikeJobListingCopy("Job description\nAbout the role\nApply now"), true);
+    assert.equal(looksLikeJobListingCopy("Privacy policy"), false);
   });
 });

@@ -106,5 +106,11 @@ export function looksLikeApplicationPage(url: string, bodyText = ""): boolean {
     /submit application|upload (your )?resume|work authorization|equal employment|voluntary self|apply for this job/.test(
       blob
     );
-  return hasIdentity && hasApply;
+  if (hasIdentity && hasApply) return true;
+  const listing =
+    /job description|about (the|this) role|what you'll do|what you will do|we're hiring|we are hiring|qualifications/.test(
+      blob
+    );
+  const applyCta = /apply now|start application|apply for this job|submit application/.test(blob);
+  return listing && applyCta;
 }

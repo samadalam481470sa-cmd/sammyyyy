@@ -12,12 +12,45 @@ export interface BoardLogin {
   appliedCount: number;
 }
 
+/** Workday company tenant (subdomain). Different tenants are different companies. */
+export function workdayTenant(hostOrUrl: string): string | null {
+  const host = hostOrUrl.includes("://") ? loginHost(hostOrUrl) : hostOrUrl.replace(/^www\./, "").toLowerCase();
+  const m = /^([a-z0-9-]+)\.wd\d+\.myworkdayjobs\.com$/i.exec(host);
+  if (m) return m[1].toLowerCase();
+  const site = /^([a-z0-9-]+)\.myworkdaysite\.com$/i.exec(host);
+  return site ? site[1].toLowerCase() : null;
+}
+
+function boardSlug(u: URL): string | null {
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  if (/greenhouse\.io$/.test(host) || /^jobs\.lever\.co$/.test(host) || /ashbyhq\.com$/.test(host) || /myworkdayjobs\.com$/.test(host)) {
+    if (workdayTenant(host)) return null;
+    const part = u.pathname.split("/").filter(Boolean)[0];
+    return part ? part.toLowerCase() : null;
+  }
+  return null;
+}
+
 export function loginHost(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    const slug = boardSlug(u);
+    return slug ? `${host}/${slug}` : host;
   } catch {
     return "";
   }
+}
+
+/** Same Workday tenant / Greenhouse board / host — not every site on the ATS. */
+export function sameBoardCompany(a: string, b: string): boolean {
+  const ha = a.includes("://") ? loginHost(a) : a.replace(/^www\./, "").toLowerCase();
+  const hb = b.includes("://") ? loginHost(b) : b.replace(/^www\./, "").toLowerCase();
+  if (!ha || !hb) return false;
+  const ta = workdayTenant(ha);
+  const tb = workdayTenant(hb);
+  if (ta || tb) return Boolean(ta && tb && ta === tb);
+  return ha === hb;
 }
 
 export function classifyAuthGate(label: string): AuthGateAction | null {
@@ -45,12 +78,12 @@ export function classifyAuthGate(label: string): AuthGateAction | null {
 }
 
 export function pickAuthGate(
-  buttons: { label: string }[],
+  buttons: { label: string; action?: AuthGateAction | null }[],
   returning: boolean,
   canSignIn = true
 ): { label: string; action: AuthGateAction } | null {
   const labeled = buttons
-    .map((b) => ({ label: b.label, action: classifyAuthGate(b.label) }))
+    .map((b) => ({ label: b.label, action: b.action || classifyAuthGate(b.label) }))
     .filter((b): b is { label: string; action: AuthGateAction } => Boolean(b.action));
   if (returning) {
     return (
@@ -91,13 +124,18 @@ export function hostHasPriorApply(
   liveJobs: Pick<ApplyQueueItem, "url" | "appliedAt">[] = [],
   url = ""
 ): boolean {
+  const probe = url || (host.includes("://") ? host : host ? `https://${host}` : "");
   const login = priorLogin(logins, host);
-  if (login && login.appliedCount > 0) return true;
+  // Signup-created logins (appliedCount 0) are not "already submitted at this company".
+  if (login && login.appliedCount > 0) {
+    if (!probe) return true;
+    return sameBoardCompany(probe, login.host.includes("://") ? login.host : `https://${login.host}`);
+  }
   const key = url ? canonicalJobUrl(url) : "";
   return liveJobs.some((j) => {
     if (!j.appliedAt) return false;
     if (key && canonicalJobUrl(j.url) === key) return true;
-    return loginHost(j.url) === host;
+    return probe ? sameBoardCompany(j.url, probe) : loginHost(j.url) === host;
   });
 }
 
@@ -178,7 +216,7 @@ export function shouldSkipWarmupFill(pageUrl: string, warmupUrl?: string | null)
 }
 
 export function decideKeepAuth(input: {
-  buttons: { label: string }[];
+  buttons: { label: string; action?: AuthGateAction | null }[];
   returning: boolean;
   canSignIn: boolean;
   appliedBeforePrompt: boolean;

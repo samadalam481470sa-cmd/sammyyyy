@@ -11,8 +11,10 @@ import {
   looksLikeAppliedBeforePrompt,
   looksLikeAuthWall,
   pickAuthGate,
+  sameBoardCompany,
   shouldSkipWarmupFill,
   upsertBoardLogin,
+  workdayTenant,
 } from "../src/authGate.js";
 
 describe("auth gate", () => {
@@ -71,5 +73,68 @@ describe("auth gate", () => {
     });
     assert.equal(plan.appliedBefore, "yes");
     assert.equal(plan.gate?.action, "last-application");
+  });
+
+  it("uses last application only after a real submit at that same Workday company", () => {
+    const austinUrl = "https://austintexas.wd5.myworkdayjobs.com/COA_Careers";
+    const dallasUrl = "https://dallascityhall.wd1.myworkdayjobs.com/External";
+    const buttons = [
+      { label: "Use My Last Application" },
+      { label: "Create Account" },
+      { label: "Sign In" },
+    ];
+    assert.equal(workdayTenant(austinUrl), "austintexas");
+    assert.equal(workdayTenant(dallasUrl), "dallascityhall");
+    assert.equal(sameBoardCompany(austinUrl, dallasUrl), false);
+    assert.equal(pickAuthGate(buttons, false)?.action, "create-account");
+
+    const signup = loginForFill([], austinUrl, "sam@example.com", "secret1");
+    assert.equal(signup.created, true);
+    assert.equal(hostHasPriorApply(signup.login.host, signup.logins, [], austinUrl), false);
+    assert.equal(
+      pickAuthGate(buttons, hostHasPriorApply(signup.login.host, signup.logins, [], austinUrl))?.action,
+      "create-account"
+    );
+
+    const applied = upsertBoardLogin(signup.logins, { ...signup.login, applied: true });
+    assert.equal(hostHasPriorApply(loginHost(austinUrl), applied, [], austinUrl), true);
+    assert.equal(pickAuthGate(buttons, true)?.action, "last-application");
+    assert.equal(hostHasPriorApply(loginHost(dallasUrl), applied, [], dallasUrl), false);
+    assert.equal(
+      pickAuthGate(buttons, hostHasPriorApply(loginHost(dallasUrl), applied, [], dallasUrl))?.action,
+      "create-account"
+    );
+    assert.equal(
+      hostHasPriorApply(loginHost(dallasUrl), [], [{ url: austinUrl, appliedAt: "2026-01-01T00:00:00.000Z" }], dallasUrl),
+      false
+    );
+    assert.equal(
+      hostHasPriorApply(loginHost(austinUrl), [], [{ url: austinUrl, appliedAt: "2026-01-01T00:00:00.000Z" }], austinUrl),
+      true
+    );
+  });
+
+  it("honors Workday automation ids so a new company still hits Sign Up", () => {
+    const buttons = [
+      { label: "wd-UseLastApplication", action: "last-application" as const },
+      { label: "wd-CreateAccount", action: "create-account" as const },
+    ];
+    assert.equal(pickAuthGate(buttons, false)?.action, "create-account");
+    assert.equal(pickAuthGate(buttons, true)?.action, "last-application");
+  });
+
+  it("keeps Greenhouse boards on different company slugs separate", () => {
+    const acme = "https://boards.greenhouse.io/acme/jobs/1";
+    const other = "https://boards.greenhouse.io/other/jobs/2";
+    assert.equal(loginHost(acme), "boards.greenhouse.io/acme");
+    assert.equal(loginHost(other), "boards.greenhouse.io/other");
+    const applied = upsertBoardLogin([], {
+      host: loginHost(acme),
+      email: "sam@example.com",
+      password: "Fg!x",
+      applied: true,
+    });
+    assert.equal(hostHasPriorApply(loginHost(acme), applied, [], acme), true);
+    assert.equal(hostHasPriorApply(loginHost(other), applied, [], other), false);
   });
 });

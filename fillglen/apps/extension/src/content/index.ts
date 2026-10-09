@@ -16,6 +16,9 @@ import {
   KEEP_SCAN_BURST_MS,
   KEEP_SLOW_GAP_MS,
   KEEP_STUCK_TICKS,
+  looksLikeJobListingCopy,
+  SCREEN_CLICK_BUDGET,
+  trimScreenSkip,
   loginForFill,
   loginHost,
   looksLikeApplicationPage,
@@ -93,6 +96,7 @@ function boot() {
   let googleClicked = false;
   let keepRestored = false;
   let persistTimer: number | undefined;
+  let screenSkip: string[] = [];
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -309,6 +313,7 @@ function boot() {
       const applyPage =
         looksLikeApplicationPage(location.href, pageBlob) ||
         looksLikeAuthWall(pageBlob) ||
+        looksLikeJobListingCopy(pageBlob) ||
         Boolean(document.querySelector("input[type=password]")) ||
         collectAuthButtons(document).length > 0 ||
         findFileInputs(document).length > 0;
@@ -328,10 +333,12 @@ function boot() {
         waitingOnCaptcha = false;
         post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
       }
-      const acted = clickScreenAction(document);
-      if (acted) {
+      for (let n = 0; n < SCREEN_CLICK_BUDGET; n++) {
+        const acted = clickScreenAction(document, screenSkip);
+        if (!acted) break;
+        screenSkip = trimScreenSkip([...screenSkip, acted.fingerprint]);
         stuckTicks = 0;
-        post({ type: "keep-status", status: "fill", url, detail: acted });
+        post({ type: "keep-status", status: "fill", url, detail: acted.label });
         if (pace === "slow") await new Promise((r) => setTimeout(r, KEEP_SLOW_GAP_MS));
       }
       const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);

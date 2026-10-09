@@ -411,6 +411,13 @@ describe("adapters", () => {
     assert.equal(looksLikeApplicationPage("https://acme.bamboohr.com/careers/12"), true);
     assert.equal(looksLikeApplicationPage("https://jobs.dayforcehcm.com/en-US/acme/CANDIDATEPORTAL/job/1"), true);
     assert.equal(looksLikeApplicationPage("https://www.linkedin.com/jobs/view/1"), false);
+    assert.equal(
+      looksLikeApplicationPage(
+        "https://example.com/careers/software-engineer",
+        "Job description. About the role. Qualifications. Apply now."
+      ),
+      true
+    );
   });
 });
 

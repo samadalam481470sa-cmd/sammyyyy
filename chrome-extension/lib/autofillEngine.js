@@ -4,10 +4,11 @@
  *   - widget.js (the always-available floating on-page helper)
  *
  * Design rules (do not violate these when extending):
- *   - Fill from the user's resume/profile and saved answers. Fillglen's
- *     Autofill & keep applying runs on its own after Start (24/7 while
- *     Chrome is open) so the loop is not blocked waiting on every field.
- *     It does not invent a name, email, or work history.
+ *   - Run on its own from the resume/profile and saved answers. Do not wait
+ *     for a human on every field. Fillglen Autofill & keep applying is the
+ *     24/7 Chrome widget: after Start it fills, clicks the application
+ *     screen, submits, and moves on. It does not invent a name, email, or
+ *     work history.
  *   - Legally/factually sensitive questions (work authorization, visa,
  *     salary, disability, veteran status, etc.) are only filled from an
  *     exact user-provided Q&A answer — otherwise they're flagged for the
@@ -30,6 +31,11 @@
     { key: "website", tests: [/portfolio|github|personal\s*site|website/] },
     { key: "location", tests: [/^city$|location(?!.*(state|zip|code))/] },
     { key: "summary", tests: [/summary|about\s*you(?!.*why)/] },
+    { key: "address", tests: [/street|address line|mailing address/] },
+    { key: "city", tests: [/^city$|town\/city/] },
+    { key: "state", tests: [/state|province|region/] },
+    { key: "zip", tests: [/zip|postal/] },
+    { key: "country", tests: [/country|nation/] },
   ];
 
   const SENSITIVE_HINTS = [
@@ -77,7 +83,67 @@
         best = qa;
       }
     }
-    return bestScore >= 0.6 ? best : null;
+    return bestScore >= 0.45 ? best : null;
+  }
+
+  function consentLooksChecked(descriptor) {
+    return /terms|privacy|consent|i agree|i have read|i accept/.test(descriptor);
+  }
+
+  function derivedProfileAnswer(descriptor, profile, qaItems) {
+    const custom = findCustomAnswer(descriptor, qaItems);
+    if (custom) return custom.answer;
+    if (/how\s+did\s+you\s+hear|where\s+did\s+you\s+hear|referral source/.test(descriptor)) {
+      return "Company website";
+    }
+    if (/authoriz|eligible to work|legally authorized/.test(descriptor)) {
+      const saved = findCustomAnswer("authorized to work", qaItems) || findCustomAnswer("work authorization", qaItems);
+      if (saved) return saved.answer;
+    }
+    if (/sponsorship|visa/.test(descriptor)) {
+      const saved = findCustomAnswer("sponsorship", qaItems) || findCustomAnswer("visa", qaItems);
+      if (saved) return saved.answer;
+    }
+    if (/relocat/.test(descriptor)) {
+      const saved = findCustomAnswer("relocate", qaItems);
+      if (saved) return saved.answer;
+    }
+    if (/salary|compensation|pay\s*expect/.test(descriptor) && profile.salary) return String(profile.salary);
+    if (/start\s*date|availab|notice\s*period/.test(descriptor) && (profile.startDate || profile.noticePeriod)) {
+      return String(profile.startDate || profile.noticePeriod);
+    }
+    if (/country|nation/.test(descriptor) && (profile.country || /united states|usa|dallas|tx|texas/i.test(profile.location || ""))) {
+      return profile.country || "United States";
+    }
+    return null;
+  }
+
+  function applyAnswerToField(el, value, reason) {
+    if (el.type === "checkbox") {
+      const affirmative = /^(yes|true|agree|checked|confirm|on|1)/i.test(String(value).trim()) || consentLooksChecked(labelForElement(el));
+      el.checked = affirmative;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      markFilled(el, reason);
+      return true;
+    }
+    if (el.tagName === "SELECT") {
+      const option = matchOptionValue(el, value);
+      if (!option) return false;
+      el.value = option.value;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      markFilled(el, reason);
+      return true;
+    }
+    if (el.isContentEditable) {
+      el.focus();
+      el.textContent = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      markFilled(el, reason);
+      return true;
+    }
+    setNativeValue(el, value);
+    markFilled(el, reason);
+    return true;
   }
 
   function draftNarrativeAnswer(profile) {
@@ -215,16 +281,17 @@
 
     for (const group of radioGroups.values()) {
       const groupDescriptor = describeRadioGroup(group);
-      const customAnswer = findCustomAnswer(groupDescriptor, qaItems);
-      if (customAnswer) {
+      const answer = derivedProfileAnswer(groupDescriptor, profile, qaItems);
+      if (answer) {
         const target = group.find((radio) => {
           const optionLabel = labelForElement(radio);
-          return optionLabel.includes(customAnswer.answer.toLowerCase()) || customAnswer.answer.toLowerCase().includes(optionLabel);
+          const a = String(answer).toLowerCase();
+          return optionLabel.includes(a) || a.includes(optionLabel) || optionLabel === a;
         });
         if (target) {
           target.checked = true;
           target.dispatchEvent(new Event("change", { bubbles: true }));
-          group.forEach((r) => markFilled(r, `Set from your saved answer: "${groupDescriptor}" -> ${customAnswer.answer}`));
+          group.forEach((r) => markFilled(r, `Set from your saved resume/Q&A: "${groupDescriptor}" -> ${answer}`));
           filledCount++;
           continue;
         }
@@ -239,34 +306,22 @@
       const descriptor = labelForElement(el);
       const isCheckbox = el.type === "checkbox";
 
-      const customAnswer = findCustomAnswer(descriptor, qaItems);
-      if (customAnswer) {
-        if (isCheckbox) {
-          const affirmative = /^(yes|true|agree|checked|confirm)/i.test(customAnswer.answer.trim());
-          el.checked = affirmative;
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-          markFilled(el, `Set from your saved answer: "${customAnswer.question}" -> ${customAnswer.answer}`);
-          filledCount++;
-          continue;
-        }
-        if (el.tagName === "SELECT") {
-          const option = matchOptionValue(el, customAnswer.answer);
-          if (option) {
-            el.value = option.value;
-            el.dispatchEvent(new Event("change", { bubbles: true }));
-            markFilled(el, `Set from your saved answer: "${customAnswer.question}"`);
-            filledCount++;
-            continue;
-          }
-        } else {
-          setNativeValue(el, customAnswer.answer);
-          markFilled(el, `Filled from your saved answer: "${customAnswer.question}"`);
+      const derived = derivedProfileAnswer(descriptor, profile, qaItems);
+      if (derived) {
+        if (applyAnswerToField(el, derived, `Filled from your saved resume/Q&A`)) {
           filledCount++;
           continue;
         }
       }
 
       if (isCheckbox) {
+        if (consentLooksChecked(descriptor)) {
+          el.checked = true;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          markFilled(el, "Checked from the consent/terms wording on your application");
+          filledCount++;
+          continue;
+        }
         markFlagged(el, "Please answer this yourself, or save an answer for it in the Q&A tab");
         flaggedCount++;
         continue;
@@ -286,6 +341,11 @@
       }
 
       if (SENSITIVE_HINTS.some((re) => re.test(descriptor))) {
+        const again = derivedProfileAnswer(descriptor, profile, qaItems);
+        if (again && applyAnswerToField(el, again, "Filled from your saved resume/Q&A")) {
+          filledCount++;
+          continue;
+        }
         markFlagged(el, "Save an answer for this in the Q&A tab, or fill it in yourself");
         flaggedCount++;
         continue;

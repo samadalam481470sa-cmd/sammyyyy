@@ -7,7 +7,13 @@ import {
 } from "./authGate.js";
 import { classifyQuestion } from "./classify.js";
 import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
-import { classifyScreenControl, KEEP_SLOW_CHAR_MS, type FillPace } from "./screenAct.js";
+import {
+  classifyScreenControl,
+  controlFingerprint,
+  KEEP_SLOW_CHAR_MS,
+  pickScreenAction,
+  type FillPace,
+} from "./screenAct.js";
 import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
 import { stableQuestionId } from "./questionId.js";
 import { normalize } from "./fuzzy.js";
@@ -22,7 +28,7 @@ function visible(el: HTMLElement): boolean {
 
 function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
   const nodes = root.querySelectorAll(
-    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [data-automation-id]"
+    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [data-automation-id], [contenteditable='true'], [contenteditable='']"
   );
   nodes.forEach((n) => {
     if (n instanceof HTMLElement) out.push(n);
@@ -31,6 +37,20 @@ function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[
   });
   root.querySelectorAll("*").forEach((n) => {
     if (n instanceof HTMLElement && n.shadowRoot) walkShadow(n.shadowRoot, out);
+  });
+}
+
+function walkClickables(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
+  const nodes = root.querySelectorAll(
+    "button, a, input[type=button], input[type=submit], input[type=reset], [role='button'], [role='link'], [role='menuitem'], [role='tab'], [role='switch'], label, [data-automation-id]"
+  );
+  nodes.forEach((n) => {
+    if (n instanceof HTMLElement) out.push(n);
+    const sr = (n as HTMLElement).shadowRoot;
+    if (sr) walkClickables(sr, out);
+  });
+  root.querySelectorAll("*").forEach((n) => {
+    if (n instanceof HTMLElement && n.shadowRoot) walkClickables(n.shadowRoot, out);
   });
 }
 
@@ -46,6 +66,7 @@ function kindOf(el: HTMLElement): FieldKind {
     if (el.type === "date" || el.type === "month") return "date";
   }
   if (el.getAttribute("aria-autocomplete") === "list") return "typeahead";
+  if (el.isContentEditable) return "textarea";
   return "text";
 }
 
@@ -139,6 +160,8 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
       value = el.options[el.selectedIndex]?.text || el.value;
     } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       value = el.value;
+    } else if (el.isContentEditable) {
+      value = tidy(el.innerText || el.textContent || "");
     } else {
       value = tidy(el.textContent || "");
     }
@@ -179,12 +202,16 @@ function nativeSet(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElemen
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function setContentEditable(el: HTMLElement, value: string): string {
+  el.focus();
+  el.textContent = value;
+  el.dispatchEvent(new InputEvent("input", { bubbles: true, data: value }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return tidy(el.innerText || el.textContent || "");
+}
+
 export function setFieldById(id: string, value: string): { ok: boolean; readBack: string; error?: string } {
-  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as
-    | HTMLInputElement
-    | HTMLTextAreaElement
-    | HTMLSelectElement
-    | null;
+  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
   if (!el) return { ok: false, readBack: "", error: "Field left the page." };
   try {
     if (el instanceof HTMLInputElement && el.type === "radio") {
@@ -227,16 +254,25 @@ export function setFieldById(id: string, value: string): { ok: boolean; readBack
       nativeSet(el, match ? match.value : value);
       el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    } else {
+    } else if (el.isContentEditable) {
+      setContentEditable(el, value);
+    } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       nativeSet(el, value);
+      openAndPickCustom(el, value);
+    } else {
       openAndPickCustom(el, value);
     }
     const readBack =
       el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")
         ? String(el.checked)
-        : el.value;
-    const invalid = !el.checkValidity?.() || el.getAttribute("aria-invalid") === "true";
-    if (invalid) return { ok: false, readBack, error: el.validationMessage || "Site rejected this value." };
+        : el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+          ? el.value
+          : tidy(el.innerText || el.textContent || "");
+    const formEl = el as HTMLInputElement;
+    const invalid =
+      (typeof formEl.checkValidity === "function" && !formEl.checkValidity()) ||
+      el.getAttribute("aria-invalid") === "true";
+    if (invalid) return { ok: false, readBack, error: formEl.validationMessage || "Site rejected this value." };
     return { ok: true, readBack };
   } catch (err) {
     return { ok: false, readBack: "", error: err instanceof Error ? err.message : String(err) };
@@ -294,11 +330,8 @@ export function findAdvanceControl(
   doc: Document,
   mode: "fill-only" | "keep-applying" = "fill-only"
 ): { el: HTMLElement; kind: "next" | "submit"; label: string } | null {
-  const els = [
-    ...doc.querySelectorAll("button, a, input[type=button], input[type=submit], [role='button']"),
-  ] as HTMLElement[];
-  const labeled = els
-    .filter(visible)
+  const labeled = clickableControls(doc)
+    .filter((el) => visible(el) && isInnermostClickable(el))
     .map((el) => ({
       el,
       label: (el.getAttribute("value") || el.getAttribute("aria-label") || el.textContent || "").replace(/\s+/g, " ").trim(),
@@ -363,9 +396,20 @@ export function readWorkdayStep(): { label: string; index?: number; total?: numb
 }
 
 function clickableControls(doc: Document): HTMLElement[] {
-  return [
-    ...doc.querySelectorAll("button, a, input[type=button], input[type=submit], [role='button'], [role='link'], label"),
-  ] as HTMLElement[];
+  const found: HTMLElement[] = [];
+  walkClickables(doc, found);
+  const seen = new Set<HTMLElement>();
+  const out: HTMLElement[] = [];
+  for (const el of found) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    out.push(el);
+  }
+  return out;
+}
+
+function isInnermostClickable(el: HTMLElement): boolean {
+  return !el.querySelector("button, a[href], [role='button'], input[type=button], input[type=submit]");
 }
 
 function controlLabel(el: HTMLElement): string {
@@ -405,7 +449,7 @@ export function clickAuthGate(
 ): { action: AuthGateAction; label: string } | null {
   const buttons = collectAuthButtons(doc);
   const picked = pickAuthGate(
-    buttons.map((b) => ({ label: b.label })),
+    buttons.map((b) => ({ label: b.label, action: b.action })),
     returning,
     canSignIn
   );
@@ -459,17 +503,32 @@ export function attachFileToInput(el: HTMLInputElement, file: File): boolean {
   }
 }
 
-export function clickScreenAction(doc: Document): string | null {
+export function clickScreenAction(
+  doc: Document,
+  skip: string[] = []
+): { label: string; fingerprint: string } | null {
+  const buttons: { el: HTMLElement; label: string; automationId: string }[] = [];
   for (const el of clickableControls(doc)) {
-    if (!visible(el)) continue;
+    if (!visible(el) || !isInnermostClickable(el)) continue;
     const label = controlLabel(el);
-    if (classifyScreenControl(label) !== "act") continue;
+    const automationId = el.getAttribute("data-automation-id") || "";
     if (classifyAdvanceLabel(label)) continue;
-    el.scrollIntoView({ block: "nearest" });
-    el.click();
-    return label;
+    if (classifyAuthGate(label) || automationAction(el)) continue;
+    if (classifyScreenControl(label, automationId) !== "act") continue;
+    buttons.push({ el, label, automationId });
   }
-  return null;
+  const picked = pickScreenAction(
+    buttons.map((b) => ({ label: b.label, automationId: b.automationId })),
+    skip
+  );
+  if (!picked) return null;
+  const node =
+    buttons.find((b) => controlFingerprint(b.label, b.automationId) === picked.fingerprint) ||
+    buttons.find((b) => normalize(b.label) === normalize(picked.label));
+  if (!node) return null;
+  node.el.scrollIntoView({ block: "nearest" });
+  node.el.click();
+  return { label: node.label, fingerprint: picked.fingerprint };
 }
 
 export async function setFieldPaced(
@@ -478,16 +537,16 @@ export async function setFieldPaced(
   pace: FillPace = "fast"
 ): Promise<{ ok: boolean; readBack: string; error?: string }> {
   if (pace !== "slow") return setFieldById(id, value);
-  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as
-    | HTMLInputElement
-    | HTMLTextAreaElement
-    | HTMLSelectElement
-    | null;
+  const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
   if (!el) return { ok: false, readBack: "", error: "Field left the page." };
   if (
     el instanceof HTMLSelectElement ||
+    el.isContentEditable ||
     (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio" || el.type === "file" || el.type === "password"))
   ) {
+    return setFieldById(id, value);
+  }
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
     return setFieldById(id, value);
   }
   nativeSet(el, "");
