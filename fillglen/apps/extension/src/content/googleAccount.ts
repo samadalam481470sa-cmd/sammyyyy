@@ -8,6 +8,6 @@ function tick() {
 }
 
 tick();
-window.setInterval(tick, 300);
+window.setInterval(tick, 160);
 const obs = new MutationObserver(() => tick());
 obs.observe(document.documentElement, { childList: true, subtree: true });

@@ -256,7 +256,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <p className="banner done">Every required question has an answer. You still click Submit yourself unless Keep applying is on.</p>
       ) : null}
       {props.keepApplying ? (
-        <p className="banner done">Keep applying is on. Built-in job list, no 24/7 server needed. Dropdowns, Next, Submit, then the next listing while Chrome stays open. A CAPTCHA waits for you — Fillglen will not solve it. After you finish, open Live jobs or leave the list saved.</p>
+        <p className="banner done">Keep applying is on. The next listing loads in the background so the switch is immediate. Dropdowns, Next, Submit, then the warmed tab. A CAPTCHA waits for you — Fillglen will not solve it. After you finish, open Live jobs or leave the list saved.</p>
       ) : null}
       <ul className="qlist">
         {filtered.map((q) => (

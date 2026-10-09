@@ -272,7 +272,7 @@ function Popup() {
             setBusy(false);
             persistUi({
               status:
-                "Keep applying is on. After each application you can open a Live job, or leave the list for later. Unknown questions use the resume, or No.",
+                "Keep applying is on. The next listing is warmed in the background so switching is instant. After each application you can open a Live job, or leave the list. Unknown questions use the resume, or No.",
             });
           }}
         >

@@ -21,6 +21,8 @@ import {
   matchOption,
   markLiveJob,
   mergeLiveJobs,
+  handoffPlan,
+  KEEP_INTERVAL_MS,
   nextQueueItem,
   pageLooksLikeCaptcha,
   shouldLeavePageOnCaptcha,
@@ -275,8 +277,39 @@ describe("dropdown and keep-applying loop", () => {
       { url: "https://boards.greenhouse.io/b/2", title: "B", company: "B" },
     ];
     assert.equal(nextQueueItem(q, q[0].url)?.url, q[1].url);
-    assert.equal(nextQueueItem(q, q[1].url), null);
+    assert.equal(nextQueueItem(q, q[1].url)?.url, q[0].url);
     assert.equal(nextQueueItem(q, `${q[0].url}?gh_jid=1`)?.url, q[1].url);
+  });
+  it("skips already-applied jobs and stops when none are left", () => {
+    const q = [
+      { url: "https://boards.greenhouse.io/a/1", title: "A", company: "A", appliedAt: "2026-01-01T00:00:00.000Z" },
+      { url: "https://boards.greenhouse.io/b/2", title: "B", company: "B" },
+      { url: "https://boards.greenhouse.io/c/3", title: "C", company: "C", appliedAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    assert.equal(nextQueueItem(q, q[0].url)?.url, q[1].url);
+    assert.equal(nextQueueItem(q, q[1].url), null);
+  });
+  it("hands off to a warmed next tab and keeps Submit's tab alive briefly", () => {
+    const q = [
+      { url: "https://boards.greenhouse.io/a/1", title: "A", company: "A" },
+      { url: "https://boards.greenhouse.io/b/2", title: "B", company: "B" },
+      { url: "https://boards.greenhouse.io/c/3", title: "C", company: "C" },
+    ];
+    const plan = handoffPlan({
+      queue: q,
+      currentUrl: q[0].url,
+      warmupUrl: q[1].url,
+      warmupTabId: 9,
+      reason: "submitted",
+    });
+    assert.equal(plan.next?.url, q[1].url);
+    assert.equal(plan.useWarmup, true);
+    assert.equal(plan.closeCurrentAfterMs, 450);
+    assert.equal(plan.prefetchUrl, q[2].url);
+    const stuck = handoffPlan({ queue: q, currentUrl: q[0].url, reason: "stuck" });
+    assert.equal(stuck.useWarmup, false);
+    assert.ok(stuck.closeCurrentAfterMs < 100);
+    assert.ok(KEEP_INTERVAL_MS <= 200);
   });
 });
 

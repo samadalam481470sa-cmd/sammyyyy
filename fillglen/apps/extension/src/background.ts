@@ -8,7 +8,7 @@ import {
   mergeLiveJobs,
   isSupportedApplyUrl,
   looksLikeApplicationPage,
-  nextQueueItem,
+  handoffPlan,
   planPage,
   shouldBlockPage,
   type ApplyQueueItem,
@@ -22,6 +22,10 @@ import { loadDiscover, runDiscoverTick } from "./backgroundDiscover";
 const contentPorts = new Map<number, Set<chrome.runtime.Port>>();
 const panelPorts = new Set<chrome.runtime.Port>();
 const snapshots = new Map<number, ScanSnapshot>();
+let warmupTabId: number | null = null;
+let warmupUrl: string | null = null;
+let handoffLock = false;
+const handedOffTabs = new Set<number>();
 
 async function loadProfile(): Promise<Profile> {
   const stored = await chrome.storage.local.get(["profile"]);
@@ -265,13 +269,49 @@ async function ping(tabId: number, url: string) {
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   const url = info.url || tab.url;
   if (url) ping(tabId, url);
+  if (info.status === "complete") {
+    chrome.storage.local.get(["keepApplying"], (r) => {
+      if (!r.keepApplying) return;
+      if (tabId === warmupTabId) return;
+      if (tab.id && looksKeepTab(tab.url || url)) sendToTab(tab.id, { type: "keep-tick" });
+    });
+  }
 });
 
+chrome.webNavigation?.onCommitted.addListener((d) => {
+  if (d.frameId !== 0) return;
+  ping(d.tabId, d.url);
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (!r.keepApplying || d.tabId === warmupTabId) return;
+    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+  });
+});
 chrome.webNavigation?.onCompleted.addListener((d) => {
   if (d.frameId === 0) ping(d.tabId, d.url);
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (!r.keepApplying || d.frameId !== 0 || d.tabId === warmupTabId) return;
+    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+  });
 });
 chrome.webNavigation?.onHistoryStateUpdated.addListener((d) => {
   if (d.frameId === 0) ping(d.tabId, d.url);
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (!r.keepApplying || d.frameId !== 0 || d.tabId === warmupTabId) return;
+    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+  });
+});
+chrome.tabs.onRemoved.addListener((tabId) => {
+  handedOffTabs.delete(tabId);
+  if (tabId === warmupTabId) {
+    warmupTabId = null;
+    warmupUrl = null;
+  }
+});
+chrome.tabs.onActivated.addListener((info) => {
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (!r.keepApplying || info.tabId === warmupTabId) return;
+    sendToTab(info.tabId, { type: "keep-tick" });
+  });
 });
 
 function startLiveAlarm() {
@@ -400,6 +440,91 @@ async function openLiveJob(url: string) {
   await chrome.tabs.create({ url });
 }
 
+async function cachedQueue(): Promise<ApplyQueueItem[]> {
+  const { applyQueue = [], liveJobs = [] } = await chrome.storage.local.get(["applyQueue", "liveJobs"]);
+  const list = (applyQueue as ApplyQueueItem[]).length ? applyQueue : liveJobs;
+  return (list as ApplyQueueItem[]).filter((j) => j?.url);
+}
+
+async function warmup(url: string) {
+  if (!url || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(url)) return;
+  if (warmupUrl && canonicalJobUrl(warmupUrl) === canonicalJobUrl(url) && warmupTabId != null) {
+    try {
+      const tab = await chrome.tabs.get(warmupTabId);
+      if (tab?.id && !tab.discarded) return;
+    } catch {
+      warmupTabId = null;
+      warmupUrl = null;
+    }
+  }
+  if (warmupTabId != null) {
+    const old = warmupTabId;
+    warmupTabId = null;
+    warmupUrl = null;
+    chrome.tabs.remove(old).catch(() => {});
+  }
+  try {
+    const tab = await chrome.tabs.create({ url, active: false });
+    if (tab.id == null) return;
+    warmupTabId = tab.id;
+    warmupUrl = url;
+  } catch {
+    warmupTabId = null;
+    warmupUrl = null;
+  }
+}
+
+async function prefetchNext(currentUrl?: string, queue?: ApplyQueueItem[]) {
+  const list = queue || (await cachedQueue());
+  const item = currentUrl
+    ? handoffPlan({ queue: list, currentUrl, reason: "stuck" }).next
+    : list.find((j) => j.url && !j.appliedAt) || null;
+  if (item?.url) await warmup(item.url);
+}
+
+async function closeWarmup() {
+  const id = warmupTabId;
+  warmupTabId = null;
+  warmupUrl = null;
+  if (id != null) chrome.tabs.remove(id).catch(() => {});
+}
+
+async function goToNextJob(fromTabId: number, currentUrl: string, reason: "submitted" | "stuck" | "blocked" | "done-job") {
+  if (handoffLock || handedOffTabs.has(fromTabId)) return;
+  handoffLock = true;
+  handedOffTabs.add(fromTabId);
+  try {
+    const queue = await cachedQueue();
+    const plan = handoffPlan({
+      queue,
+      currentUrl,
+      warmupUrl,
+      warmupTabId,
+      reason,
+    });
+    if (!plan.next?.url) {
+      chrome.action.setBadgeText({ text: "DONE" });
+      return;
+    }
+    const nextUrl = plan.next.url;
+    if (plan.useWarmup && warmupTabId != null) {
+      const warmed = warmupTabId;
+      warmupTabId = null;
+      warmupUrl = null;
+      await chrome.tabs.update(warmed, { active: true }).catch(() => chrome.tabs.update(fromTabId, { url: nextUrl }));
+      sendToTab(warmed, { type: "keep-tick" });
+      setTimeout(() => chrome.tabs.remove(fromTabId).catch(() => {}), plan.closeCurrentAfterMs);
+      if (plan.prefetchUrl) warmup(plan.prefetchUrl).catch(() => {});
+      return;
+    }
+    chrome.tabs.update(fromTabId, { url: nextUrl });
+    await closeWarmup();
+    if (plan.prefetchUrl) warmup(plan.prefetchUrl).catch(() => {});
+  } finally {
+    handoffLock = false;
+  }
+}
+
 async function setKeepApplying(on: boolean, tabId?: number | null) {
   await chrome.storage.local.set({ keepApplying: on });
   if (on) {
@@ -407,18 +532,24 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
     startLiveAlarm();
-    const queue = await harvestLiveJobs();
-    runDiscoverTick().then(() => harvestLiveJobs()).catch(() => {});
+    const ready = await cachedQueue();
     const [tab] = tabId
       ? [await chrome.tabs.get(tabId).catch(() => null)]
       : await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     const id = tab?.id;
     if (id) sendToTab(id, { type: "keep-tick" });
     const url = tab?.url || "";
-    if (id && !looksApply(url) && queue[0]) chrome.tabs.update(id, { url: queue[0].url });
+    const first = ready.find((j) => !j.appliedAt);
+    if (id && !looksApply(url) && first) chrome.tabs.update(id, { url: first.url });
+    prefetchNext(looksApply(url) ? url : first?.url, ready).catch(() => {});
+    harvestLiveJobs()
+      .then((queue) => prefetchNext(looksApply(url) ? url : queue[0]?.url, queue))
+      .catch(() => {});
+    runDiscoverTick().then(() => harvestLiveJobs()).catch(() => {});
   } else {
     await chrome.alarms.clear("fillglen-keep");
     chrome.action.setBadgeText({ text: "" });
+    await closeWarmup();
     const { status } = await loadDiscover();
     await chrome.storage.local.set({
       discoverStatus: { ...status, running: false, note: "Discovery paused. Turn keep applying back on to continue the Texas map scan." },
@@ -448,15 +579,16 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
   }
   if (status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
     if (currentUrl && status === "submitted") {
+      const now = new Date().toISOString();
       const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
+      const marked = (applyQueue as ApplyQueueItem[]).map((j) =>
+        canonicalJobUrl(j.url) === canonicalJobUrl(currentUrl) ? { ...j, appliedAt: now } : j
+      );
       await chrome.storage.local.set({
-        liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], currentUrl, { appliedAt: new Date().toISOString() }),
+        applyQueue: marked,
+        liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], currentUrl, { appliedAt: now }),
       });
     }
-    const next = nextQueueItem(applyQueue, currentUrl || "");
-    const url = next?.url || applyQueue[0]?.url;
-    if (url && canonicalJobUrl(url) !== canonicalJobUrl(currentUrl || "")) {
-      setTimeout(() => chrome.tabs.update(tabId, { url }), 280);
-    }
+    goToNextJob(tabId, currentUrl || "", status).catch(() => {});
   }
 }

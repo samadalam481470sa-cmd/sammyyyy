@@ -5,6 +5,11 @@ import {
   feedMetaForUrl,
   fieldLooksFilled,
   hydrateProfile,
+  KEEP_FILL_GAP_MS,
+  KEEP_INTERVAL_MS,
+  KEEP_MUTATION_DEBOUNCE_MS,
+  KEEP_SCAN_BURST_MS,
+  KEEP_STUCK_TICKS,
   looksLikeApplicationPage,
   mayAdvance,
   planPage,
@@ -38,11 +43,18 @@ if (!window.__fillglen) {
   boot();
 }
 
+function pageTextNow(): string {
+  return document.body?.innerText?.slice(0, 2500) || "";
+}
+
+function isVisibleTab(): boolean {
+  return document.visibilityState === "visible";
+}
+
 function boot() {
   const url = location.href;
-  const pageText = document.body?.innerText?.slice(0, 2500) || "";
-  const blocked = shouldBlockPage(url, pageText);
-  const applyLike = looksLikeApplicationPage(url, pageText);
+  const blocked = shouldBlockPage(url, pageTextNow());
+  const applyLike = looksLikeApplicationPage(url, pageTextNow()) || looksLikeApplicationPage(url);
   const frameId = window === window.top ? "top" : `frame:${location.host}${location.pathname.slice(0, 40)}`;
 
   let port: chrome.runtime.Port | null = null;
@@ -72,7 +84,7 @@ function boot() {
     });
     port.onDisconnect.addListener(() => {
       port = null;
-      setTimeout(connect, 500);
+      setTimeout(connect, 120);
     });
   }
   connect();
@@ -131,7 +143,7 @@ function boot() {
     if (reason === "full" || last.length === 0) {
       last = questions;
       post({ type: "scan", snapshot: snapshot(questions, stored.finderMatches as Parameters<typeof snapshot>[1]) });
-      if (window === window.top && questions.length > 0) {
+      if (window === window.top && isVisibleTab() && questions.length > 0) {
         const plans = planPage(questions, profile).filter((p) => p.value);
         for (const plan of plans) applyOne(plan.questionId, plan.value);
       }
@@ -166,7 +178,7 @@ function boot() {
   }
 
   async function keepCycle() {
-    if (window !== window.top || keepBusy) return;
+    if (window !== window.top || keepBusy || !isVisibleTab()) return;
     keepBusy = true;
     try {
       const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
@@ -207,21 +219,23 @@ function boot() {
         return;
       }
       const plans = planPage(questions, profile);
+      let hadCustom = false;
       for (const plan of plans) {
         if (!plan.value) continue;
         applyOne(plan.questionId, plan.value);
         const q = questions.find((x) => x.id === plan.questionId);
         if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio" || q.kind === "checkbox")) {
+          if (q.kind === "custom-select" || q.kind === "typeahead") hadCustom = true;
           clickMatchingDropdown(plan.questionId, plan.value);
         }
       }
-      await new Promise((r) => setTimeout(r, 70));
+      await new Promise((r) => setTimeout(r, hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
       const after = scanDocument(document, frameId, profile);
       const stillEmpty = after.filter((q) => q.required && !fieldLooksFilled(q.kind, q.value));
       const found = findAdvanceControl(document, "keep-applying");
       if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
         stuckTicks += 1;
-        if (stuckTicks >= 12) {
+        if (stuckTicks >= KEEP_STUCK_TICKS) {
           stuckTicks = 0;
           post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
         }
@@ -240,7 +254,7 @@ function boot() {
       }
       if (stillEmpty.length) {
         stuckTicks += 1;
-        if (stuckTicks >= 12) {
+        if (stuckTicks >= KEEP_STUCK_TICKS) {
           stuckTicks = 0;
           post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
         }
@@ -254,7 +268,7 @@ function boot() {
     if (keepTimer || window !== window.top) return;
     keepTimer = window.setInterval(() => {
       keepCycle().catch(() => {});
-    }, 400);
+    }, KEEP_INTERVAL_MS);
   }
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -276,23 +290,55 @@ function boot() {
     watching = true;
     if (window === window.top) mountFab();
     scan("full");
-    [200, 600, 1500, 3000].forEach((ms) => setTimeout(() => scan("full"), ms));
+    KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("full"), ms));
     const obs = new MutationObserver(() => {
       clearTimeout((obs as unknown as { t?: number }).t);
       (obs as unknown as { t?: number }).t = window.setTimeout(() => {
         scan("delta");
         if (!paused) keepCycle().catch(() => {});
-      }, 120) as unknown as number;
+      }, KEEP_MUTATION_DEBOUNCE_MS) as unknown as number;
     });
     obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
   }
 
-  if (applyLike) watchPage();
-  chrome.storage.local.get(["keepApplying"], (r) => {
-    if (r.keepApplying) watchPage();
+  function whenReady(fn: () => void) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+    else fn();
+  }
+
+  whenReady(() => {
+    if (applyLike || looksLikeApplicationPage(url, pageTextNow())) watchPage();
+    chrome.storage.local.get(["keepApplying"], (r) => {
+      if (r.keepApplying) {
+        watchPage();
+        startKeepLoop();
+        keepCycle().catch(() => {});
+      }
+    });
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.keepApplying?.newValue) watchPage();
+    if (area === "local" && changes.keepApplying?.newValue) {
+      whenReady(() => {
+        watchPage();
+        startKeepLoop();
+        keepCycle().catch(() => {});
+      });
+    }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!isVisibleTab()) return;
+    chrome.storage.local.get(["keepApplying"], (r) => {
+      if (!r.keepApplying) return;
+      whenReady(() => {
+        watchPage();
+        startKeepLoop();
+        keepCycle().catch(() => {});
+      });
+    });
+  });
+  window.addEventListener("pageshow", () => {
+    if (!isVisibleTab()) return;
+    keepCycle().catch(() => {});
   });
 
   document.addEventListener(

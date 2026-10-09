@@ -125,10 +125,49 @@ export function canonicalJobUrl(url: string): string {
   }
 }
 
+/** Skip the current listing and any already-applied rows; wrap so the queue does not stall. */
 export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): ApplyQueueItem | null {
   if (!queue.length) return null;
   const cur = canonicalJobUrl(currentUrl);
   const i = queue.findIndex((q) => canonicalJobUrl(q.url) === cur);
-  const next = i >= 0 ? queue[i + 1] : queue[0];
-  return next || null;
+  const rest = i >= 0 ? [...queue.slice(i + 1), ...queue.slice(0, i)] : queue;
+  return rest.find((q) => q.url && !q.appliedAt) || null;
+}
+
+export const KEEP_FILL_GAP_MS = 16;
+export const KEEP_INTERVAL_MS = 180;
+export const KEEP_STUCK_TICKS = 8;
+export const KEEP_SCAN_BURST_MS = [40, 160, 400, 800];
+export const KEEP_MUTATION_DEBOUNCE_MS = 50;
+
+export type HandoffReason = "submitted" | "stuck" | "blocked" | "done-job";
+
+export interface HandoffPlan {
+  next: ApplyQueueItem | null;
+  useWarmup: boolean;
+  closeCurrentAfterMs: number;
+  prefetchUrl: string | null;
+}
+
+/**
+ * Instantly show the next application (a background-warmed tab when ready).
+ * After Submit, keep the old tab around briefly so the POST can finish.
+ */
+export function handoffPlan(input: {
+  queue: ApplyQueueItem[];
+  currentUrl: string;
+  warmupUrl?: string | null;
+  warmupTabId?: number | null;
+  reason: HandoffReason;
+}): HandoffPlan {
+  const next = nextQueueItem(input.queue, input.currentUrl);
+  if (!next) return { next: null, useWarmup: false, closeCurrentAfterMs: 0, prefetchUrl: null };
+  const useWarmup = Boolean(
+    input.warmupTabId && input.warmupUrl && canonicalJobUrl(input.warmupUrl) === canonicalJobUrl(next.url)
+  );
+  const closeCurrentAfterMs = input.reason === "submitted" ? 450 : 60;
+  const after = nextQueueItem(input.queue, next.url);
+  const prefetchUrl =
+    after && canonicalJobUrl(after.url) !== canonicalJobUrl(input.currentUrl) ? after.url : null;
+  return { next, useWarmup, closeCurrentAfterMs, prefetchUrl };
 }
