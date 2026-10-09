@@ -143,7 +143,7 @@ export const KEEP_MUTATION_DEBOUNCE_MS = 220;
 /** Cap fields per tick so dropdown-heavy EEO pages do not freeze the tab. */
 export const KEEP_FIELDS_PER_TICK = 3;
 export const KEEP_COOLDOWN_MS = 140;
-export const KEEP_DROPDOWN_SETTLE_MS = 90;
+export const KEEP_DROPDOWN_SETTLE_MS = 140;
 
 export type HandoffReason = "submitted" | "stuck" | "blocked" | "done-job";
 

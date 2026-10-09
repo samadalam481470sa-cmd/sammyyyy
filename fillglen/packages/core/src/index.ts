@@ -16,6 +16,7 @@ export * from "./applyLoop.js";
 export * from "./authGate.js";
 export * from "./resumeFiles.js";
 export * from "./screenAct.js";
+export * from "./dropdown.js";
 export * from "./answers.js";
 export * from "./feeds.js";
 export * from "./mapsDiscover.js";

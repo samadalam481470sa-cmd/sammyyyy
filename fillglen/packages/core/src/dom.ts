@@ -8,6 +8,13 @@ import {
 import { classifyQuestion } from "./classify.js";
 import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
 import {
+  dropdownHintsFromAttrs,
+  isDropdownFieldKind,
+  isDropdownQuestionType,
+  optionLabelOf,
+  pickVisibleOption,
+} from "./dropdown.js";
+import {
   classifyScreenControl,
   controlFingerprint,
   KEEP_SLOW_CHAR_MS,
@@ -28,7 +35,7 @@ function visible(el: HTMLElement): boolean {
 
 function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
   const nodes = root.querySelectorAll(
-    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [data-automation-id], [contenteditable='true'], [contenteditable='']"
+    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [aria-haspopup='menu'], [aria-haspopup='true'], [aria-expanded], [data-automation-id], [contenteditable='true'], [contenteditable='']"
   );
   nodes.forEach((n) => {
     if (n instanceof HTMLElement) out.push(n);
@@ -55,8 +62,6 @@ function walkClickables(root: Document | ShadowRoot | HTMLElement, out: HTMLElem
 }
 
 function kindOf(el: HTMLElement): FieldKind {
-  const role = el.getAttribute("role") || "";
-  if (role === "combobox" || role === "listbox") return "custom-select";
   if (el instanceof HTMLSelectElement) return "select";
   if (el instanceof HTMLTextAreaElement) return "textarea";
   if (el instanceof HTMLInputElement) {
@@ -65,9 +70,27 @@ function kindOf(el: HTMLElement): FieldKind {
     if (el.type === "checkbox") return "checkbox";
     if (el.type === "date" || el.type === "month") return "date";
   }
-  if (el.getAttribute("aria-autocomplete") === "list") return "typeahead";
+  if (
+    dropdownHintsFromAttrs({
+      role: el.getAttribute("role") || undefined,
+      ariaHaspopup: el.getAttribute("aria-haspopup"),
+      ariaExpanded: el.getAttribute("aria-expanded"),
+      ariaAutocomplete: el.getAttribute("aria-autocomplete"),
+      automationId: el.getAttribute("data-automation-id"),
+      className: typeof el.className === "string" ? el.className : "",
+      tag: el.tagName.toLowerCase(),
+    })
+  ) {
+    return el.getAttribute("aria-autocomplete") === "list" || el.getAttribute("aria-autocomplete") === "both"
+      ? "typeahead"
+      : "custom-select";
+  }
   if (el.isContentEditable) return "textarea";
   return "text";
+}
+
+function elementLooksLikeDropdown(el: HTMLElement): boolean {
+  return isDropdownFieldKind(kindOf(el));
 }
 
 function tidy(text: string): string {
@@ -246,19 +269,14 @@ export function setFieldById(id: string, value: string): { ok: boolean; readBack
         el.dispatchEvent(new Event("change", { bubbles: true }));
       }
     } else if (el instanceof HTMLSelectElement) {
-      const texts = Array.from(el.options).map((o) => o.text);
-      const picked = matchOption(value, texts);
-      const match = picked
-        ? Array.from(el.options).find((o) => o.text === picked || normalize(o.text) === normalize(picked))
-        : Array.from(el.options).find((o) => o.value.toLowerCase() === value.toLowerCase());
-      nativeSet(el, match ? match.value : value);
-      el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      pickNativeSelect(el, value);
+    } else if (elementLooksLikeDropdown(el)) {
+      // Open the menu and click the choice — do not type into the field.
+      openAndPickCustom(el, value);
     } else if (el.isContentEditable) {
       setContentEditable(el, value);
     } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       nativeSet(el, value);
-      openAndPickCustom(el, value);
     } else {
       openAndPickCustom(el, value);
     }
@@ -290,31 +308,281 @@ export function flashAndScroll(id: string): void {
   }, 1200);
 }
 
-function openAndPickCustom(el: HTMLElement, value: string): boolean {
-  el.click();
-  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-  el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-  const options = [
-    ...document.querySelectorAll("[role='option'], [role='listbox'] li, [data-test='select-option']"),
-  ] as HTMLElement[];
-  const texts = options.map((o) => (o.textContent || "").trim()).filter(Boolean);
-  const picked = matchOption(value, texts);
-  if (!picked) return false;
-  const node = options.find((o) => normalize(o.textContent || "") === normalize(picked) || (o.textContent || "").trim() === picked);
-  if (!node) return false;
-  node.click();
-  node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+function pointerClick(el: HTMLElement): void {
+  try {
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  } catch {
+    /* detached */
+  }
+  el.focus?.();
+  const opts: MouseEventInit = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+  for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"] as const) {
+    el.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, { ...opts, pointerType: "mouse" }) : new MouseEvent(type, opts));
+  }
+}
+
+function pickNativeSelect(el: HTMLSelectElement, value: string): boolean {
+  const texts = Array.from(el.options).map((o) => o.text);
+  const picked = pickVisibleOption(value, texts);
+  const opt = picked
+    ? Array.from(el.options).find((o) => o.text === picked || normalize(o.text) === normalize(picked))
+    : Array.from(el.options).find((o) => normalize(o.value) === normalize(value));
+  if (!opt) return false;
+  el.focus();
+  for (const o of Array.from(el.options)) o.selected = false;
+  opt.selected = true;
+  el.selectedIndex = opt.index;
+  // Some ATS listen for click on the <option> itself.
+  try {
+    opt.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    opt.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    opt.click();
+  } catch {
+    /* option.click unsupported */
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
   return true;
 }
 
-export function clickMatchingDropdown(id: string, value: string): boolean {
+function findDropdownTrigger(el: HTMLElement): HTMLElement {
+  if (
+    el.getAttribute("role") === "combobox" ||
+    el.getAttribute("aria-haspopup") ||
+    el.getAttribute("aria-expanded") != null ||
+    el instanceof HTMLButtonElement
+  ) {
+    return el;
+  }
+  const wrap =
+    el.closest(
+      "[role='combobox'], [aria-haspopup], [aria-expanded], [data-automation-id*='select'], [data-automation-id*='Select'], [class*='select'], [class*='Select']"
+    ) || el.parentElement;
+  if (wrap instanceof HTMLElement && wrap !== el) {
+    const btn = wrap.querySelector(
+      "button, [role='button'], [role='combobox'], [aria-haspopup], [class*='indicator'], [class*='arrow'], [class*='caret'], [data-automation-id*='icon'], [data-automation-id*='arrow']"
+    ) as HTMLElement | null;
+    if (btn && visible(btn)) return btn;
+    if (dropdownHintsFromAttrs({
+      role: wrap.getAttribute("role") || undefined,
+      ariaHaspopup: wrap.getAttribute("aria-haspopup"),
+      ariaExpanded: wrap.getAttribute("aria-expanded"),
+      automationId: wrap.getAttribute("data-automation-id"),
+      className: typeof wrap.className === "string" ? wrap.className : "",
+      tag: wrap.tagName.toLowerCase(),
+    })) {
+      return wrap;
+    }
+  }
+  return el;
+}
+
+const OPTION_SELECTORS = [
+  "[role='option']",
+  "[role='treeitem']",
+  "[role='menuitem']",
+  "[role='menuitemradio']",
+  "[role='listbox'] li",
+  "[role='listbox'] > div",
+  "[role='menu'] li",
+  "[data-automation-id='promptOption']",
+  "[data-automation-id*='promptOption']",
+  "[data-automation-id*='PromptOption']",
+  "[data-uxi-widget-type='selectoption']",
+  "[data-test='select-option']",
+  ".select__option",
+  "[class*='select__option']",
+  "[class*='SelectOption']",
+  "[class*='dropdown-option']",
+  "[class*='DropdownOption']",
+  "li[data-value]",
+  "div[data-value][tabindex]",
+];
+
+function collectOpenOptions(root: ParentNode = document): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const push = (n: Element) => {
+    if (!(n instanceof HTMLElement) || seen.has(n)) return;
+    if (!visible(n)) return;
+    const label = optionLabelOf({
+      text: n.textContent || "",
+      ariaLabel: n.getAttribute("aria-label") || undefined,
+      title: n.getAttribute("title") || undefined,
+    });
+    if (!label || label.length > 280) return;
+    if (/^select( one)?$|^choose|^please select$/i.test(label)) return;
+    seen.add(n);
+    out.push(n);
+  };
+  for (const sel of OPTION_SELECTORS) {
+    root.querySelectorAll(sel).forEach(push);
+  }
+  if (root instanceof Document || root instanceof ShadowRoot || root instanceof HTMLElement) {
+    root.querySelectorAll("*").forEach((n) => {
+      if (n instanceof HTMLElement && n.shadowRoot) {
+        for (const opt of collectOpenOptions(n.shadowRoot)) push(opt);
+      }
+    });
+  }
+  return out;
+}
+
+async function waitForOpenOptions(timeoutMs = 900): Promise<HTMLElement[]> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const opts = collectOpenOptions();
+    if (opts.length) return opts;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return collectOpenOptions();
+}
+
+function clickOptionNode(node: HTMLElement): void {
+  pointerClick(node);
+  const inner = node.querySelector(
+    "[data-automation-id='promptOption'], div, span, label"
+  ) as HTMLElement | null;
+  if (inner && inner !== node && visible(inner)) pointerClick(inner);
+}
+
+/** Sync best-effort: open menu and click a matching option (no typing). */
+function openAndPickCustom(el: HTMLElement, value: string): boolean {
+  if (el instanceof HTMLSelectElement) return pickNativeSelect(el, value);
+  const trigger = findDropdownTrigger(el);
+  pointerClick(trigger);
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  const options = collectOpenOptions();
+  const texts = options.map((o) =>
+    optionLabelOf({
+      text: o.textContent || "",
+      ariaLabel: o.getAttribute("aria-label") || undefined,
+      title: o.getAttribute("title") || undefined,
+    })
+  );
+  const picked = pickVisibleOption(value, texts);
+  if (!picked) return false;
+  const node = options.find((o) => {
+    const t = optionLabelOf({
+      text: o.textContent || "",
+      ariaLabel: o.getAttribute("aria-label") || undefined,
+      title: o.getAttribute("title") || undefined,
+    });
+    return normalize(t) === normalize(picked) || t === picked;
+  });
+  if (!node) return false;
+  clickOptionNode(node);
+  return true;
+}
+
+/**
+ * Open a dropdown of any shape/size, wait for options, and click the matching
+ * choice. Never types the answer into the control.
+ */
+export async function selectDropdownById(id: string, value: string): Promise<boolean> {
   const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
   if (!el) return false;
-  if (el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox"))) {
-    const result = setFieldById(id, value);
-    return result.ok;
+  if (el instanceof HTMLSelectElement) return pickNativeSelect(el, value);
+  if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
+    return setFieldById(id, value).ok;
   }
-  return openAndPickCustom(el, value);
+
+  const trigger = findDropdownTrigger(el);
+  // Clear any typed filter text that might have been left in a combobox input.
+  if (el instanceof HTMLInputElement && el.value && elementLooksLikeDropdown(el)) {
+    try {
+      nativeSet(el, "");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  pointerClick(trigger);
+  await new Promise((r) => setTimeout(r, 50));
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+
+  let options = await waitForOpenOptions(950);
+  if (!options.length) {
+    const wrap = el.closest("div, li, fieldset, section") || el.parentElement;
+    const alts = wrap
+      ? ([
+          ...wrap.querySelectorAll(
+            "button, [role='button'], [role='combobox'], [aria-haspopup], [class*='indicator'], [class*='Dropdown'], [data-automation-id*='icon'], [data-automation-id*='arrow']"
+          ),
+        ] as HTMLElement[])
+      : [];
+    for (const alt of alts) {
+      if (!visible(alt) || alt === trigger) continue;
+      pointerClick(alt);
+      options = await waitForOpenOptions(700);
+      if (options.length) break;
+    }
+  }
+
+  const texts = options.map((o) =>
+    optionLabelOf({
+      text: o.textContent || "",
+      ariaLabel: o.getAttribute("aria-label") || undefined,
+      title: o.getAttribute("title") || undefined,
+    })
+  );
+  const picked = pickVisibleOption(value, texts);
+  if (!picked) {
+    // Last resort for typeaheads that filter on keypress — type only to filter, then still click.
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      nativeSet(el, value.slice(0, 24));
+      options = await waitForOpenOptions(700);
+      const filtered = options.map((o) =>
+        optionLabelOf({
+          text: o.textContent || "",
+          ariaLabel: o.getAttribute("aria-label") || undefined,
+          title: o.getAttribute("title") || undefined,
+        })
+      );
+      const again = pickVisibleOption(value, filtered);
+      if (again) {
+        const node = options.find((o) => {
+          const t = optionLabelOf({
+            text: o.textContent || "",
+            ariaLabel: o.getAttribute("aria-label") || undefined,
+            title: o.getAttribute("title") || undefined,
+          });
+          return normalize(t) === normalize(again);
+        });
+        if (node) {
+          clickOptionNode(node);
+          await new Promise((r) => setTimeout(r, 40));
+          return true;
+        }
+      }
+    }
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    return false;
+  }
+
+  const node = options.find((o) => {
+    const t = optionLabelOf({
+      text: o.textContent || "",
+      ariaLabel: o.getAttribute("aria-label") || undefined,
+      title: o.getAttribute("title") || undefined,
+    });
+    return normalize(t) === normalize(picked) || t === picked;
+  });
+  if (!node) return false;
+  clickOptionNode(node);
+  await new Promise((r) => setTimeout(r, 50));
+  // Close leftover menus so the next dropdown can open cleanly.
+  document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  return true;
+}
+
+export async function clickMatchingDropdown(id: string, value: string): Promise<boolean> {
+  return selectDropdownById(id, value);
+}
+
+export function fieldShouldUseDropdown(kind: FieldKind, type: Question["type"]): boolean {
+  return isDropdownFieldKind(kind) || isDropdownQuestionType(type);
 }
 
 export function detectCaptcha(doc: Document): boolean {
@@ -538,11 +806,19 @@ export async function setFieldPaced(
   value: string,
   pace: FillPace = "fast"
 ): Promise<{ ok: boolean; readBack: string; error?: string }> {
-  if (pace !== "slow") return setFieldById(id, value);
   const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
   if (!el) return { ok: false, readBack: "", error: "Field left the page." };
+  // Dropdowns: open + click the option. Never character-type into a select.
+  if (el instanceof HTMLSelectElement || elementLooksLikeDropdown(el)) {
+    const ok = await selectDropdownById(id, value);
+    const readBack =
+      el instanceof HTMLSelectElement
+        ? el.options[el.selectedIndex]?.text || el.value
+        : tidy(el.getAttribute("aria-label") || el.textContent || (el as HTMLInputElement).value || value);
+    return { ok, readBack: readBack || value, error: ok ? undefined : "Could not open dropdown and select that option." };
+  }
+  if (pace !== "slow") return setFieldById(id, value);
   if (
-    el instanceof HTMLSelectElement ||
     el.isContentEditable ||
     (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio" || el.type === "file" || el.type === "password"))
   ) {

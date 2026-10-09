@@ -53,12 +53,14 @@ import {
   clickVisibleGoogleAccount,
   collectAuthButtons,
   detectCaptcha,
+  fieldShouldUseDropdown,
   fillBoardLogin,
   findAdvanceControl,
   findFileInputs,
   flashAndScroll,
   readWorkdayStep,
   scanDocument,
+  selectDropdownById,
   setFieldById,
   setFieldPaced,
 } from "../../../../packages/core/src/dom";
@@ -267,11 +269,20 @@ function boot() {
   }
 
   async function applyOnePaced(id: string, value: string, pace: "fast" | "slow") {
-    const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLInputElement | null;
-    const prev = el ? el.value : "";
+    const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
+    const prev =
+      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+        ? el.value
+        : tidyText(el?.textContent || "");
     undoStack.push({ id, prev });
-    const result = await setFieldPaced(id, value, pace);
     const q = last.find((x) => x.id === id);
+    let result: { ok: boolean; readBack: string; error?: string };
+    if (q && fieldShouldUseDropdown(q.kind, q.type)) {
+      const ok = await selectDropdownById(id, value);
+      result = { ok, readBack: ok ? value : "", error: ok ? undefined : "Could not open dropdown and select that option." };
+    } else {
+      result = await setFieldPaced(id, value, pace);
+    }
     if (q) {
       q.value = result.readBack || value;
       q.status = result.ok ? "filled" : "needs-review";
@@ -280,6 +291,10 @@ function boot() {
     }
     post({ type: "delta", questions: last });
     schedulePersist();
+  }
+
+  function tidyText(text: string): string {
+    return text.replace(/\s+/g, " ").trim().slice(0, 220);
   }
 
   function undo(id?: string) {
@@ -434,12 +449,24 @@ function boot() {
       const batch = plans.slice(0, KEEP_FIELDS_PER_TICK);
       let hadCustom = false;
       for (const plan of batch) {
-        await applyOnePaced(plan.questionId, plan.value, pace);
         const q = questions.find((x) => x.id === plan.questionId);
-        if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio" || q.kind === "checkbox")) {
-          if (q.kind === "custom-select" || q.kind === "typeahead") hadCustom = true;
-          clickMatchingDropdown(plan.questionId, plan.value);
+        const useDropdown = q ? fieldShouldUseDropdown(q.kind, q.type) : false;
+        if (useDropdown) {
+          hadCustom = true;
+          const ok = await selectDropdownById(plan.questionId, plan.value);
+          if (!ok) await clickMatchingDropdown(plan.questionId, plan.value);
+          if (q) {
+            q.value = plan.value;
+            q.status = "filled";
+            q.source = "profile";
+          }
           await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
+        } else {
+          await applyOnePaced(plan.questionId, plan.value, pace);
+          if (q && (q.kind === "radio" || q.kind === "checkbox")) {
+            await clickMatchingDropdown(plan.questionId, plan.value);
+            await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
+          }
         }
         await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : KEEP_FILL_GAP_MS));
       }
