@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, token } from "../api";
+import { usePersistedState } from "../persist";
 
 export default function Answers() {
   const [items, setItems] = useState<any[]>([]);
-  const [pattern, setPattern] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [pattern, setPattern] = usePersistedState("answers-pattern", "");
+  const [answer, setAnswer] = usePersistedState("answers-draft", "");
   async function refresh() {
     if (token()) setItems(await api("/v1/answers"));
   }

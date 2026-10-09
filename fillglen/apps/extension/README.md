@@ -4,7 +4,7 @@ TypeScript, React, Vite, and `@crxjs/vite-plugin`. Side panel is the live questi
 
 **Download:** [fillglen-assistant.zip](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip) (raw URL). Unzip and Load unpacked the `fillglen-assistant/` folder in `chrome://extensions`.
 
-Paste a resume, then **Autofill & keep applying**. Jobs are ranked to that resume. While the widget is on, Fillglen also scans Texas map tiles (OpenStreetMap; Google Maps is not scraped) and checks public career sites in the background. The API continues 24/7 if it is running. A CAPTCHA waits for you — Fillglen never solves it. Hit Stop to halt. LinkedIn is blocked.
+Paste a resume, then **Autofill & keep applying**. Jobs are ranked to that resume. The popup **Live jobs** button opens the list Fillglen keeps filling in the background while Chrome is open. Open a job after you finish an application, or leave the rows there — they stay saved, including ones you already applied to. While the widget is on, Fillglen also scans Texas map tiles (OpenStreetMap; Google Maps is not scraped) and checks public career sites in the background. The API continues 24/7 if it is running. Unknown form questions use the resume; if it is not on the resume the answer is No. A CAPTCHA waits for you — Fillglen never solves it. Hit Stop to halt. LinkedIn is blocked. Every popup field is saved in `chrome.storage.local`.
 
 Or build locally: `npm run build -w @fillglen/extension` and select `fillglen/apps/extension/dist`.
 

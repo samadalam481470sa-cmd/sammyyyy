@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { usePersistedState } from "../persist";
 import {
   classifyQuestion,
   EMPTY_PROFILE,
@@ -59,9 +60,11 @@ function questionsFromForm(values: Record<string, string>): Question[] {
 }
 
 export default function LiveDemo() {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [paused, setPaused] = useState(false);
-  const [drafts, setDrafts] = useState<Record<string, { questionId: string; text: string; usedFacts: string[]; refused: boolean; reason?: string }>>({});
+  const [values, setValues] = usePersistedState<Record<string, string>>("live-demo-values", {});
+  const [paused, setPaused] = usePersistedState("live-demo-paused", false);
+  const [drafts, setDrafts] = usePersistedState<
+    Record<string, { questionId: string; text: string; usedFacts: string[]; refused: boolean; reason?: string }>
+  >("live-demo-drafts", {});
   const questions = useMemo(() => questionsFromForm(values), [values]);
   const snapshot: ScanSnapshot = {
     job: {

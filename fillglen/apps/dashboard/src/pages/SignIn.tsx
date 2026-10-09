@@ -1,10 +1,10 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { usePersistedState } from "../persist";
 
 export default function SignIn() {
-  const [email, setEmail] = useState("");
-  const [msg, setMsg] = useState("");
+  const [email, setEmail] = usePersistedState("signin-email", "");
+  const [msg, setMsg] = usePersistedState("signin-msg", "");
   const nav = useNavigate();
   return (
     <form

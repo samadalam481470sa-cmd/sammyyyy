@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import type { Profile, Question, ScanSnapshot } from "@fillglen/core";
+import { useEffect, useMemo, useState } from "react";
+import type { ApplyQueueItem, Profile, Question, ScanSnapshot } from "@fillglen/core";
 import { scoreMatch } from "@fillglen/core";
 import { CopyrightNotice, Logo } from "../brand";
 
-export type FilterTab = "all" | "needs-you" | "filled";
+export type FilterTab = "all" | "needs-you" | "filled" | "live";
 
 export interface DraftState {
   questionId: string;
@@ -32,6 +32,8 @@ export interface QuestionWindowProps {
   onEdit: (id: string, value: string) => void;
   onStartKeep?: () => void;
   onStopKeep?: () => void;
+  liveJobs?: ApplyQueueItem[];
+  onOpenLiveJob?: (url: string) => void;
 }
 
 const STATUS_LABEL: Record<Question["status"], string> = {
@@ -43,8 +45,87 @@ const STATUS_LABEL: Record<Question["status"], string> = {
   scanning: "Scanning",
 };
 
+type ChromeLite = {
+  storage?: {
+    local?: {
+      set: (items: Record<string, unknown>) => void;
+      get: (keys: string[], cb: (r: Record<string, unknown>) => void) => void;
+    };
+    onChanged?: {
+      addListener: (fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void) => void;
+      removeListener: (fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void) => void;
+    };
+  };
+  runtime?: { sendMessage: (msg: unknown) => void };
+};
+
+function chromeApi(): ChromeLite | undefined {
+  return (globalThis as { chrome?: ChromeLite }).chrome;
+}
+
+function persistLocal(key: string, value: unknown) {
+  try {
+    const local = chromeApi()?.storage?.local;
+    if (local) {
+      local.set({ [key]: value });
+      return;
+    }
+  } catch {
+    /* extension storage unavailable */
+  }
+  try {
+    localStorage.setItem("fillglen:ui:" + key, JSON.stringify(value));
+  } catch {
+    /* quota */
+  }
+}
+
+function readLocal<T>(key: string, fallback: T, cb: (value: T) => void) {
+  try {
+    const local = chromeApi()?.storage?.local;
+    if (local) {
+      local.get([key], (r) => cb((r[key] as T) ?? fallback));
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const raw = localStorage.getItem("fillglen:ui:" + key);
+    if (raw != null) {
+      cb(JSON.parse(raw) as T);
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  cb(fallback);
+}
+
 export function QuestionWindow(props: QuestionWindowProps) {
   const [tab, setTab] = useState<FilterTab>("all");
+  const [storedLive, setStoredLive] = useState<ApplyQueueItem[]>([]);
+  useEffect(() => {
+    readLocal<FilterTab>("panelTab", "all", (v) => {
+      if (v === "all" || v === "needs-you" || v === "filled" || v === "live") setTab(v);
+    });
+    readLocal<ApplyQueueItem[]>("liveJobs", [], (v) => {
+      if (Array.isArray(v)) setStoredLive(v);
+    });
+    const onChanged = chromeApi()?.storage?.onChanged;
+    if (!onChanged) return;
+    const onChange = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      if (area !== "local") return;
+      if (Array.isArray(changes.liveJobs?.newValue)) setStoredLive(changes.liveJobs.newValue as ApplyQueueItem[]);
+    };
+    onChanged.addListener(onChange);
+    return () => onChanged.removeListener(onChange);
+  }, []);
+  function setTabPersist(next: FilterTab) {
+    setTab(next);
+    persistLocal("panelTab", next);
+  }
+  const liveJobs = props.liveJobs ?? storedLive;
   const questions = props.snapshot?.questions ?? [];
   const filtered = questions.filter((q) => {
     if (tab === "needs-you") return q.status === "needs-you" || q.status === "needs-review";
@@ -58,9 +139,34 @@ export function QuestionWindow(props: QuestionWindowProps) {
     return scoreMatch(props.snapshot.job.description || props.snapshot.job.title, props.profile);
   }, [props.snapshot, props.profile]);
 
+  if (tab === "live") {
+    return (
+      <Shell>
+        <div className="toolbar">
+          <button onClick={() => setTabPersist("all")}>Back to form</button>
+          <button className="primary" onClick={() => setTabPersist("live")}>
+            Live jobs
+          </button>
+        </div>
+        <LiveJobList
+          jobs={liveJobs}
+          onOpen={(url) => {
+            if (props.onOpenLiveJob) props.onOpenLiveJob(url);
+            else chromeApi()?.runtime?.sendMessage({ type: "open-live-job", url });
+          }}
+        />
+      </Shell>
+    );
+  }
+
   if (props.snapshot?.blockedReason === "linkedin-easy-apply") {
     return (
       <Shell>
+        <div className="toolbar">
+          <button className="primary" onClick={() => setTabPersist("live")}>
+            Live jobs
+          </button>
+        </div>
         <Empty
           title="LinkedIn Easy Apply is off-limits"
           body="Fillglen never runs on LinkedIn. LinkedIn’s terms ban automation, including Easy Apply."
@@ -72,9 +178,14 @@ export function QuestionWindow(props: QuestionWindowProps) {
   if (!props.snapshot) {
     return (
       <Shell>
+        <div className="toolbar">
+          <button className="primary" onClick={() => setTabPersist("live")}>
+            Live jobs
+          </button>
+        </div>
         <Empty
           title="No form on this page"
-          body="Open a Greenhouse, Lever, Ashby, Workday, SmartRecruiters, or iCIMS application. The live list appears as questions show up."
+          body="Open a Greenhouse, Lever, Ashby, Workday, SmartRecruiters, or iCIMS application. The live list appears as questions show up. Live jobs stay saved."
         />
       </Shell>
     );
@@ -84,6 +195,11 @@ export function QuestionWindow(props: QuestionWindowProps) {
     return (
       <Shell>
         <JobHeader job={props.snapshot.job} match={match?.score} />
+        <div className="toolbar">
+          <button className="primary" onClick={() => setTabPersist("live")}>
+            Live jobs
+          </button>
+        </div>
         <Empty title="Scanning…" body="Looking for fields, including shadow DOM and this frame." />
       </Shell>
     );
@@ -124,20 +240,22 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button onClick={() => props.onUndo()}>Undo page</button>
         <button onClick={props.onPause}>{props.paused ? "Resume site" : "Pause this site"}</button>
         {props.onPopout && !props.popout ? <button onClick={props.onPopout}>Pop out</button> : null}
+        <button onClick={() => setTabPersist("live")}>Live jobs</button>
       </div>
       <div className="tabs">
-        {(["all", "needs-you", "filled"] as FilterTab[]).map((t) => (
-          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>
+        {(["all", "needs-you", "filled"] as const).map((t) => (
+          <button key={t} className={tab === t ? "on" : ""} onClick={() => setTabPersist(t)}>
             {t === "all" ? "All" : t === "needs-you" ? "Needs you" : "Filled"}
           </button>
         ))}
+        <button onClick={() => setTabPersist("live")}>Live jobs</button>
       </div>
       {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
       {done && !props.keepApplying ? (
         <p className="banner done">Every required question has an answer. You still click Submit yourself unless Keep applying is on.</p>
       ) : null}
       {props.keepApplying ? (
-        <p className="banner done">Keep applying is on. Built-in job list, no 24/7 server needed. Dropdowns, Next, Submit, then the next listing while Chrome stays open. A CAPTCHA waits for you — Fillglen will not solve it.</p>
+        <p className="banner done">Keep applying is on. Built-in job list, no 24/7 server needed. Dropdowns, Next, Submit, then the next listing while Chrome stays open. A CAPTCHA waits for you — Fillglen will not solve it. After you finish, open Live jobs or leave the list saved.</p>
       ) : null}
       <ul className="qlist">
         {filtered.map((q) => (
@@ -164,6 +282,40 @@ export function QuestionWindow(props: QuestionWindowProps) {
         Final check — {requiredEmpty.length} required still empty. You submit the form.
       </button>
     </Shell>
+  );
+}
+
+function LiveJobList({ jobs, onOpen }: { jobs: ApplyQueueItem[]; onOpen: (url: string) => void }) {
+  return (
+    <section>
+      <p className="meta">
+        Fillglen keeps looking in the background while Chrome is open. Open a job after you finish an application, or
+        leave the list here. It is saved.
+      </p>
+      <ol className="qlist">
+        {jobs.map((m) => (
+          <li key={m.url} className="qrow">
+            <a href={m.url} target="_blank" rel="noreferrer">
+              {m.title}
+            </a>
+            <div className="meta">
+              {m.company}
+              {m.location ? ` · ${m.location}` : ""}
+              {m.source ? ` · ${m.source}` : ""}
+              {m.score != null ? ` · ${m.score}` : ""}
+              {m.appliedAt ? " · applied" : m.openedAt ? " · opened" : " · new"}
+            </div>
+            {m.why ? <p className="hint">{m.why}</p> : null}
+            <div className="toolbar">
+              <button className="primary" onClick={() => onOpen(m.url)}>
+                Open job
+              </button>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {!jobs.length ? <p className="meta">No live jobs yet. Keep Chrome open — the list fills in the background.</p> : null}
+    </section>
   );
 }
 

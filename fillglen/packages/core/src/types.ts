@@ -182,6 +182,11 @@ export interface Preferences {
   needsSponsorship: boolean;
   /** Current product default: every applicant is a US citizen. */
   usCitizen: boolean;
+  /**
+   * Unknown form questions: use the resume first. If the resume does not
+   * contain the answer, fill No. Identity, EEO, and consent never get No.
+   */
+  unknownAnswerPolicy: "resume-then-no";
 }
 
 /** Defaults to Decline. Encrypt at rest. Never send to the AI model. */
@@ -302,6 +307,7 @@ export const EMPTY_PROFILE: Profile = {
     workAuthorized: true,
     needsSponsorship: false,
     usCitizen: true,
+    unknownAnswerPolicy: "resume-then-no",
   },
   selfIdentification: {
     gender: "Decline to self-identify",
@@ -329,6 +335,7 @@ export function hydrateProfile(raw: Partial<Profile> | null | undefined): Profil
       workAuthorized: p.preferences?.workAuthorized !== false,
       needsSponsorship: p.preferences?.needsSponsorship === true,
       usCitizen: p.preferences?.usCitizen !== false,
+      unknownAnswerPolicy: "resume-then-no",
     },
     selfIdentification: { ...EMPTY_PROFILE.selfIdentification, ...(p.selfIdentification || {}) },
     work: p.work || EMPTY_PROFILE.work,

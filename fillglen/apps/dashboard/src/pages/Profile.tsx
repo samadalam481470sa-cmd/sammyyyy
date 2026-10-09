@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { EMPTY_PROFILE, hydrateProfile, parseResumeText, type Profile } from "@fillglen/core";
 import { api, token } from "../api";
 import { Logo } from "../Brand";
+import { usePersistedState } from "../persist";
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
-  const [paste, setPaste] = useState("");
-  const [msg, setMsg] = useState("Paste your resume. Jobs on Local jobs and in the extension are ranked to it.");
+  const [profile, setProfile] = usePersistedState<Profile>("profile", EMPTY_PROFILE);
+  const [paste, setPaste] = usePersistedState("profile-paste", "");
+  const [msg, setMsg] = usePersistedState("profile-msg", "Paste your resume. Jobs on Local jobs and in the extension are ranked to it.");
   useEffect(() => {
+    setProfile((p) => hydrateProfile(p));
     if (token()) api("/v1/profile").then((p) => setProfile(hydrateProfile(p))).catch(() => {});
   }, []);
   async function save() {
@@ -59,8 +61,9 @@ export default function ProfilePage() {
           ))}
         </div>
         <p className="text-sm mt-6 text-[#5c6b64]">
-          Defaults: US citizen, authorized to work in the US, no visa sponsorship. Sex/race default to decline-to-identify when
-          that option exists; veteran defaults to not a protected veteran. Encrypted at rest.
+          Defaults: US citizen, authorized to work in the US, no visa sponsorship. Unknown questions use the resume; if
+          it is not on the resume the answer is No. Sex/race default to decline-to-identify when that option exists;
+          veteran defaults to not a protected veteran. Encrypted at rest. Fields here are saved as you type.
         </p>
         <label className="flex gap-2 items-center mt-4 w-fit">
           <input

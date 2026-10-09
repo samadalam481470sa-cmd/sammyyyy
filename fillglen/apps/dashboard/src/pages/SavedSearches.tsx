@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { DEFAULT_SEARCH, type SearchSettings } from "@fillglen/core";
 import { api, token } from "../api";
+import { usePersistedState } from "../persist";
 
 export default function SavedSearches() {
-  const [settings, setSettings] = useState<SearchSettings>(DEFAULT_SEARCH);
-  const [msg, setMsg] = useState("");
+  const [settings, setSettings] = usePersistedState<SearchSettings>("saved-search", DEFAULT_SEARCH);
+  const [msg, setMsg] = usePersistedState("saved-search-msg", "");
+  const saveTimer = useRef<number>(0);
 
   useEffect(() => {
     if (!token()) return;
@@ -12,7 +14,15 @@ export default function SavedSearches() {
   }, []);
 
   function set<K extends keyof SearchSettings>(key: K, value: SearchSettings[K]) {
-    setSettings((s) => ({ ...s, [key]: value }));
+    setSettings((s) => {
+      const next = { ...s, [key]: value };
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = window.setTimeout(() => {
+        if (!token()) return;
+        api("/v1/finder/settings", { method: "PUT", body: JSON.stringify(next) }).catch(() => {});
+      }, 600);
+      return next;
+    });
   }
 
   return (
@@ -125,9 +135,9 @@ export default function SavedSearches() {
 }
 
 function AddCompany() {
-  const [company, setCompany] = useState("");
-  const [url, setUrl] = useState("");
-  const [out, setOut] = useState("");
+  const [company, setCompany] = usePersistedState("add-company-name", "");
+  const [url, setUrl] = usePersistedState("add-company-url", "");
+  const [out, setOut] = usePersistedState("add-company-out", "");
   return (
     <div className="flex flex-col gap-2 mt-1">
       <input placeholder="Company" value={company} onChange={(e) => setCompany(e.target.value)} />

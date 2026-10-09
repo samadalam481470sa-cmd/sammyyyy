@@ -16,6 +16,9 @@ function PanelApp() {
 
   useEffect(() => {
     if (typeof chrome === "undefined" || !chrome.runtime?.connect) return;
+    chrome.storage.local.get(["panelDrafts"], (r) => {
+      if (r.panelDrafts && typeof r.panelDrafts === "object") setDrafts(r.panelDrafts);
+    });
     const p = chrome.runtime.connect({ name: "fillglen-panel" });
     setPort(p);
     p.postMessage({ type: "subscribe" } satisfies FromPanel);
@@ -27,7 +30,11 @@ function PanelApp() {
         setKeepApplying(Boolean(msg.keepApplying));
       }
       if (msg.type === "draft") {
-        setDrafts((d) => ({ ...d, [msg.questionId]: msg }));
+        setDrafts((d) => {
+          const next = { ...d, [msg.questionId]: msg };
+          chrome.storage.local.set({ panelDrafts: next });
+          return next;
+        });
       }
     });
     return () => p.disconnect();

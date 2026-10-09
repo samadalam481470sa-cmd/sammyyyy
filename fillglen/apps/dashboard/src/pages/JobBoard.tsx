@@ -1,9 +1,9 @@
-import { useState } from "react";
 import { api, token } from "../api";
+import { usePersistedState } from "../persist";
 
 export default function JobBoard() {
-  const [q, setQ] = useState("engineer");
-  const [jobs, setJobs] = useState<any[]>([]);
+  const [q, setQ] = usePersistedState("jobboard-q", "engineer");
+  const [jobs, setJobs] = usePersistedState<any[]>("jobboard-jobs", []);
   return (
     <div className="space-y-4">
       <h1 className="text-2xl">Job board</h1>

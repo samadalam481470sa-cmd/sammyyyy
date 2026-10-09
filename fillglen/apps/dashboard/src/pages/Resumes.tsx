@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { EMPTY_PROFILE, tailorResume } from "@fillglen/core";
+import { usePersistedState } from "../persist";
 
 export default function Resumes() {
-  const [desc, setDesc] = useState("Required: TypeScript, React, PostgreSQL");
+  const [desc, setDesc] = usePersistedState("resumes-desc", "Required: TypeScript, React, PostgreSQL");
   const result = tailorResume(
     {
       ...EMPTY_PROFILE,

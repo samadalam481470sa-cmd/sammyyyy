@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, token } from "../api";
+import { usePersistedState } from "../persist";
 
 const COLS = ["saved", "applied", "phone-screen", "technical", "final", "offer", "rejected", "withdrawn"];
 
 export default function Tracker() {
-  const [view, setView] = useState<"board" | "table">("board");
+  const [view, setView] = usePersistedState<"board" | "table">("tracker-view", "board");
   const [state, setState] = useState<{ applications: any[]; jobs: any[] }>({ applications: [], jobs: [] });
   useEffect(() => {
     if (token()) api("/v1/applications").then(setState).catch(() => {});

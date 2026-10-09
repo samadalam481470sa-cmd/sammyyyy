@@ -1,5 +1,6 @@
 import { matchOption } from "./applyLoop.js";
 import { normalize, tokens } from "./fuzzy.js";
+import { resumeBlob } from "./matchScore.js";
 import type { Profile, Question, QuestionType } from "./types.js";
 
 const DECLINE = [
@@ -162,15 +163,225 @@ export function bestEffortAnswer(question: Question, profile: Profile): string {
   }
   if (question.kind === "checkbox" && CONSENT_HINT.test(label)) return "Yes";
   if ((question.type === "motivation" || question.type === "behavioral" || question.type === "unknown") && shouldInventFromFacts(label)) {
-    return shortFactualAnswer(profile, question.label);
+    if (profileHasResumeFacts(profile)) return shortFactualAnswer(profile, question.label);
   }
+  const fromResume = answerFromResume(question, profile);
+  if (fromResume) return fromResume;
   if (question.required && options.length >= 2 && options.length <= 6) {
-    const yes = matchOption("Yes", options);
-    if (yes && /able|can you|do you|willing|agree/.test(label)) return yes;
     const no = matchOption("No", options);
     if (no && /felony|convict|sponsor/.test(label)) return no;
   }
+  if (isIdentityQuestion(question.type)) return "";
+  return fallbackNo(question);
+}
+
+const IDENTITY_TYPES = new Set<QuestionType>([
+  "email",
+  "phone",
+  "firstName",
+  "lastName",
+  "fullName",
+  "preferredName",
+  "address",
+  "city",
+  "state",
+  "zip",
+  "country",
+  "linkedin",
+  "github",
+  "portfolio",
+  "website",
+  "resume",
+  "gender",
+  "race",
+  "veteran",
+  "disability",
+  "citizenship",
+  "consent",
+]);
+
+export function isIdentityQuestion(type: QuestionType): boolean {
+  return IDENTITY_TYPES.has(type);
+}
+
+export function profileHasResumeFacts(profile: Profile): boolean {
+  return Boolean(
+    profile.rawResumeText ||
+      profile.skills.length ||
+      profile.work.length ||
+      profile.contact.legalName ||
+      profile.contact.email
+  );
+}
+
+const QUESTION_STOP = new Set([
+  "have",
+  "has",
+  "this",
+  "that",
+  "with",
+  "from",
+  "your",
+  "you",
+  "are",
+  "was",
+  "were",
+  "will",
+  "the",
+  "and",
+  "for",
+  "any",
+  "please",
+  "select",
+  "choose",
+  "question",
+  "following",
+  "what",
+  "when",
+  "where",
+  "which",
+  "would",
+  "could",
+  "should",
+  "does",
+  "did",
+  "can",
+  "may",
+  "been",
+  "being",
+  "about",
+  "into",
+  "able",
+  "willing",
+  "experience",
+  "experiences",
+  "background",
+  "years",
+  "role",
+  "position",
+  "company",
+  "job",
+  "work",
+  "working",
+  "currently",
+  "current",
+  "previous",
+  "prior",
+  "describe",
+  "tell",
+  "list",
+  "provide",
+  "enter",
+  "type",
+  "name",
+  "yes",
+  "true",
+  "false",
+  "ever",
+  "also",
+  "other",
+  "others",
+  "using",
+  "used",
+  "include",
+  "including",
+  "required",
+  "require",
+  "must",
+  "need",
+  "needs",
+  "how",
+  "many",
+  "much",
+]);
+
+export function resumeFacts(profile: Profile): string[] {
+  const out: string[] = [];
+  for (const s of profile.skills) if (s.name) out.push(s.name);
+  for (const w of profile.work) {
+    if (w.company) out.push(w.company);
+    if (w.title) out.push(w.title);
+    for (const b of w.bullets || []) if (b.text) out.push(b.text);
+  }
+  for (const e of profile.education) {
+    if (e.school) out.push(e.school);
+    if (e.degree) out.push(e.degree);
+    if (e.major) out.push(e.major);
+  }
+  const c = profile.contact;
+  for (const v of [c.city, c.state, c.legalName, c.email, c.phone]) {
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+function blobHasPhrase(blob: string, phrase: string): boolean {
+  const n = normalize(phrase);
+  if (n.length < 2) return false;
+  return ` ${blob} `.includes(` ${n} `);
+}
+
+/** Pull an answer from the pasted resume. Empty means the resume does not cover it. */
+export function answerFromResume(question: Question, profile: Profile): string {
+  const blob = resumeBlob(profile);
+  if (!blob) return "";
+  const label = normalize(question.label);
+  const options = question.options || [];
+  const facts = resumeFacts(profile);
+  const factHits = facts.filter((f) => {
+    const n = normalize(f);
+    return n.length >= 2 && label.includes(n) && blobHasPhrase(blob, f);
+  });
+  const distinctive = tokens(question.label).filter((t) => t.length > 3 && !QUESTION_STOP.has(t));
+  const long = distinctive.filter((t) => t.length >= 5);
+  const yesNo =
+    (options.some((o) => /^yes$/i.test(o.trim())) && options.some((o) => /^no$/i.test(o.trim()))) ||
+    /^(do you|are you|have you|can you|will you|did you|is it|were you)/.test(label);
+
+  if (yesNo) {
+    const allLongOnResume = long.length > 0 && long.every((t) => blobHasPhrase(blob, t));
+    if (factHits.length || allLongOnResume) return matchOption("Yes", options) || "Yes";
+    return "";
+  }
+
+  if (/skill|technolog|language|framework|tool/.test(label) && profile.skills.length) {
+    return profile.skills
+      .slice(0, 8)
+      .map((s) => s.name)
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (factHits.length) {
+    const skill = profile.skills.find((s) => factHits.some((h) => normalize(s.name) === normalize(h)));
+    if (skill) return skill.name;
+    const line = (profile.rawResumeText || "")
+      .split(/\n/)
+      .map((l) => l.trim())
+      .find((l) => l && factHits.some((h) => normalize(l).includes(normalize(h))));
+    if (line && line.length <= 220) return line;
+    return factHits[0];
+  }
+
+  const tokenHits = distinctive.filter((t) => blobHasPhrase(blob, t));
+  if (tokenHits.length >= 2 || (tokenHits.length === 1 && tokenHits[0].length >= 6)) {
+    const line = (profile.rawResumeText || "")
+      .split(/\n/)
+      .map((l) => l.trim())
+      .find((l) => l && tokenHits.some((h) => normalize(l).includes(h)));
+    if (line && line.length <= 220) return line;
+    const skill = profile.skills.find((s) =>
+      tokenHits.some((h) => normalize(s.name).includes(h) || h.includes(normalize(s.name)))
+    );
+    if (skill) return skill.name;
+  }
   return "";
+}
+
+export function fallbackNo(question: Question): string {
+  if (isIdentityQuestion(question.type)) return "";
+  const options = question.options || [];
+  return matchOption("No", options) || "No";
 }
 
 function shouldInventFromFacts(label: string): boolean {

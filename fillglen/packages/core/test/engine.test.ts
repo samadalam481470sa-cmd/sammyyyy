@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  answerFromResume,
   applicationStats,
+  bestEffortAnswer,
+  fallbackNo,
   isGoogleSignInLabel,
   pickDemographicOption,
   titleRelevance,
@@ -16,6 +19,8 @@ import {
   isCaptchaChallengeFrame,
   mayAdvance,
   matchOption,
+  markLiveJob,
+  mergeLiveJobs,
   nextQueueItem,
   pageLooksLikeCaptcha,
   shouldLeavePageOnCaptcha,
@@ -151,6 +156,11 @@ describe("resolve values", () => {
     const plan = planFill(q({ label: "Gender", type: "gender" }), profile());
     assert.match(plan.value, /Decline/);
     assert.equal(plan.source, "profile");
+  });
+  it("fills unknown questions with No when the resume has no match", () => {
+    const plan = planFill(q({ label: "Do you have a forklift license?", type: "unknown", options: ["Yes", "No"] }), profile());
+    assert.equal(plan.value, "No");
+    assert.equal(plan.status, "filled");
   });
   it("writes a factual motivation answer from the profile instead of leaving it blank", () => {
     const plan = planFill(q({ label: "Why this role?", type: "motivation" }), profile());
@@ -392,6 +402,70 @@ describe("best-effort answers and google sign-in", () => {
   it("does not treat sales engineer as a software engineer title", () => {
     assert.ok(titleRelevance("Sales Engineer", ["software engineer"]) < 0.4);
     assert.ok(titleRelevance("Senior Software Engineer", ["software engineer"]) >= 0.55);
+  });
+});
+
+describe("resume-then-no unknown answers", () => {
+  it("answers Yes when the resume names the skill", () => {
+    const a = answerFromResume(
+      q({ label: "Do you have TypeScript experience?", type: "unknown", options: ["Yes", "No"] }),
+      profile()
+    );
+    assert.equal(a, "Yes");
+  });
+  it("does not treat information security as a security clearance", () => {
+    const p = profile({
+      rawResumeText: "Information security analyst. TypeScript.",
+      skills: [
+        { name: "TypeScript", category: "lang", years: 5, level: "advanced" },
+        { name: "information security", category: "domain", years: 3, level: "advanced" },
+      ],
+    });
+    const a = answerFromResume(
+      q({ label: "Do you have a security clearance?", type: "unknown", options: ["Yes", "No"] }),
+      p
+    );
+    assert.equal(a, "");
+    const plan = planFill(q({ label: "Do you have a security clearance?", type: "unknown", options: ["Yes", "No"] }), p);
+    assert.equal(plan.value, "No");
+  });
+  it("fills No when the resume does not have the answer", () => {
+    const plan = planFill(
+      q({ label: "Do you own a forklift certification?", type: "unknown", options: ["Yes", "No"] }),
+      profile()
+    );
+    assert.equal(plan.value, "No");
+    assert.equal(bestEffortAnswer(q({ label: "What is your favorite color?", type: "unknown" }), profile()), "No");
+    assert.equal(fallbackNo(q({ label: "Favorite color?", type: "unknown" })), "No");
+  });
+  it("does not write No into empty identity fields", () => {
+    const empty = profile({
+      contact: { ...EMPTY_PROFILE.contact },
+      rawResumeText: "",
+      skills: [],
+      work: [],
+    });
+    const plan = planFill(q({ label: "Email", type: "email" }), empty);
+    assert.equal(plan.value, "");
+    assert.equal(fallbackNo(q({ label: "Email", type: "email" })), "");
+  });
+  it("keeps the unknown-answer policy on the profile", () => {
+    assert.equal(profile().preferences.unknownAnswerPolicy, "resume-then-no");
+  });
+});
+
+describe("live jobs list", () => {
+  it("keeps old jobs and marks applied without dropping them", () => {
+    const existing = [
+      { url: "https://boards.greenhouse.io/a/1", title: "A", company: "A", firstSeenAt: "2026-01-01T00:00:00.000Z" },
+    ];
+    const incoming = [{ url: "https://boards.greenhouse.io/b/2", title: "B", company: "B" }];
+    const merged = mergeLiveJobs(existing, incoming);
+    assert.equal(merged.length, 2);
+    const applied = markLiveJob(merged, existing[0].url, { appliedAt: "2026-01-02T00:00:00.000Z" });
+    assert.ok(applied.find((j) => j.url.includes("/a/1"))?.appliedAt);
+    const again = mergeLiveJobs(applied, incoming);
+    assert.ok(again.find((j) => j.url.includes("/a/1"))?.appliedAt);
   });
 });
 

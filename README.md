@@ -4,7 +4,7 @@
 
 **Download the Chrome extension:**
 [**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip)
-(use the `raw/` URL). Unzip, then `chrome://extensions` → Developer mode → Load unpacked → select the `fillglen-assistant/` folder. Paste a resume and hit **Autofill & keep applying**.
+(use the `raw/` URL). Unzip, then `chrome://extensions` → Developer mode → Load unpacked → select the `fillglen-assistant/` folder. Paste a resume, open **Live jobs**, and hit **Autofill & keep applying**. Unknown questions use the resume, or No.
 
 **Download / deploy the whole platform:**
 [**source zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/keep-applying-autofill-0208.zip)

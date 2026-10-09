@@ -4,6 +4,8 @@ import {
   canonicalJobUrl,
   fetchBuiltInJobQueue,
   hydrateProfile,
+  markLiveJob,
+  mergeLiveJobs,
   isSupportedApplyUrl,
   looksLikeApplicationPage,
   nextQueueItem,
@@ -272,10 +274,20 @@ chrome.webNavigation?.onHistoryStateUpdated.addListener((d) => {
   if (d.frameId === 0) ping(d.tabId, d.url);
 });
 
+function startLiveAlarm() {
+  chrome.alarms.create("fillglen-live", { periodInMinutes: 1 });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(["profile"], (r) => {
     if (!r.profile) chrome.storage.local.set({ profile: EMPTY_PROFILE });
   });
+  startLiveAlarm();
+  harvestLiveJobs().catch(() => {});
+});
+chrome.runtime.onStartup?.addListener(() => {
+  startLiveAlarm();
+  harvestLiveJobs().catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendResponse) => {
@@ -288,24 +300,34 @@ chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendRespo
     return true;
   }
   if (msg?.type === "refresh-queue") {
-    rebuildQueue()
+    harvestLiveJobs()
       .then(async (queue) => {
-        const { discoverStatus } = await chrome.storage.local.get(["discoverStatus"]);
+        const { discoverStatus, liveJobs } = await chrome.storage.local.get(["discoverStatus", "liveJobs"]);
         sendResponse({
           ok: true,
           count: queue.length,
           top: queue.slice(0, 8),
           lookup: queue,
+          liveJobs: liveJobs || queue,
           discover: discoverStatus,
         });
       })
-      .catch(() => sendResponse({ ok: false, count: 0, top: [], lookup: [] }));
+      .catch(() => sendResponse({ ok: false, count: 0, top: [], lookup: [], liveJobs: [] }));
+    return true;
+  }
+  if (msg?.type === "open-live-job" && typeof (msg as { url?: string }).url === "string") {
+    const url = (msg as { url: string }).url;
+    openLiveJob(url).then(() => sendResponse({ ok: true }));
     return true;
   }
   return undefined;
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "fillglen-live") {
+    harvestLiveJobs().catch(() => {});
+    return;
+  }
   if (alarm.name !== "fillglen-keep") return;
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying) return;
@@ -315,7 +337,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       }
     });
     runDiscoverTick()
-      .then(() => rebuildQueue())
+      .then(() => harvestLiveJobs())
       .catch(() => {});
   });
 });
@@ -362,14 +384,31 @@ async function rebuildQueue(): Promise<ApplyQueueItem[]> {
   return queue;
 }
 
+async function harvestLiveJobs(): Promise<ApplyQueueItem[]> {
+  const queue = await rebuildQueue();
+  const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
+  const merged = mergeLiveJobs((liveJobs as ApplyQueueItem[]) || [], queue, 200);
+  await chrome.storage.local.set({ liveJobs: merged, liveJobsHarvestedAt: new Date().toISOString() });
+  return queue;
+}
+
+async function openLiveJob(url: string) {
+  const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
+  await chrome.storage.local.set({
+    liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], url, { openedAt: new Date().toISOString() }),
+  });
+  await chrome.tabs.create({ url });
+}
+
 async function setKeepApplying(on: boolean, tabId?: number | null) {
   await chrome.storage.local.set({ keepApplying: on });
   if (on) {
     chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
-    const queue = await rebuildQueue();
-    runDiscoverTick().then(() => rebuildQueue()).catch(() => {});
+    startLiveAlarm();
+    const queue = await harvestLiveJobs();
+    runDiscoverTick().then(() => harvestLiveJobs()).catch(() => {});
     const [tab] = tabId
       ? [await chrome.tabs.get(tabId).catch(() => null)]
       : await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -386,6 +425,8 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     });
   }
 }
+
+startLiveAlarm();
 
 async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
   const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
@@ -406,6 +447,12 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
     return;
   }
   if (status === "blocked" || status === "submitted" || status === "stuck" || status === "done-job") {
+    if (currentUrl && status === "submitted") {
+      const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
+      await chrome.storage.local.set({
+        liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], currentUrl, { appliedAt: new Date().toISOString() }),
+      });
+    }
     const next = nextQueueItem(applyQueue, currentUrl || "");
     const url = next?.url || applyQueue[0]?.url;
     if (url && canonicalJobUrl(url) !== canonicalJobUrl(currentUrl || "")) {

@@ -75,6 +75,45 @@ export interface ApplyQueueItem {
   location?: string;
   score?: number;
   why?: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  openedAt?: string;
+  appliedAt?: string;
+}
+
+/** Keep discovered jobs on the Live jobs list. New hits move to the top; old rows stay. */
+export function mergeLiveJobs(existing: ApplyQueueItem[], incoming: ApplyQueueItem[], limit = 200): ApplyQueueItem[] {
+  const now = new Date().toISOString();
+  const map = new Map<string, ApplyQueueItem>();
+  for (const j of existing) {
+    if (!j?.url) continue;
+    map.set(canonicalJobUrl(j.url), { ...j });
+  }
+  for (const j of incoming) {
+    if (!j?.url) continue;
+    const key = canonicalJobUrl(j.url);
+    const prev = map.get(key);
+    map.set(key, {
+      ...prev,
+      ...j,
+      url: j.url || prev?.url || "",
+      firstSeenAt: prev?.firstSeenAt || now,
+      lastSeenAt: now,
+      openedAt: prev?.openedAt,
+      appliedAt: prev?.appliedAt || j.appliedAt,
+    });
+  }
+  const merged = [...map.values()].sort((a, b) => (b.lastSeenAt || "").localeCompare(a.lastSeenAt || ""));
+  return merged.slice(0, limit);
+}
+
+export function markLiveJob(
+  list: ApplyQueueItem[],
+  url: string,
+  patch: Partial<Pick<ApplyQueueItem, "openedAt" | "appliedAt">>
+): ApplyQueueItem[] {
+  const key = canonicalJobUrl(url);
+  return list.map((j) => (canonicalJobUrl(j.url) === key ? { ...j, ...patch } : j));
 }
 
 export function canonicalJobUrl(url: string): string {

@@ -40,7 +40,9 @@ npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
 
 Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
 
-**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then the next job. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
+**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then the next job. **Live jobs** on the popup (and in the live window) keeps the list as Fillglen looks in the background. Open a job right after you finish an application, or leave it there. Applied rows stay on the list. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
+
+**Unknown questions:** Fillglen uses the resume first. If the resume does not contain the answer, it fills **No**. Name, email, address, EEO, and consent are never filled with No. That setting is on by default (Settings). Popup, panel, and dashboard fields are saved as you type so switching windows does not lose them.
 
 Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/keep-applying-autofill-0208
 

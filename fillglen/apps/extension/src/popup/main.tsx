@@ -5,48 +5,77 @@ import {
   EMPTY_PROFILE,
   hydrateProfile,
   parseResumeText,
+  type ApplyQueueItem,
   type DiscoverStatus,
   type Profile,
 } from "@fillglen/core";
 import { CopyrightNotice, Wordmark } from "../brand";
 import "../panel/styles.css";
 
-type Match = { title: string; company: string; url: string; score?: number; source?: string; why?: string; location?: string };
+type Match = ApplyQueueItem;
+type View = "home" | "live";
 
 function Popup() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [paste, setPaste] = useState("");
   const [status, setStatus] = useState("Paste your resume. Fillglen ranks Texas IT jobs to that resume.");
   const [matches, setMatches] = useState<{ count: number; top: Match[] }>({ count: 0, top: [] });
+  const [liveJobs, setLiveJobs] = useState<Match[]>([]);
   const [keepApplying, setKeepApplying] = useState(false);
   const [discover, setDiscover] = useState<DiscoverStatus>(EMPTY_DISCOVER);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<View>("home");
+  const [harvestedAt, setHarvestedAt] = useState("");
 
   useEffect(() => {
-    chrome.storage.local.get(["profile", "apiBase", "sessionToken", "finderMatches", "keepApplying", "discoverStatus"], (r) => {
-      if (r.profile) setProfile(hydrateProfile(r.profile));
-      if (r.finderMatches) setMatches(r.finderMatches);
-      if (r.discoverStatus) setDiscover(r.discoverStatus);
-      setKeepApplying(Boolean(r.keepApplying));
-      const base = r.apiBase || "http://127.0.0.1:8787";
-      if (r.sessionToken) {
-        fetch(`${base}/v1/finder/matches`, { headers: { authorization: `Bearer ${r.sessionToken}` } })
-          .then((res) => res.json())
-          .then((body) => {
-            setMatches(body);
-            chrome.storage.local.set({ finderMatches: body });
-          })
-          .catch(() => {});
+    chrome.storage.local.get(
+      [
+        "profile",
+        "apiBase",
+        "sessionToken",
+        "finderMatches",
+        "keepApplying",
+        "discoverStatus",
+        "liveJobs",
+        "popupPaste",
+        "popupStatus",
+        "popupView",
+        "liveJobsHarvestedAt",
+      ],
+      (r) => {
+        if (r.profile) setProfile(hydrateProfile(r.profile));
+        if (r.finderMatches) setMatches(r.finderMatches);
+        if (r.discoverStatus) setDiscover(r.discoverStatus);
+        if (Array.isArray(r.liveJobs)) setLiveJobs(r.liveJobs);
+        if (typeof r.popupPaste === "string") setPaste(r.popupPaste);
+        if (typeof r.popupStatus === "string") setStatus(r.popupStatus);
+        if (r.popupView === "live" || r.popupView === "home") setView(r.popupView);
+        if (typeof r.liveJobsHarvestedAt === "string") setHarvestedAt(r.liveJobsHarvestedAt);
+        setKeepApplying(Boolean(r.keepApplying));
+        const base = r.apiBase || "http://127.0.0.1:8787";
+        if (r.sessionToken) {
+          fetch(`${base}/v1/finder/matches`, { headers: { authorization: `Bearer ${r.sessionToken}` } })
+            .then((res) => res.json())
+            .then((body) => {
+              setMatches(body);
+              chrome.storage.local.set({ finderMatches: body });
+            })
+            .catch(() => {});
+        }
+        chrome.runtime.sendMessage({ type: "refresh-queue" }).then((body) => {
+          if (body?.liveJobs) setLiveJobs(body.liveJobs);
+          if (body?.top) setMatches({ count: body.count || body.top.length, top: body.top });
+          if (body?.discover) setDiscover(body.discover);
+        }).catch(() => {});
       }
-    });
-    const onChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      area: string
-    ) => {
+    );
+    const onChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
       if (area !== "local") return;
       if (changes.discoverStatus?.newValue) setDiscover(changes.discoverStatus.newValue);
       if (changes.finderMatches?.newValue) setMatches(changes.finderMatches.newValue);
       if (changes.keepApplying) setKeepApplying(Boolean(changes.keepApplying.newValue));
+      if (changes.liveJobs?.newValue) setLiveJobs(changes.liveJobs.newValue);
+      if (typeof changes.liveJobsHarvestedAt?.newValue === "string") setHarvestedAt(changes.liveJobsHarvestedAt.newValue);
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
@@ -57,6 +86,17 @@ function Popup() {
     chrome.storage.local.set({ profile: next });
   }
 
+  function persistUi(patch: { paste?: string; status?: string; view?: View }) {
+    if (patch.paste != null) setPaste(patch.paste);
+    if (patch.status != null) setStatus(patch.status);
+    if (patch.view != null) setView(patch.view);
+    chrome.storage.local.set({
+      popupPaste: patch.paste ?? paste,
+      popupStatus: patch.status ?? status,
+      popupView: patch.view ?? view,
+    });
+  }
+
   async function refreshQueue() {
     const body = await chrome.runtime.sendMessage({ type: "refresh-queue" });
     if (body?.top) {
@@ -65,7 +105,64 @@ function Popup() {
         finderMatches: { count: body.count, top: body.top, lookup: body.lookup || body.top },
       });
     }
+    if (body?.liveJobs) setLiveJobs(body.liveJobs);
     if (body?.discover) setDiscover(body.discover);
+  }
+
+  async function openJob(url: string) {
+    await chrome.runtime.sendMessage({ type: "open-live-job", url });
+  }
+
+  if (view === "live") {
+    return (
+      <div className="fg-root fg-popup">
+        <Wordmark />
+        <div className="toolbar fg-actions">
+          <button onClick={() => persistUi({ view: "home" })}>Back</button>
+          <button className="primary" onClick={() => persistUi({ view: "live" })}>
+            Live jobs
+          </button>
+          <button disabled={busy} onClick={() => refreshQueue()}>
+            Refresh
+          </button>
+        </div>
+        <section className="fg-card">
+          <div className="fg-card-head">
+            <strong>Live jobs</strong>
+            <span>{liveJobs.length} kept in this list</span>
+          </div>
+          <p className="meta">
+            Fillglen keeps looking in the background while Chrome is open. Open a job now, or leave it here after you
+            finish an application. This list is saved.
+            {harvestedAt ? ` Last look ${new Date(harvestedAt).toLocaleTimeString()}.` : ""}
+          </p>
+          <ol className="qlist">
+            {liveJobs.map((m) => (
+              <li key={m.url} className="qrow">
+                <a href={m.url} target="_blank" rel="noreferrer">
+                  {m.title}
+                </a>
+                <div className="meta">
+                  {m.company}
+                  {m.location ? ` · ${m.location}` : ""}
+                  {m.source ? ` · ${m.source}` : ""}
+                  {m.score != null ? ` · ${m.score}` : ""}
+                  {m.appliedAt ? " · applied" : m.openedAt ? " · opened" : " · new"}
+                </div>
+                {m.why ? <p className="hint">{m.why}</p> : null}
+                <div className="toolbar">
+                  <button className="primary" onClick={() => openJob(m.url)}>
+                    Open job
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {!liveJobs.length ? <p className="meta">No live jobs yet. Keep Chrome open — the list fills in the background.</p> : null}
+        </section>
+        <CopyrightNotice />
+      </div>
+    );
   }
 
   return (
@@ -73,10 +170,17 @@ function Popup() {
       <Wordmark />
       <p className="fg-lede">{status}</p>
 
+      <div className="toolbar fg-actions">
+        <button className="primary" onClick={() => persistUi({ view: "live" })}>
+          Live jobs
+        </button>
+        <span className="meta">{liveJobs.length} saved</span>
+      </div>
+
       <section className="fg-card fg-discover">
         <div className="fg-card-head">
           <strong>Texas map scan</strong>
-          <span>{keepApplying ? "Running while this widget is on" : "Idle"}</span>
+          <span>{keepApplying ? "Running while this widget is on" : "Scanning in the background"}</span>
         </div>
         <p className="meta">{discover.note || EMPTY_DISCOVER.note}</p>
         <div className="fg-stats">
@@ -89,8 +193,8 @@ function Popup() {
             <span>Career sites</span>
           </div>
           <div>
-            <em>{discover.mappedFeeds}</em>
-            <span>Job feeds</span>
+            <em>{liveJobs.length}</em>
+            <span>Live jobs</span>
           </div>
         </div>
       </section>
@@ -98,13 +202,13 @@ function Popup() {
       <section className="fg-card">
         <div className="fg-card-head">
           <strong>Resume</strong>
-          <span>Paste, then parse. Matches follow this resume.</span>
+          <span>Paste, then parse. Matches follow this resume. Saved automatically.</span>
         </div>
         <textarea
           rows={9}
           placeholder="Paste the full resume text here"
           value={paste}
-          onChange={(e) => setPaste(e.target.value)}
+          onChange={(e) => persistUi({ paste: e.target.value })}
         />
         <div className="toolbar">
           <button
@@ -112,16 +216,16 @@ function Popup() {
             disabled={busy}
             onClick={async () => {
               if (!paste.trim()) {
-                setStatus("Paste a resume first.");
+                persistUi({ status: "Paste a resume first." });
                 return;
               }
               setBusy(true);
               const parsed = hydrateProfile(parseResumeText(paste));
-              save(parsed);
-              setStatus("Parsed. Ranking Texas IT jobs to this resume…");
+              save({ ...parsed, rawResumeText: paste });
+              persistUi({ status: "Parsed. Ranking Texas IT jobs to this resume…" });
               try {
                 await refreshQueue();
-                setStatus("Resume saved. Jobs below are ranked to this resume. Texas IT first.");
+                persistUi({ status: "Resume saved. Jobs below are ranked to this resume. Texas IT first." });
               } finally {
                 setBusy(false);
               }
@@ -154,21 +258,22 @@ function Popup() {
           disabled={busy}
           onClick={async () => {
             if (!profile.contact.legalName && !paste) {
-              setStatus("Paste a resume and parse it first.");
+              persistUi({ status: "Paste a resume and parse it first." });
               return;
             }
             if (paste && !profile.contact.email) {
               const parsed = hydrateProfile(parseResumeText(paste));
-              save(parsed);
+              save({ ...parsed, rawResumeText: paste });
             }
             setBusy(true);
             await chrome.runtime.sendMessage({ type: "start-keep-applying" });
             setKeepApplying(true);
             await refreshQueue();
             setBusy(false);
-            setStatus(
-              "Keep applying is on. Fillglen scans Texas map companies in the background, ranks jobs to your resume, fills forms, and waits on CAPTCHAs. It never solves CAPTCHAs. Leave Chrome open."
-            );
+            persistUi({
+              status:
+                "Keep applying is on. After each application you can open a Live job, or leave the list for later. Unknown questions use the resume, or No.",
+            });
           }}
         >
           Autofill & keep applying
@@ -177,7 +282,7 @@ function Popup() {
           onClick={async () => {
             await chrome.runtime.sendMessage({ type: "stop-keep-applying" });
             setKeepApplying(false);
-            setStatus("Stopped. Fillglen is idle.");
+            persistUi({ status: "Stopped. Live jobs stay saved." });
           }}
         >
           Stop
@@ -210,19 +315,22 @@ function Popup() {
                 {m.score != null ? ` · ${m.score}` : ""}
               </div>
               {m.why ? <p className="hint">{m.why}</p> : null}
+              <div className="toolbar">
+                <button className="primary" onClick={() => openJob(m.url)}>
+                  Open job
+                </button>
+              </div>
             </li>
           ))}
         </ol>
         {!(matches.top || []).length ? (
-          <p className="meta">Parse a resume, then keep applying. Matches appear here.</p>
+          <p className="meta">Parse a resume. Live jobs also collect in the background.</p>
         ) : null}
       </section>
 
       <p className="meta fg-foot-note">
-        {keepApplying
-          ? "Widget on: map scan and autofill keep running while Chrome stays open. The API continues 24/7 if it is running."
-          : "Keep applying is off."}{" "}
-        LinkedIn Easy Apply is blocked. Google Maps is not scraped — OpenStreetMap (and Places API when configured) plus public career pages.
+        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. Unknown form
+        questions use the resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
       </p>
       <CopyrightNotice />
     </div>

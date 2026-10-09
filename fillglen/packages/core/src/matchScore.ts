@@ -38,7 +38,7 @@ function expand(term: string): string[] {
   return [n, ...extra.map(normalize), ...reverse.map(([k]) => k)];
 }
 
-function resumeBlob(profile: Profile): string {
+export function resumeBlob(profile: Profile): string {
   const parts = [
     profile.rawResumeText,
     profile.contact.legalName,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, token } from "../api";
+import { usePersistedState } from "../persist";
 
 type JobRow = {
   id: string;
@@ -20,8 +21,8 @@ type JobRow = {
 };
 
 function Feedback({ listingId }: { listingId: string }) {
-  const [reason, setReason] = useState("wrong industry");
-  const [done, setDone] = useState("");
+  const [reason, setReason] = usePersistedState("local-feedback-reason", "wrong industry");
+  const [done, setDone] = usePersistedState(`local-feedback-done-${listingId}`, "");
   return (
     <div className="flex flex-wrap gap-2 mt-2 text-xs items-center">
       <button
@@ -70,9 +71,9 @@ function project(lat: number, lng: number) {
 export default function LocalJobs() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [coverage, setCoverage] = useState<{ mappedCount: number; seedCount: number; unmapped: string[]; note: string } | null>(null);
-  const [minScore, setMinScore] = useState(60);
-  const [mode, setMode] = useState("all");
-  const [msg, setMsg] = useState("");
+  const [minScore, setMinScore] = usePersistedState("local-min-score", 60);
+  const [mode, setMode] = usePersistedState("local-mode", "all");
+  const [msg, setMsg] = usePersistedState("local-msg", "");
 
   async function refresh() {
     if (!token()) return;
