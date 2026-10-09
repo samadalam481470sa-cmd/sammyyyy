@@ -5,6 +5,7 @@ import {
   analysisSummary,
   analyzeApplyPage,
   fillBudgetForAnalysis,
+  fillProgressDetail,
 } from "../src/pageAnalyze.js";
 
 describe("pageAnalyze", () => {
@@ -86,6 +87,45 @@ describe("pageAnalyze", () => {
     });
     assert.equal(a.action, "skip");
     assert.equal(a.stage, "blocked");
+  });
+
+  it("reads a random host form then fills instead of skipping", () => {
+    const a = analyzeApplyPage({
+      url: "https://jobs.acme-corp.example/apply",
+      bodyText:
+        "First Name Last Name Email Phone Country Phone Location Resume Education Submit application",
+      visibleFieldCount: 45,
+      hasFileInput: true,
+      requiredEmpty: 40,
+      filledCount: 0,
+    });
+    assert.equal(a.action, "fill");
+    assert.equal(a.stage, "form");
+    assert.ok(a.reasons.includes("read-page-then-fill"));
+    assert.ok(a.reasons.includes("long-form"));
+    assert.match(analysisSummary(a), /form → fill/);
+    assert.match(fillProgressDetail(45, 12), /45 fields detected/);
+    assert.match(fillProgressDetail(0, 0), /Detecting questions/);
+  });
+
+  it("fills a long form even when the host is unknown", () => {
+    const a = analyzeApplyPage({
+      url: "https://portal.random-corp.example/form/step2",
+      bodyText: "",
+      visibleFieldCount: 18,
+    });
+    assert.equal(a.action, "fill");
+    assert.ok(a.reasons.includes("read-page-then-fill"));
+  });
+
+  it("does not treat a checkout or comment form as an application", () => {
+    const a = analyzeApplyPage({
+      url: "https://shop.example.com/checkout",
+      bodyText: "First name Last name Email Phone Zip Place order",
+      visibleFieldCount: 6,
+    });
+    assert.equal(a.action, "skip");
+    assert.equal(a.stage, "unknown");
   });
 
   it("reuses a fingerprint when the page has not changed", () => {

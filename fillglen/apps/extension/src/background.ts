@@ -10,6 +10,7 @@ import {
   mergeLiveJobs,
   isSupportedApplyUrl,
   looksLikeApplicationPage,
+  looksLikeFillableTab,
   handoffPlan,
   KEEP_HANDOFF_SETTLE_MS,
   mayHandoffToNextJob,
@@ -379,7 +380,10 @@ function looksApply(url?: string) {
 }
 
 function looksKeepTab(url?: string) {
-  return looksApply(url) || /accounts\.google\.com/i.test(url || "");
+  if (!url) return false;
+  if (/accounts\.google\.com/i.test(url)) return true;
+  if (shouldBlockPage(url)) return false;
+  return looksApply(url) || looksLikeFillableTab(url);
 }
 
 function pingKeepTabs() {
@@ -472,25 +476,24 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
 });
 
 chrome.webNavigation?.onCommitted.addListener((d) => {
-  if (d.frameId !== 0) return;
-  ping(d.tabId, d.url);
+  if (d.frameId === 0) ping(d.tabId, d.url);
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying || d.tabId === warmupTabId) return;
-    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+    if (d.frameId !== 0 || looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
   });
 });
 chrome.webNavigation?.onCompleted.addListener((d) => {
   if (d.frameId === 0) ping(d.tabId, d.url);
   chrome.storage.local.get(["keepApplying"], (r) => {
-    if (!r.keepApplying || d.frameId !== 0 || d.tabId === warmupTabId) return;
-    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+    if (!r.keepApplying || d.tabId === warmupTabId) return;
+    if (d.frameId !== 0 || looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
   });
 });
 chrome.webNavigation?.onHistoryStateUpdated.addListener((d) => {
   if (d.frameId === 0) ping(d.tabId, d.url);
   chrome.storage.local.get(["keepApplying"], (r) => {
-    if (!r.keepApplying || d.frameId !== 0 || d.tabId === warmupTabId) return;
-    if (looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
+    if (!r.keepApplying || d.tabId === warmupTabId) return;
+    if (d.frameId !== 0 || looksKeepTab(d.url)) sendToTab(d.tabId, { type: "keep-tick" });
   });
 });
 chrome.tabs.onRemoved.addListener((tabId) => {

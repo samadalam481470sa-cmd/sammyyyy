@@ -36,6 +36,8 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
       return c.state;
     case "zip":
       return c.zip || "75006";
+    case "location":
+      return [c.city, c.state].filter(Boolean).join(", ") || c.zip || c.country || "United States";
     case "country":
       return options?.length ? pickCountryAnswer("country", options) : c.country || "United States";
     case "linkedin":

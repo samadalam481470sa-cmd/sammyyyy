@@ -151,14 +151,14 @@ export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): Appl
   return rest.find((q) => q.url && !q.appliedAt) || null;
 }
 
-export const KEEP_FILL_GAP_MS = 80;
-export const KEEP_INTERVAL_MS = 400;
+export const KEEP_FILL_GAP_MS = 50;
+export const KEEP_INTERVAL_MS = 320;
 export const KEEP_HEARTBEAT_MS = 500;
 export const KEEP_STUCK_TICKS = 10;
 export const KEEP_SCAN_BURST_MS = [900];
 export const KEEP_MUTATION_DEBOUNCE_MS = 520;
 /** Cap fields per tick so dropdown-heavy EEO pages do not freeze the tab. */
-export const KEEP_FIELDS_PER_TICK = 2;
+export const KEEP_FIELDS_PER_TICK = 4;
 export const KEEP_COOLDOWN_MS = 220;
 export const KEEP_DROPDOWN_SETTLE_MS = 180;
 

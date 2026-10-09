@@ -32,7 +32,14 @@ import { scoreMatch } from "../src/matchScore.js";
 import { tailorResume } from "../src/tailor.js";
 import { buildAiPrompt, parseAiDraft } from "../src/ai.js";
 import { adapterFor, isSupportedApplyUrl } from "../src/adapters.js";
-import { isKnownAtsHost, looksLikeApplicationPage } from "../src/ats.js";
+import {
+  applicationSignalCount,
+  hostLooksLikeCareers,
+  isKnownAtsHost,
+  looksLikeApplicationPage,
+  looksLikeFillableTab,
+  shouldKeepCycleOnPage,
+} from "../src/ats.js";
 import { bestSavedMatch, tokenSetRatio } from "../src/fuzzy.js";
 import { hydrateProfile, EMPTY_PROFILE, type Profile, type Question } from "../src/types.js";
 import { bytesForUpload } from "../src/resumeFiles.js";
@@ -113,6 +120,8 @@ describe("classify rules", () => {
     assert.equal(classifyQuestion({ label: "Disability status" }).type, "disability");
     assert.equal(classifyQuestion({ label: "I identify as a first-generation professional (please select one):" }).type, "firstGeneration");
     assert.equal(classifyQuestion({ label: "Country code" }).type, "country");
+    assert.equal(classifyQuestion({ label: "Phone Country" }).type, "country");
+    assert.equal(classifyQuestion({ label: "Location" }).type, "location");
     assert.equal(classifyQuestion({ label: "Zip code" }).type, "zip");
   });
   it("maps motivation and behavioral", () => {
@@ -471,6 +480,21 @@ describe("adapters", () => {
       ),
       true
     );
+    assert.equal(hostLooksLikeCareers("https://jobs.nike.com/job/123"), true);
+    assert.equal(hostLooksLikeCareers("https://www.amazon.com/checkout"), false);
+    assert.equal(
+      looksLikeApplicationPage("https://unknown-board.example/form", "First Name Last Name Email Resume Education", {
+        fields: 45,
+        files: true,
+      }),
+      true
+    );
+    assert.ok(applicationSignalCount("First Name Last Name Email Phone Resume Education") >= 4);
+    assert.equal(shouldKeepCycleOnPage("https://jobs.example.com/apply", "First Name Email Resume", { fields: 8 }), true);
+    assert.equal(shouldKeepCycleOnPage("https://www.linkedin.com/jobs/view/1", "Easy Apply", { fields: 9 }), false);
+    assert.equal(looksLikeFillableTab("https://careers.example.com/job/1"), true);
+    assert.equal(looksLikeFillableTab("https://www.youtube.com/watch?v=1"), false);
+    assert.equal(valueForType("location", hydrateProfile({ ...EMPTY_PROFILE, contact: { ...EMPTY_PROFILE.contact, city: "Dallas", state: "TX" } })), "Dallas, TX");
   });
 });
 

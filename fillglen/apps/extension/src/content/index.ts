@@ -7,6 +7,7 @@ import {
   analysisIsFresh,
   analysisSummary,
   analyzeApplyPage,
+  fillProgressDetail,
   cycleOverBudget,
   keepBusyExpired,
   looksLikeConfirmationCopy,
@@ -20,6 +21,7 @@ import {
   fieldLooksFilled,
   fillBudgetForAnalysis,
   fillMatchedIntent,
+  FILLABLE_SELECTOR,
   filterRealQuestions,
   hostHasPriorApply,
   isAuthChoiceScreen,
@@ -54,6 +56,7 @@ import {
   loginForFill,
   loginHost,
   looksLikeApplicationPage,
+  shouldKeepCycleOnPage,
   looksLikeAppliedBeforePrompt,
   mayAdvance,
   overlaySavedValues,
@@ -124,8 +127,17 @@ function isVisibleTab(): boolean {
 function boot() {
   const url = location.href;
   const blocked = shouldBlockPage(url, pageTextNow());
-  const applyLike = looksLikeApplicationPage(url, pageTextNow()) || looksLikeApplicationPage(url);
+  const bootFields = (() => {
+    try {
+      return document.querySelectorAll(FILLABLE_SELECTOR).length;
+    } catch {
+      return 0;
+    }
+  })();
+  const applyLike =
+    looksLikeApplicationPage(url, pageTextNow(), { fields: bootFields }) || looksLikeApplicationPage(url);
   const frameId = window === window.top ? "top" : `frame:${location.host}${location.pathname.slice(0, 40)}`;
+  let keepLoopRetries = 0;
 
   let port: chrome.runtime.Port | null = null;
   const undoStack: { id: string; prev: string }[] = [];
@@ -386,8 +398,43 @@ function boot() {
     return true;
   }
 
+  function frameHasFields(): boolean {
+    try {
+      return document.querySelectorAll(FILLABLE_SELECTOR).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  function countVisibleFillable(): number {
+    return [...document.querySelectorAll(FILLABLE_SELECTOR)].filter((n) => {
+      const el = n as HTMLElement;
+      if (el instanceof HTMLInputElement && (el.type === "hidden" || el.disabled)) return false;
+      const s = window.getComputedStyle(el);
+      return s.display !== "none" && s.visibility !== "hidden";
+    }).length;
+  }
+
+  function pageFillExtras() {
+    const fields = countVisibleFillable();
+    let files = false;
+    try {
+      files = document.querySelectorAll("input[type=file]").length > 0;
+    } catch {
+      files = false;
+    }
+    return { fields, files };
+  }
+
+  function mayRunKeepLoop(): boolean {
+    if (window === window.top) return true;
+    const extras = pageFillExtras();
+    if (extras.fields > 0 || extras.files) return true;
+    return shouldKeepCycleOnPage(location.href, pageTextNow(), extras);
+  }
+
   async function keepCycle(_opts?: { allowHidden?: boolean }) {
-    if (window !== window.top) return;
+    if (window !== window.top && !frameHasFields()) return;
     if (leavingJob) return;
     if (keepBusy) {
       if (keepBusyExpired(keepBusySince)) {
@@ -399,6 +446,15 @@ function boot() {
       }
     }
     if (Date.now() < keepCooldownUntil) return;
+    const extrasEarly = pageFillExtras();
+    const blobEarly = pageTextSlice(4000);
+    if (
+      !shouldKeepCycleOnPage(location.href, blobEarly, extrasEarly) &&
+      extrasEarly.fields < 2 &&
+      !/accounts\.google\.com/i.test(location.host)
+    ) {
+      return;
+    }
     const myGen = bumpCycle(cycleGen);
     cycleGen = myGen;
     keepBusy = true;
@@ -434,12 +490,7 @@ function boot() {
       const authButtonsEarly = collectAuthButtons(document);
       const hasPasswordEarly = Boolean(document.querySelector("input[type=password]"));
       const fileCount = findFileInputs(document).length;
-      const visibleEarly = [...document.querySelectorAll("input, textarea, select")].filter((n) => {
-        const el = n as HTMLInputElement;
-        if (el.type === "hidden" || el.disabled) return false;
-        const s = window.getComputedStyle(el);
-        return s.display !== "none" && s.visibility !== "hidden";
-      }).length;
+      const visibleEarly = countVisibleFillable();
       const advanceEarly = findAdvanceControl(document, "keep-applying");
       const earlyFacts = {
         url,
@@ -464,7 +515,9 @@ function boot() {
           /* storage unavailable */
         }
       }
-      if (early.action === "skip" && !/accounts\.google\.com/i.test(location.host)) return;
+      if (early.action === "skip" && !/accounts\.google\.com/i.test(location.host)) {
+        return;
+      }
       if (early.action === "wait" && early.stage === "loading") return;
       if (clickedSubmitAt || early.action === "handoff") {
         const evidence: SubmitEvidence = {
@@ -540,12 +593,7 @@ function boot() {
       }
       const authButtons = collectAuthButtons(document);
       const hasPassword = Boolean(document.querySelector("input[type=password]"));
-      const visibleFields = [...document.querySelectorAll("input, textarea, select")].filter((n) => {
-        const el = n as HTMLInputElement;
-        if (el.type === "hidden" || el.disabled) return false;
-        const s = window.getComputedStyle(el);
-        return s.display !== "none" && s.visibility !== "hidden";
-      }).length;
+      const visibleFields = countVisibleFillable();
       const authChoiceScreen = isAuthChoiceScreen(authButtons, visibleFields);
       if (hasPassword || looksLikeAppliedBeforePrompt(pageBlob) || authChoiceScreen) {
         const gate = clickAuthGate(document, returning, canSignIn);
@@ -634,6 +682,12 @@ function boot() {
       );
       const ready = takeTickBatch(rawReady, fillLimit);
       last = realQuestions;
+      post({
+        type: "keep-status",
+        status: "fill",
+        url,
+        detail: fillProgressDetail(realQuestions.length, rawReady.length),
+      });
       let hadCustom = false;
       let verified = 0;
       for (const { plan, question: q } of ready) {
@@ -733,7 +787,15 @@ function boot() {
   }
 
   function startKeepLoop() {
-    if (keepTimer || window !== window.top) return;
+    if (keepTimer) return;
+    if (!mayRunKeepLoop()) {
+      if (keepLoopRetries < 16) {
+        keepLoopRetries += 1;
+        window.setTimeout(() => startKeepLoop(), 700);
+      }
+      return;
+    }
+    keepLoopRetries = 0;
     keepTimer = window.setInterval(() => {
       if (keepBusy && keepBusyExpired(keepBusySince)) {
         cycleGen = bumpCycle(cycleGen);
@@ -768,10 +830,16 @@ function boot() {
     scan("full");
     KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("delta"), ms));
     const obs = new MutationObserver(() => {
-      if (keepBusy || leavingJob) return;
+      if (leavingJob) return;
+      if (!keepTimer && mayRunKeepLoop()) startKeepLoop();
+      if (keepBusy) return;
       clearTimeout((obs as unknown as { t?: number }).t);
       (obs as unknown as { t?: number }).t = window.setTimeout(() => {
         scan("delta");
+        chrome.storage.local.get(["keepApplying"], (r) => {
+          if (!r.keepApplying || keepBusy || leavingJob) return;
+          keepCycle().catch(() => {});
+        });
       }, KEEP_MUTATION_DEBOUNCE_MS) as unknown as number;
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
@@ -783,7 +851,14 @@ function boot() {
   }
 
   whenReady(() => {
-    if (applyLike || looksLikeApplicationPage(url, pageTextNow())) watchPage();
+    const extras = pageFillExtras();
+    if (
+      applyLike ||
+      looksLikeApplicationPage(url, pageTextNow(), extras) ||
+      extras.fields >= 2
+    ) {
+      watchPage();
+    }
     chrome.storage.local.get(["keepApplying"], (r) => {
       if (r.keepApplying) {
         watchPage();

@@ -1,6 +1,10 @@
 import { normalize } from "./fuzzy.js";
 import type { FieldKind, FillPlan, Question, QuestionType } from "./types.js";
 
+/** Native + custom ATS controls. Used to count fields before a full scan. */
+export const FILLABLE_SELECTOR =
+  "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]):not([type=reset]):not([type=range]), textarea, select, [role='combobox'], [role='listbox'], [role='textbox'], [role='searchbox'], [aria-haspopup='listbox'], [contenteditable='true'], [contenteditable='']";
+
 const NOISE_LABEL =
   /progress scrubber|scrubber|slider|seek bar|volume|zoom|opacity|scroll|carousel|pagination|page indicator|step indicator|wizard progress|breadcrumb|toolbar|skip to content|main menu|side nav|navigation|cookie banner|chat widget|intercom|zendesk|media player|playback|timeline/;
 
@@ -51,8 +55,9 @@ export function filterRealQuestions(questions: Question[]): Question[] {
 }
 
 export function isRealQuestion(q: Pick<Question, "label" | "name" | "kind" | "type" | "required" | "options">): boolean {
-  if (isNoiseFieldLabel(q.label, q.name || "")) return false;
-  if (q.type === "unknown" && !q.required && !q.options?.length && /unlabeled/i.test(q.label)) return false;
+  const unlabeled = /unlabeled/i.test(q.label);
+  if (isNoiseFieldLabel(q.label, q.name || "") && !(q.required && unlabeled)) return false;
+  if (q.type === "unknown" && !q.required && !q.options?.length && unlabeled) return false;
   // Long nav-like labels with no question mark are almost never form fields.
   if (q.type === "unknown" && q.kind === "text" && q.label.length > 90 && !/\?/.test(q.label)) return false;
   return true;
@@ -67,7 +72,7 @@ export function shouldAutofillPlan(
   if (q && !isRealQuestion(q)) return false;
   if (plan.type === "password") return false;
   if (q?.source === "user" && q.value) return false;
-  if (q?.type === "unknown" && !q.required && !q.options?.length) return false;
+  if (q?.type === "unknown" && !q.required && !q.options?.length && plan.confidence !== "high" && plan.source !== "saved") return false;
   // Soft answers on unlabeled optional fields stay out of the auto path.
   if (plan.confidence === "check-this" && q && /unlabeled/i.test(q.label) && !q.required) return false;
   return true;
@@ -84,7 +89,8 @@ const TYPE_PRIORITY: Record<string, number> = {
   zip: 89,
   state: 88,
   city: 87,
-  address: 86,
+  location: 86,
+  address: 85,
   workAuthorization: 85,
   visaSponsorship: 84,
   citizenship: 83,

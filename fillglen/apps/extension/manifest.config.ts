@@ -27,10 +27,10 @@ export default defineManifest({
     type: "module",
   },
   permissions: ["storage", "unlimitedStorage", "sidePanel", "scripting", "tabs", "windows", "webNavigation", "alarms", "notifications", "offscreen"],
-  host_permissions: ["http://127.0.0.1:8787/*", "http://localhost:8787/*", "https://*/*"],
+  host_permissions: ["http://127.0.0.1:8787/*", "http://localhost:8787/*", "https://*/*", "http://*/*"],
   content_scripts: [
     {
-      matches: ["https://*/*"],
+      matches: ["https://*/*", "http://*/*"],
       exclude_matches: [
         "https://www.linkedin.com/*",
         "https://linkedin.com/*",

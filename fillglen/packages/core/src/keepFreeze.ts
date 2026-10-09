@@ -10,8 +10,8 @@ export const KEEP_FULL_SCAN_GAP_MS = 1800;
 export const KEEP_DELTA_SCAN_GAP_MS = 500;
 export const KEEP_RESUME_GAP_MS = 8000;
 export const KEEP_TEXT_CACHE_MS = 400;
-export const KEEP_COOLDOWN_AFTER_FILL_MS = 520;
-export const KEEP_COOLDOWN_AFTER_DROPDOWN_MS = 720;
+export const KEEP_COOLDOWN_AFTER_FILL_MS = 280;
+export const KEEP_COOLDOWN_AFTER_DROPDOWN_MS = 400;
 export const KEEP_DROPDOWNS_PER_TICK = 1;
 export const KEEP_RESTORE_WRITES = 4;
 

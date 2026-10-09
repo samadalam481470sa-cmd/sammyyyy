@@ -46,7 +46,7 @@ function visible(el: HTMLElement): boolean {
 function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
   // Tight selector — do not grab every data-automation-id / aria-expanded (progress scrubbers, tab strips).
   const nodes = root.querySelectorAll(
-    "input, textarea, select, [role='combobox'], [role='listbox'], [role='textbox'], [aria-haspopup='listbox'], [aria-haspopup='menu'], [contenteditable='true'], [contenteditable='']"
+    "input, textarea, select, [role='combobox'], [role='listbox'], [role='textbox'], [role='searchbox'], [aria-haspopup='listbox'], [aria-haspopup='menu'], [contenteditable='true'], [contenteditable=''], [data-automation-id*='input'], [data-automation-id*='Input'], [data-automation-id*='textInput']"
   );
   nodes.forEach((n) => {
     if (!(n instanceof HTMLElement)) return;
@@ -66,9 +66,11 @@ function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[
     const sr = n.shadowRoot;
     if (sr) walkShadow(sr, out);
   });
-  root.querySelectorAll("*").forEach((n) => {
-    if (n instanceof HTMLElement && n.shadowRoot) walkShadow(n.shadowRoot, out);
-  });
+  const all = "getElementsByTagName" in root ? root.getElementsByTagName("*") : root.querySelectorAll("*");
+  for (let i = 0, len = all.length; i < len; i++) {
+    const n = all[i];
+    if (n instanceof HTMLElement && n.tagName.includes("-") && n.shadowRoot) walkShadow(n.shadowRoot, out);
+  }
 }
 
 function walkClickables(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
@@ -80,9 +82,11 @@ function walkClickables(root: Document | ShadowRoot | HTMLElement, out: HTMLElem
     const sr = (n as HTMLElement).shadowRoot;
     if (sr) walkClickables(sr, out);
   });
-  root.querySelectorAll("*").forEach((n) => {
-    if (n instanceof HTMLElement && n.shadowRoot) walkClickables(n.shadowRoot, out);
-  });
+  const all = "getElementsByTagName" in root ? root.getElementsByTagName("*") : root.querySelectorAll("*");
+  for (let i = 0, len = all.length; i < len; i++) {
+    const n = all[i];
+    if (n instanceof HTMLElement && n.tagName.includes("-") && n.shadowRoot) walkClickables(n.shadowRoot, out);
+  }
 }
 
 function kindOf(el: HTMLElement): FieldKind {
@@ -184,7 +188,8 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
       : [];
     const label = isRadio ? groupLabel(el) : el instanceof HTMLSelectElement ? groupLabel(el) : labelFor(el);
     if (!label && kindOf(el) === "text" && !(el instanceof HTMLInputElement)) continue;
-    if (isNoiseFieldLabel(label || "", el.getAttribute("name") || el.id || "")) continue;
+    // Unlabeled inputs still count so we can read-then-fill; drop chrome noise with a real label.
+    if (label && isNoiseFieldLabel(label, el.getAttribute("name") || el.id || "")) continue;
     if (el instanceof HTMLInputElement && el.type === "range") continue;
     const classified = classifyQuestion(
       {

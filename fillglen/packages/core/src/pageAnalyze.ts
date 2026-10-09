@@ -94,7 +94,10 @@ export function analyzeApplyPage(facts: PageFacts): PageAnalysis {
     return pack("submitted", "handoff", board, ["confirmation-page"], true, fingerprint, 0);
   }
 
-  const applyPage = looksLikeApplicationPage(facts.url, blob);
+  const applyPage = looksLikeApplicationPage(facts.url, blob, {
+    fields,
+    files: Boolean(facts.hasFileInput),
+  });
   const listing = looksLikeJobListingCopy(blob);
   const applyCta = Boolean(facts.hasApplyCta) || /apply now|start application|apply for this job/i.test(blob);
   if (listing && applyCta && fields < 2 && !facts.hasPassword) {
@@ -111,8 +114,11 @@ export function analyzeApplyPage(facts: PageFacts): PageAnalysis {
     return pack("auth", "auth", board, reasons, true, fingerprint, 2);
   }
 
-  if (!applyPage && !board && !facts.hasFileInput && fields === 0) {
+  if (!applyPage && !board && !facts.hasFileInput && fields < 12) {
     return pack("unknown", "skip", board, ["not-an-application"], false, fingerprint, 0);
+  }
+  if (fields >= 2) {
+    reasons.push("read-page-then-fill");
   }
 
   if (REVIEW.test(blob) && (facts.requiredEmpty ?? 1) === 0) {
@@ -161,6 +167,13 @@ export function fillBudgetForAnalysis(analysis: PageAnalysis): number {
 export function analysisSummary(analysis: PageAnalysis): string {
   const board = analysis.board ? analysis.board.replace(/^\./, "") : "generic";
   return `${analysis.stage} → ${analysis.action} · ${board} · ${analysis.reasons.slice(0, 3).join(", ")}`;
+}
+
+/** Status copy: detect every field, then generate answers and autofill. */
+export function fillProgressDetail(detected: number, filling: number): string {
+  if (detected <= 0) return "Detecting questions & input fields";
+  if (filling <= 0) return `${detected} fields detected`;
+  return `${detected} fields detected · generating ${filling} answers`;
 }
 
 export function looksLikeConfirmationCopy(text: string): boolean {
