@@ -22,7 +22,9 @@ import {
   isAuthChoiceScreen,
   hydrateProfile,
   hydrateSession,
+  applicationShape,
   applyWidgetDocuments,
+  queryLocalStore,
   fillPaceForPage,
   KEEP_COOLDOWN_MS,
   KEEP_DROPDOWN_SETTLE_MS,
@@ -374,6 +376,7 @@ function boot() {
         "boardVaultSecret",
         "liveJobs",
         "applyQueue",
+        "popupPaste",
       ]);
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
@@ -521,10 +524,25 @@ function boot() {
         return;
       }
       try {
-        const uploaded = await applyWidgetDocuments(document, profile);
+        const library: string[] = [];
+        try {
+          const db = await queryLocalStore({ kind: "answer", q: "resume", limit: 8 });
+          for (const row of db.rows) {
+            const text = String(row.why || (row.meta as { answer?: string })?.answer || "");
+            if (text.length > 40) library.push(text);
+          }
+        } catch {
+          /* IndexedDB optional */
+        }
+        const uploaded = await applyWidgetDocuments(document, profile, {
+          paste: typeof stored.popupPaste === "string" ? stored.popupPaste : "",
+          library,
+        });
         if (uploaded.did) {
           stuckTicks = 0;
+          const shape = applicationShape(url, pageBlob);
           post({ type: "keep-status", status: "fill", url, detail: uploaded.detail });
+          await new Promise((r) => setTimeout(r, Math.min(360, Math.round(shape.waitAfterResumeMs / 6))));
         }
       } catch {
         /* File/DataTransfer unavailable */
@@ -549,7 +567,9 @@ function boot() {
           return;
         }
       }
-      const fillLimit = late.action === "fill" ? fillBudgetForAnalysis(late) : KEEP_FIELDS_PER_TICK;
+      const shape = applicationShape(url, pageBlob);
+      const fillLimit =
+        late.action === "fill" ? Math.min(fillBudgetForAnalysis(late), shape.fieldsPerTick) : KEEP_FIELDS_PER_TICK;
       const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, fillLimit);
       last = realQuestions;
       let hadCustom = false;

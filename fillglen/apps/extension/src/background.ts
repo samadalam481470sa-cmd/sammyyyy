@@ -750,6 +750,7 @@ async function rebuildQueue(): Promise<ApplyQueueItem[]> {
       why: j.why,
     });
   }
+  queue.sort((a, b) => (b.score || 0) - (a.score || 0));
   const compact = {
     count: queue.length,
     top: queue.slice(0, 8),

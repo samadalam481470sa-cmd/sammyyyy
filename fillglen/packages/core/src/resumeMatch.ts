@@ -7,6 +7,7 @@ import {
   looksLikeItRole,
   type SearchSettings,
 } from "./finder.js";
+import { jobComplexityBoost } from "./applicationShape.js";
 import { normalize } from "./fuzzy.js";
 import type { Profile } from "./types.js";
 
@@ -84,10 +85,12 @@ export function rankJobsForResume(jobs: ApplyQueueItem[], profile?: Profile | nu
     score += Math.round(resumeHit * 12);
     if (looksLikeItRole(j.title)) score += 6;
     if (isTexasLocation(`${j.location || ""} ${j.company}`)) score += 15;
+    const complex = jobComplexityBoost(j.url, j.title, j.source);
+    score += complex.boost;
     score = Math.max(0, Math.min(100, score));
     const why = titleScore >= 0.5
-      ? `Fits your resume title${skillHits[0] ? ` and ${skillHits[0]}` : ""}${isTexasLocation(j.location || "") ? " · Texas" : ""}.`
-      : `Nearby IT role${isTexasLocation(j.location || "") ? " in Texas" : ""}.`;
+      ? `Fits your resume title${skillHits[0] ? ` and ${skillHits[0]}` : ""}${isTexasLocation(j.location || "") ? " · Texas" : ""} · ${complex.why}.`
+      : `Nearby IT role${isTexasLocation(j.location || "") ? " in Texas" : ""} · ${complex.why}.`;
     return { ...j, score, why };
   });
   scored.sort((a, b) => (b.score || 0) - (a.score || 0));

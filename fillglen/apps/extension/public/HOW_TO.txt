@@ -26,8 +26,10 @@ Settings
 What the bot does first
   It analyzes the page (board, fields, auth, CAPTCHA, Next/Submit) before
   typing or clicking. Junk UI such as Progress scrubber stays hidden.
-  On Resume/CV it attaches your widget PDF or clicks Enter manually and
-  pastes the same resume text. It never opens Dropbox or Google Drive.
+  On Resume/CV it finds your PDF/DOCX, paste, or saved resume, clicks
+  Attach or Enter manually, and pastes that same text. It never opens
+  Dropbox or Google Drive. The live list prefers multi-step enterprise
+  applications over basic one-page forms.
 
 It will not
   Solve CAPTCHAs. Run on LinkedIn Easy Apply. Invent facts that are not

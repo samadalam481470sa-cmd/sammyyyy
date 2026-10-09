@@ -1,6 +1,8 @@
+import { applicationShape } from "./applicationShape.js";
 import { attachFileToInput } from "./dom.js";
 import { normalize } from "./fuzzy.js";
-import { buildDownloadable, bytesForUpload, profileCoverLetterText, profileResumeText } from "./resumeFiles.js";
+import { buildDownloadable, profileCoverLetterText } from "./resumeFiles.js";
+import { resolveResumeSource, resumeFileFromSource, type ResumeSourceExtras } from "./resumeSource.js";
 import type { Profile } from "./types.js";
 
 export type DocumentSlotKind = "resume" | "cover" | "unknown";
@@ -61,14 +63,16 @@ function fileFromPacked(name: string, mime: string, bytes: Uint8Array): File {
   return new File([copy], name, { type: mime });
 }
 
-function filesForProfile(profile: Profile): { resume: File; cover: File; resumeText: string; coverText: string } {
-  const resumePacked = bytesForUpload(profile);
+function filesForProfile(profile: Profile, extras?: ResumeSourceExtras): { resume: File; cover: File; resumeText: string; coverText: string; from: string } {
+  const source = resolveResumeSource(profile, extras);
+  const packed = resumeFileFromSource(source, profile);
   const coverPacked = buildDownloadable(profile, "cover", "pdf");
   return {
-    resume: fileFromPacked(resumePacked.name, resumePacked.mime, resumePacked.bytes),
+    resume: fileFromPacked(packed.fileName, packed.mime, packed.bytes),
     cover: fileFromPacked(coverPacked.name, coverPacked.mime, coverPacked.bytes),
-    resumeText: profileResumeText(profile) || resumePacked.text,
+    resumeText: source.text || packed.text,
     coverText: profileCoverLetterText(profile) || coverPacked.text,
+    from: source.from,
   };
 }
 
@@ -227,12 +231,15 @@ function wait(ms: number): Promise<void> {
 }
 
 /**
- * Attach the widget resume (and cover letter) the way this ATS asks:
- * hidden file input / dropzone first, then Enter manually + paste the same text.
- * Never opens Dropbox / Google Drive.
+ * Click Attach / Enter manually, then inject the same resume we found in the
+ * widget, PDF/DOCX, paste box, or saved library. Never opens Dropbox / Drive.
  */
-export async function applyWidgetDocuments(doc: Document, profile: Profile): Promise<WidgetDocResult> {
-  const files = filesForProfile(profile);
+export async function applyWidgetDocuments(
+  doc: Document,
+  profile: Profile,
+  extras?: ResumeSourceExtras
+): Promise<WidgetDocResult> {
+  const files = filesForProfile(profile, extras);
   const result: WidgetDocResult = {
     did: false,
     detail: "",
@@ -242,6 +249,9 @@ export async function applyWidgetDocuments(doc: Document, profile: Profile): Pro
     coverPasted: false,
   };
   if (!files.resumeText && !files.resume.size) return result;
+
+  const url = (doc.location && doc.location.href) || "";
+  const shape = applicationShape(url, doc.body?.innerText?.slice(0, 2500) || "");
 
   const tryAttach = (kind: DocumentSlotKind, file: File): boolean => {
     const inputs = inputsForKind(allFileInputs(doc), kind);
@@ -267,55 +277,55 @@ export async function applyWidgetDocuments(doc: Document, profile: Profile): Pro
     return false;
   };
 
-  if (!slotLooksFilled(doc.body?.innerText?.slice(0, 8000) || "") || allFileInputs(doc).every((el) => !el.files?.length)) {
-    result.resumeAttached = tryAttach("resume", files.resume);
-  } else if (allFileInputs(doc).some((el) => el.files?.length && nearestSlotKind(el) !== "cover")) {
+  const clickFirst = async (kind: AttachButtonKind, slot: DocumentSlotKind): Promise<boolean> => {
+    const btn = findButtons(doc, kind, slot)[0];
+    if (!btn) return false;
+    btn.scrollIntoView({ block: "nearest" });
+    btn.click();
+    await wait(shape.family === "workday" ? 160 : 120);
+    return true;
+  };
+
+  const already = allFileInputs(doc).some((el) => el.files?.length && nearestSlotKind(el) !== "cover");
+  if (already && slotLooksFilled(doc.body?.innerText?.slice(0, 4000) || "")) {
     result.resumeAttached = true;
   }
 
-  if (!result.resumeAttached) {
-    result.resumeAttached = tryAttach("unknown", files.resume);
-  }
-
-  if (!result.resumePasted && files.resumeText) {
-    const manuals = findButtons(doc, "manual", "resume");
-    if (manuals[0] && !emptyTextTargets(doc, "resume").length) {
-      manuals[0].scrollIntoView({ block: "nearest" });
-      manuals[0].click();
-      await wait(90);
-    }
-    result.resumePasted = tryPaste("resume", files.resumeText);
-  }
-
   if (!result.resumeAttached && !result.resumePasted) {
-    const attachBtns = findButtons(doc, "attach", "resume");
-    if (attachBtns[0] && !allFileInputs(doc).length) {
-      attachBtns[0].scrollIntoView({ block: "nearest" });
-      attachBtns[0].click();
-      await wait(90);
-      result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
-    } else if (attachBtns[0] && allFileInputs(doc).length) {
-      result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
+    const prefer = shape.preferResumeClick;
+    if (prefer === "manual" || prefer === "auto") {
+      if (await clickFirst("manual", "resume")) {
+        result.resumePasted = tryPaste("resume", files.resumeText);
+      }
+    }
+    if (!result.resumePasted && files.resumeText) {
+      result.resumePasted = tryPaste("resume", files.resumeText);
+    }
+    result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
+    if (!result.resumeAttached && !result.resumePasted) {
+      if (await clickFirst("attach", "resume")) {
+        result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
+      }
+      if (!result.resumePasted && (await clickFirst("manual", "resume"))) {
+        result.resumePasted = tryPaste("resume", files.resumeText);
+      }
     }
   }
 
   const coverNeeded = /cover\s*letter/i.test(doc.body?.innerText?.slice(0, 6000) || "");
   if (coverNeeded) {
-    result.coverAttached = tryAttach("cover", files.cover);
-    if (!result.coverPasted && files.coverText) {
-      const manuals = findButtons(doc, "manual", "cover");
-      if (manuals[0] && !emptyTextTargets(doc, "cover").length) {
-        manuals[0].scrollIntoView({ block: "nearest" });
-        manuals[0].click();
-        await wait(90);
-      }
+    if (await clickFirst("manual", "cover")) {
       result.coverPasted = tryPaste("cover", files.coverText);
+    }
+    result.coverAttached = tryAttach("cover", files.cover);
+    if (!result.coverAttached && !result.coverPasted && (await clickFirst("attach", "cover"))) {
+      result.coverAttached = tryAttach("cover", files.cover);
     }
   }
 
   const bits = [
-    result.resumeAttached ? `attached ${files.resume.name}` : "",
-    result.resumePasted ? "pasted resume text" : "",
+    result.resumeAttached ? `attached ${files.resume.name} (${files.from})` : "",
+    result.resumePasted ? `pasted resume from ${files.from}` : "",
     result.coverAttached ? "attached cover letter" : "",
     result.coverPasted ? "pasted cover letter" : "",
   ].filter(Boolean);

@@ -58,9 +58,10 @@ export function SettingsView({ onBack, lastAnalysis }: SettingsViewProps) {
       <ul className="fg-settings-ul">
         <li>Uses only your resume and the profile fields you typed.</li>
         <li>
-          Resume/CV: attaches the widget PDF to hidden file inputs, or clicks Enter manually and pastes the
-          same resume text. It does not open Dropbox or Google Drive.
+          Resume/CV: finds your resume in the uploaded PDF/DOCX, the paste box, or the saved library, clicks
+          Attach or Enter manually, and pastes that same file. It does not open Dropbox or Google Drive.
         </li>
+        <li>Live jobs prefers multi-step Workday / enterprise applications and stronger titles over basic one-pagers.</li>
         <li>Opens dropdowns and clicks the matching option — it does not type into menus.</li>
         <li>A CAPTCHA waits for you. Fillglen never solves it.</li>
         <li>LinkedIn Easy Apply is blocked.</li>
