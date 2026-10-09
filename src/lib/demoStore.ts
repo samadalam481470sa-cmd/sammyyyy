@@ -4,8 +4,55 @@
  */
 
 const PREFIX = 'newport_crm_demo_v1_'
+const DATASET_VERSION_KEY = 'newport_crm_demo_dataset_version'
+/** Bump when public seed data is replaced so stale browser caches cannot restore old names. */
+export const DEMO_DATASET_VERSION = 'anon-letter-v1'
+
+const PRESERVE_COLLECTION_EXACT = new Set([
+  'issued_api_keys',
+  'api_key_slots',
+  'sessions',
+])
+
+function shouldResetDemoCollection(name: string): boolean {
+  if (PRESERVE_COLLECTION_EXACT.has(name)) return false
+  if (name.startsWith('huddle')) return false
+  return (
+    name.startsWith('opportunities') ||
+    name.startsWith('contacts') ||
+    name.startsWith('tasks') ||
+    name.startsWith('sources') ||
+    name.startsWith('carriers') ||
+    name.startsWith('portfolio') ||
+    name.startsWith('documents') ||
+    name.startsWith('meetings') ||
+    name.startsWith('notifications') ||
+    name.startsWith('change_history') ||
+    name.startsWith('live_meeting_') ||
+    name.startsWith('meetings_v2_')
+  )
+}
+
+function ensureDemoDatasetVersion(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (localStorage.getItem(DATASET_VERSION_KEY) === DEMO_DATASET_VERSION) return
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(PREFIX)) continue
+      const name = k.slice(PREFIX.length)
+      if (shouldResetDemoCollection(name)) toRemove.push(k)
+    }
+    for (const k of toRemove) localStorage.removeItem(k)
+    localStorage.setItem(DATASET_VERSION_KEY, DEMO_DATASET_VERSION)
+  } catch {
+    // private mode / quota
+  }
+}
 
 function key(name: string) {
+  ensureDemoDatasetVersion()
   return `${PREFIX}${name}`
 }
 

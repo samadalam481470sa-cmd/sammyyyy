@@ -12,7 +12,7 @@ const SUGGESTED_PROMPTS = [
   'Which deals need attention?',
   'What changed this week?',
   'Show active deals with no next action',
-  'Summarize Project Guardian',
+  'Summarize Project A',
   'Pipeline overview',
 ] as const
 

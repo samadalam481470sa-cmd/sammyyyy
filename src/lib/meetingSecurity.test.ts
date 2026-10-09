@@ -44,7 +44,7 @@ describe('meetingSecurity', () => {
   })
 
   it('validates email and phone', () => {
-    expect(sanitizeEmail('Rob@CrossCover.DEMO')).toBe('rob@crosscover.demo')
+    expect(sanitizeEmail('Alex@Entity-A.DEMO')).toBe('alex@entity-a.demo')
     expect(sanitizeEmail('not-an-email')).toBe('')
     expect(sanitizePhone('(555) 201-3344; DROP TABLE')).toBe('(555) 201-3344')
   })

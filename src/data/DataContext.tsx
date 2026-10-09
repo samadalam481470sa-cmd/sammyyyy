@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/auth/AuthContext'
 import { mockOpportunities } from '@/data/mockOpportunities'
 import { appendDemoChange, loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { anonymousEntityName, anonymousProjectName, demoProjectNumber } from '@/lib/demoAliases'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 
 interface DataContextValue {
@@ -32,9 +33,9 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null)
 
 function withProjectNumbers(list: Opportunity[]): Opportunity[] {
-  return list.map((o, i) => ({
+  return list.map((o) => ({
     ...o,
-    projectNumber: o.projectNumber ?? i + 1,
+    projectNumber: o.projectNumber ?? demoProjectNumber(o.id),
     outstandingItems: o.outstandingItems ?? [],
     diligenceNotes: o.diligenceNotes ?? '',
   }))
@@ -131,11 +132,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (getStoredSession()?.token === 'local-demo') {
         const projectNumber =
           itemsRef.current.reduce((m, o) => Math.max(m, o.projectNumber ?? 0), 0) + 1
+        const id = `opp_local_${Date.now()}`
         const created: Opportunity = {
-          id: `opp_local_${Date.now()}`,
+          id,
           projectNumber,
-          projectName: draft.projectName ?? `Project ${projectNumber}`,
-          entityName: draft.entityName ?? 'Imported Entity',
+          projectName: draft.projectName ?? anonymousProjectName(id),
+          entityName: draft.entityName ?? anonymousEntityName(id),
           type: draft.type ?? 'Platform Acquisition',
           status: draft.status ?? 'Pending',
           stage: draft.stage ?? 'Target Identified',

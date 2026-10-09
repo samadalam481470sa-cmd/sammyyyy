@@ -231,7 +231,7 @@ export function answerFromKnowledge(question: string, knowledge: AiKnowledge): A
   return {
     mode: 'retrieval',
     sources,
-    answer: `I searched opportunities, tasks, relationships, documents, sources, carriers, and portfolio records for “${q}”.\n\nNo single strong match stood out. Current book: **${opps.length}** opportunities (${active} active). Try asking about a project code name (e.g. Project Guardian), “which deals need attention?”, or “pipeline overview”.${
+    answer: `I searched opportunities, tasks, relationships, documents, sources, carriers, and portfolio records for “${q}”.\n\nNo single strong match stood out. Current book: **${opps.length}** opportunities (${active} active). Try asking about a project code name (e.g. Project A), “which deals need attention?”, or “pipeline overview”.${
       extraBits.length ? `\n\nNearby hits:\n${extraBits.join('\n')}` : ''
     }`,
   }

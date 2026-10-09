@@ -82,6 +82,31 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
+const DEMO_DATASET_VERSION = 'anon-letter-v1'
+
+function resetPublicDemoTablesIfNeeded() {
+  db.exec(`CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+  const row = db.prepare(`SELECT v FROM app_meta WHERE k = 'demo_dataset'`).get() as
+    | { v: string }
+    | undefined
+  if (row?.v === DEMO_DATASET_VERSION) return
+  db.exec(`
+    DELETE FROM contacts;
+    DELETE FROM tasks;
+    DELETE FROM sources;
+    DELETE FROM carriers;
+    DELETE FROM portfolio_companies;
+    DELETE FROM documents;
+    DELETE FROM meetings;
+    DELETE FROM notifications;
+    DELETE FROM change_history;
+    DELETE FROM opportunities;
+  `)
+  db.prepare(`INSERT OR REPLACE INTO app_meta (k, v) VALUES ('demo_dataset', ?)`).run(
+    DEMO_DATASET_VERSION,
+  )
+}
+
 export function seedDatabase() {
   const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }
   if (userCount.c === 0) {
@@ -184,32 +209,32 @@ export function seedDatabase() {
     insertNote.run({
       id: 'notif-1',
       direction: 'inbound',
-      from_address: 'counsel@hargrovelane.demo',
+      from_address: 'counsel@demo-counsel.demo',
       to_address: 'dennis@newportspecialty.demo',
-      subject: 'Re: Project Guardian — NDA countersignature',
-      body: 'Dennis — the NDA is ready for countersignature. Please confirm board approval language before Friday.',
+      subject: 'Re: Project A — NDA countersignature',
+      body: 'Dennis — the sample NDA is ready for countersignature. Please confirm board approval language before Friday.',
       read_flag: 0,
-      related_project: 'Project Guardian',
+      related_project: 'Project A',
     })
     insertNote.run({
       id: 'notif-2',
       direction: 'inbound',
       from_address: 'mary@newportspecialty.demo',
       to_address: 'dennis@newportspecialty.demo',
-      subject: 'Diligence pack — Project Beacon',
-      body: 'Uploaded the latest diligence pack. Outstanding: call accountant on broker comps.',
+      subject: 'Diligence pack — Project C',
+      body: 'Uploaded the latest sample diligence pack. Outstanding: call accountant on broker comps.',
       read_flag: 0,
-      related_project: 'Project Beacon',
+      related_project: 'Project C',
     })
     insertNote.run({
       id: 'notif-3',
       direction: 'outbound',
       from_address: 'dennis@newportspecialty.demo',
-      to_address: 'banker@orioncap.demo',
-      subject: 'Follow-up: Project Orion management call',
-      body: 'Confirming Thursday 2pm ET for the management update call. Please send updated NWP bridge.',
+      to_address: 'banker@demo-advisory.demo',
+      subject: 'Follow-up: Project A management call',
+      body: 'Confirming Thursday 2pm ET for the sample management update call.',
       read_flag: 1,
-      related_project: 'Project Orion',
+      related_project: 'Project A',
     })
   }
 
@@ -232,19 +257,19 @@ export function seedDatabase() {
     `)
 
     const outstandingById: Record<string, string[]> = {
-      'opp-guardian': ['Review initial materials', 'Confirm NDA scope with counsel'],
-      'opp-jugular': ['Schedule follow-up with management', 'Call accountant re: broker comps'],
-      'opp-beacon': ['Finalize LOI terms', 'Call lawyer on exclusivity language'],
-      'opp-summit': ['Review diligence findings pack', 'Confirm data room access'],
-      'opp-atlas': ['Confirm exclusivity extension'],
-      'opp-vertex': ['Assign next action', 'Re-engage banker'],
-      'opp-cipher': ['Assign deal lead'],
+      'opp-a': ['Review sample materials', 'Confirm NDA scope with counsel'],
+      'opp-b': ['Schedule follow-up with management', 'Call accountant re: sample comps'],
+      'opp-c': ['Finalize LOI terms', 'Call lawyer on exclusivity language'],
+      'opp-d': ['Review diligence findings pack', 'Confirm data room access'],
+      'opp-e': ['Confirm exclusivity extension'],
+      'opp-g': ['Assign next action', 'Re-engage banker'],
+      'opp-h': ['Assign deal lead'],
     }
 
     mockOpportunities.forEach((opp, index) => {
       insertOpp.run({
         id: opp.id,
-        project_number: index + 1,
+        project_number: opp.projectNumber ?? index + 1,
         project_name: opp.projectName,
         entity_name: opp.entityName,
         type: opp.type,
@@ -366,5 +391,6 @@ export function createSessionToken() {
 
 export { hashToken }
 
+resetPublicDemoTablesIfNeeded()
 seedDatabase()
 seedModuleTables()

@@ -33,11 +33,12 @@ describe('dashboard filters', () => {
     const filters: DashboardFilters = {
       status: 'All Deals',
       stage: null,
-      search: 'guardian',
+      search: 'project a',
     }
     const result = filterOpportunities(mockOpportunities, filters)
     expect(result).toHaveLength(1)
-    expect(result[0].projectName).toBe('Project Guardian')
+    expect(result[0].projectName).toBe('Project A')
+    expect(result[0].entityName).toBe('Entity A')
   })
 
   it('filters needs attention', () => {
