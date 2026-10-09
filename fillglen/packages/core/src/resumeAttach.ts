@@ -18,10 +18,40 @@ const CLOUD = /dropbox|google drive|onedrive|one drive|\bbox\b|icloud/;
 
 export function classifyDocumentHeading(text: string): DocumentSlotKind {
   const n = normalize(text);
-  if (COVER_HEAD.test(n) && !RESUME_HEAD.test(n.slice(0, 24))) return "cover";
+  if (!n) return "unknown";
+  const hasCover = COVER_HEAD.test(n);
+  const hasResume = RESUME_HEAD.test(n) || (/\b(resume|cv)\b/.test(n) && !hasCover);
+  // A Workday block often concatenates "Resume/CV … Cover Letter" — that is not one slot.
+  if (hasCover && hasResume) return "unknown";
+  if (hasCover) return "cover";
   if (RESUME_HEAD.test(n) || /\b(resume|cv)\b/.test(n)) return "resume";
-  if (COVER_HEAD.test(n)) return "cover";
   return "unknown";
+}
+
+/** Own label, then the heading above this control. Never a parent that contains both slots. */
+export function slotFromNearbyText(ownLabel: string, headingAbove: string, ancestorBlob = ""): DocumentSlotKind {
+  const own = classifyDocumentHeading(ownLabel);
+  if (own !== "unknown") return own;
+  const head = classifyDocumentHeading(headingAbove);
+  if (head !== "unknown") return head;
+  const blob = normalize(ancestorBlob);
+  if (COVER_HEAD.test(blob) && (RESUME_HEAD.test(blob) || /\b(resume|cv)\b/.test(blob))) return "unknown";
+  return classifyDocumentHeading(ancestorBlob);
+}
+
+export function pageHasBothDocumentSlots(text: string): boolean {
+  const n = normalize(text);
+  return COVER_HEAD.test(n) && (RESUME_HEAD.test(n) || /\b(resume|cv)\b/.test(n));
+}
+
+export function resumeMayUseSlot(slot: DocumentSlotKind, pageHasBoth: boolean): boolean {
+  if (slot === "cover") return false;
+  if (slot === "resume") return true;
+  return !pageHasBoth;
+}
+
+export function shouldClickAttachButton(family: string): boolean {
+  return family !== "workday";
 }
 
 export function classifyAttachButton(label: string): AttachButtonKind {
@@ -80,26 +110,67 @@ function tidy(text: string): string {
   return (text || "").replace(/\s+/g, " ").trim();
 }
 
+function isHeadingLike(el: HTMLElement): boolean {
+  const tag = el.tagName.toLowerCase();
+  if (/^h[1-6]$|^legend$|^label$/.test(tag)) return true;
+  const auto = (el.getAttribute("data-automation-id") || "").toLowerCase();
+  return /label|heading|legend|title/.test(auto) && !/button|input|upload|dropzone/.test(auto);
+}
+
 function headingKind(el: HTMLElement): DocumentSlotKind {
-  const own = tidy(el.getAttribute("aria-label") || el.innerText || el.textContent || "").slice(0, 80);
-  return classifyDocumentHeading(own);
+  const aria = tidy(el.getAttribute("aria-label") || "").slice(0, 80);
+  const fromAria = classifyDocumentHeading(aria);
+  if (fromAria !== "unknown") return fromAria;
+  if (!isHeadingLike(el)) return "unknown";
+  return classifyDocumentHeading(tidy(el.textContent || "").slice(0, 80));
+}
+
+function headingTextFromNode(node: Node): string {
+  if (!(node instanceof HTMLElement)) return "";
+  if (isHeadingLike(node)) {
+    const t = tidy(node.textContent || "").slice(0, 80);
+    if (classifyDocumentHeading(t) !== "unknown") return t;
+  }
+  const kids = node.querySelectorAll("h1, h2, h3, h4, h5, h6, legend, label");
+  for (let i = kids.length - 1; i >= 0; i--) {
+    const t = tidy(kids[i].textContent || "").slice(0, 80);
+    if (classifyDocumentHeading(t) !== "unknown") return t;
+  }
+  return "";
+}
+
+/** First Resume/CV or Cover Letter heading above this control — not a parent of both. */
+export function nearestDocumentHeading(el: HTMLElement): string {
+  let current: HTMLElement | null = el;
+  while (current) {
+    let sib: Node | null = current.previousSibling;
+    while (sib) {
+      const text = headingTextFromNode(sib);
+      if (text) return text;
+      sib = sib.previousSibling;
+    }
+    if (isHeadingLike(current)) {
+      const own = tidy(current.textContent || "").slice(0, 80);
+      if (classifyDocumentHeading(own) !== "unknown") return own;
+    }
+    current = current.parentElement;
+  }
+  return "";
 }
 
 function nearestSlotKind(el: HTMLElement): DocumentSlotKind {
-  let n: HTMLElement | null = el;
-  for (let i = 0; i < 10 && n; i++, n = n.parentElement) {
-    const kind = headingKind(n);
-    if (kind !== "unknown") return kind;
-    const labeled = n.getAttribute("aria-labelledby");
-    if (labeled) {
-      const lab = (el.ownerDocument || document).getElementById(labeled);
-      if (lab) {
-        const k = classifyDocumentHeading(lab.textContent || "");
-        if (k !== "unknown") return k;
-      }
+  const attrs = `${el.getAttribute("name") || ""} ${el.id} ${el.getAttribute("data-automation-id") || ""} ${el.getAttribute("aria-label") || ""}`;
+  const fromAttrs = classifyDocumentHeading(attrs);
+  if (fromAttrs !== "unknown") return fromAttrs;
+  const labeled = el.getAttribute("aria-labelledby");
+  if (labeled) {
+    const lab = (el.ownerDocument || document).getElementById(labeled);
+    if (lab) {
+      const k = classifyDocumentHeading(lab.textContent || "");
+      if (k !== "unknown") return k;
     }
   }
-  return "unknown";
+  return slotFromNearbyText("", nearestDocumentHeading(el));
 }
 
 function allFileInputs(doc: Document): HTMLInputElement[] {
@@ -109,14 +180,15 @@ function allFileInputs(doc: Document): HTMLInputElement[] {
   }) as HTMLInputElement[];
 }
 
-function inputsForKind(inputs: HTMLInputElement[], kind: DocumentSlotKind): HTMLInputElement[] {
-  return inputs.filter((el) => {
-    const blob = `${el.accept} ${el.name} ${el.id} ${el.getAttribute("data-automation-id") || ""} ${nearestSlotKind(el)}`;
-    const slot = classifyDocumentHeading(blob) !== "unknown" ? classifyDocumentHeading(blob) : nearestSlotKind(el);
-    if (kind === "unknown") return true;
-    if (slot === "unknown") return kind === "resume";
-    return slot === kind;
-  });
+function inputsForKind(
+  inputs: HTMLInputElement[],
+  kind: DocumentSlotKind,
+  pageHasBoth: boolean
+): HTMLInputElement[] {
+  const matched = inputs.filter((el) => nearestSlotKind(el) === kind);
+  if (matched.length) return matched;
+  if (kind === "resume" && !pageHasBoth && inputs.length === 1) return inputs;
+  return [];
 }
 
 function dropzones(doc: Document): HTMLElement[] {
@@ -171,18 +243,25 @@ function visibleEnough(el: HTMLElement): boolean {
   return r.width > 2 && r.height > 2;
 }
 
-function findButtons(doc: Document, kind: AttachButtonKind, slot: DocumentSlotKind): HTMLElement[] {
+function findButtons(
+  doc: Document,
+  kind: AttachButtonKind,
+  slot: DocumentSlotKind,
+  pageHasBoth: boolean
+): HTMLElement[] {
   const out: HTMLElement[] = [];
   for (const el of clickables(doc)) {
     if (!visibleEnough(el)) continue;
     if (classifyAttachButton(buttonLabel(el)) !== kind) continue;
-    const near = nearestSlotKind(el);
-    if (slot !== "unknown" && near !== "unknown" && near !== slot) continue;
+    if (!resumeMayUseSlot(nearestSlotKind(el), pageHasBoth) && slot === "resume") continue;
+    if (slot === "cover" && nearestSlotKind(el) !== "cover") continue;
+    if (slot === "resume" && nearestSlotKind(el) === "cover") continue;
     out.push(el);
   }
-  if (slot !== "unknown" && out.length > 1) {
+  if (slot !== "unknown") {
     const tight = out.filter((el) => nearestSlotKind(el) === slot);
     if (tight.length) return tight;
+    if (pageHasBoth) return tight;
   }
   return out;
 }
@@ -222,7 +301,9 @@ function emptyTextTargets(doc: Document, slot: DocumentSlotKind): HTMLElement[] 
         : tidy(el.innerText || "");
     if (val.trim().length > 40) return false;
     const near = nearestSlotKind(el);
-    return near === slot || near === "unknown";
+    if (slot === "resume") return near === "resume";
+    if (slot === "cover") return near === "cover";
+    return near === slot;
   });
 }
 
@@ -250,21 +331,46 @@ export async function applyWidgetDocuments(
   };
   if (!files.resumeText && !files.resume.size) return result;
 
+  for (const el of allFileInputs(doc)) {
+    if (nearestSlotKind(el) !== "cover") continue;
+    const name = el.files?.[0]?.name || "";
+    if (!name) continue;
+    if (normalize(name) === normalize(files.resume.name) || /resume|\bcv\b/i.test(name)) {
+      try {
+        el.value = "";
+      } catch {
+        /* file input may be locked */
+      }
+    }
+  }
+
   const url = (doc.location && doc.location.href) || "";
-  const shape = applicationShape(url, doc.body?.innerText?.slice(0, 2500) || "");
+  const pageText = doc.body?.innerText?.slice(0, 6000) || "";
+  const shape = applicationShape(url, pageText.slice(0, 2500));
+  const pageHasBoth = pageHasBothDocumentSlots(pageText);
 
   const tryAttach = (kind: DocumentSlotKind, file: File): boolean => {
-    const inputs = inputsForKind(allFileInputs(doc), kind);
+    if (kind === "unknown") return false;
+    const inputs = inputsForKind(allFileInputs(doc), kind, pageHasBoth);
     for (const el of inputs) {
-      if (attachToInput(el, file)) return true;
+      if (kind === "resume" && nearestSlotKind(el) === "cover") continue;
+      try {
+        if (attachToInput(el, file)) return true;
+      } catch {
+        /* Workday uploadFile is undefined until the widget is ready */
+      }
     }
     for (const zone of dropzones(doc)) {
-      if (kind !== "unknown" && nearestSlotKind(zone) !== "unknown" && nearestSlotKind(zone) !== kind) continue;
-      if (dropOnZone(zone, file)) {
-        const nearby = inputsForKind(allFileInputs(doc), kind);
-        for (const el of nearby) {
-          if (attachToInput(el, file)) return true;
+      if (nearestSlotKind(zone) !== kind) continue;
+      try {
+        if (dropOnZone(zone, file)) {
+          const nearby = inputsForKind(allFileInputs(doc), kind, pageHasBoth);
+          for (const el of nearby) {
+            if (attachToInput(el, file)) return true;
+          }
         }
+      } catch {
+        /* ignore widget errors */
       }
     }
     return false;
@@ -272,22 +378,29 @@ export async function applyWidgetDocuments(
 
   const tryPaste = (kind: DocumentSlotKind, text: string): boolean => {
     for (const el of emptyTextTargets(doc, kind)) {
+      if (kind === "resume" && nearestSlotKind(el) !== "resume") continue;
       if (pasteInto(el, text)) return true;
     }
     return false;
   };
 
   const clickFirst = async (kind: AttachButtonKind, slot: DocumentSlotKind): Promise<boolean> => {
-    const btn = findButtons(doc, kind, slot)[0];
+    if (kind === "attach" && !shouldClickAttachButton(shape.family)) return false;
+    const btn = findButtons(doc, kind, slot, pageHasBoth)[0];
     if (!btn) return false;
+    if (slot === "resume" && nearestSlotKind(btn) === "cover") return false;
     btn.scrollIntoView({ block: "nearest" });
-    btn.click();
-    await wait(shape.family === "workday" ? 160 : 120);
+    try {
+      btn.click();
+    } catch {
+      return false;
+    }
+    await wait(shape.family === "workday" ? 220 : 120);
     return true;
   };
 
-  const already = allFileInputs(doc).some((el) => el.files?.length && nearestSlotKind(el) !== "cover");
-  if (already && slotLooksFilled(doc.body?.innerText?.slice(0, 4000) || "")) {
+  const already = allFileInputs(doc).some((el) => el.files?.length && nearestSlotKind(el) === "resume");
+  if (already && slotLooksFilled(pageText)) {
     result.resumeAttached = true;
   }
 
@@ -301,10 +414,10 @@ export async function applyWidgetDocuments(
     if (!result.resumePasted && files.resumeText) {
       result.resumePasted = tryPaste("resume", files.resumeText);
     }
-    result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
+    result.resumeAttached = tryAttach("resume", files.resume);
     if (!result.resumeAttached && !result.resumePasted) {
       if (await clickFirst("attach", "resume")) {
-        result.resumeAttached = tryAttach("resume", files.resume) || tryAttach("unknown", files.resume);
+        result.resumeAttached = tryAttach("resume", files.resume);
       }
       if (!result.resumePasted && (await clickFirst("manual", "resume"))) {
         result.resumePasted = tryPaste("resume", files.resumeText);
@@ -312,14 +425,17 @@ export async function applyWidgetDocuments(
     }
   }
 
-  const coverNeeded = /cover\s*letter/i.test(doc.body?.innerText?.slice(0, 6000) || "");
-  if (coverNeeded) {
+  const coverNeeded = COVER_HEAD.test(normalize(pageText));
+  if (coverNeeded && files.coverText) {
     if (await clickFirst("manual", "cover")) {
       result.coverPasted = tryPaste("cover", files.coverText);
     }
-    result.coverAttached = tryAttach("cover", files.cover);
-    if (!result.coverAttached && !result.coverPasted && (await clickFirst("attach", "cover"))) {
-      result.coverAttached = tryAttach("cover", files.cover);
+    if (!result.coverPasted) result.coverPasted = tryPaste("cover", files.coverText);
+    if (!result.coverPasted) result.coverAttached = tryAttach("cover", files.cover);
+    if (!result.coverAttached && !result.coverPasted && shouldClickAttachButton(shape.family)) {
+      if (await clickFirst("attach", "cover")) {
+        result.coverAttached = tryAttach("cover", files.cover);
+      }
     }
   }
 

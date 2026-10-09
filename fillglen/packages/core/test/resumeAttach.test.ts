@@ -4,6 +4,10 @@ import {
   classifyAttachButton,
   classifyDocumentHeading,
   fileMatchesAccept,
+  pageHasBothDocumentSlots,
+  resumeMayUseSlot,
+  shouldClickAttachButton,
+  slotFromNearbyText,
   slotLooksFilled,
 } from "../src/resumeAttach.js";
 import { classifyScreenControl } from "../src/screenAct.js";
@@ -18,6 +22,18 @@ describe("resumeAttach", () => {
     assert.equal(classifyDocumentHeading("Resume/CV *"), "resume");
     assert.equal(classifyDocumentHeading("Resume"), "resume");
     assert.equal(classifyDocumentHeading("Cover Letter"), "cover");
+    assert.equal(
+      classifyDocumentHeading("Resume/CV * Attach Dropbox Google Drive Enter manually Cover Letter"),
+      "unknown"
+    );
+    assert.equal(pageHasBothDocumentSlots("Resume/CV *\nAttach\nCover Letter"), true);
+    assert.equal(slotFromNearbyText("", "Cover Letter", "Resume/CV Attach Cover Letter"), "cover");
+    assert.equal(slotFromNearbyText("", "Resume/CV *", "Resume/CV Attach Cover Letter"), "resume");
+    assert.equal(resumeMayUseSlot("cover", true), false);
+    assert.equal(resumeMayUseSlot("resume", true), true);
+    assert.equal(resumeMayUseSlot("unknown", true), false);
+    assert.equal(shouldClickAttachButton("workday"), false);
+    assert.equal(shouldClickAttachButton("greenhouse"), true);
   });
 
   it("clicks Attach or Enter manually and never Dropbox or Drive", () => {
