@@ -240,7 +240,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button onClick={() => props.onUndo()}>Undo page</button>
         <button onClick={props.onPause}>{props.paused ? "Resume site" : "Pause this site"}</button>
         {props.onPopout && !props.popout ? <button onClick={props.onPopout}>Pop out</button> : null}
-        <button onClick={() => setTabPersist("live")}>Live jobs</button>
+        <button className="primary" onClick={() => setTabPersist("live")}>
+          Live jobs
+        </button>
       </div>
       <div className="tabs">
         {(["all", "needs-you", "filled"] as const).map((t) => (
@@ -248,7 +250,6 @@ export function QuestionWindow(props: QuestionWindowProps) {
             {t === "all" ? "All" : t === "needs-you" ? "Needs you" : "Filled"}
           </button>
         ))}
-        <button onClick={() => setTabPersist("live")}>Live jobs</button>
       </div>
       {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
       {done && !props.keepApplying ? (
