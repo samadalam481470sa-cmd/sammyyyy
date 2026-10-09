@@ -419,8 +419,10 @@ function controlLabel(el: HTMLElement): string {
 function automationAction(el: HTMLElement): AuthGateAction | null {
   const id = normalize(el.getAttribute("data-automation-id") || "");
   if (!id) return null;
-  if (/lastapplication|previousapplication|useinforfromlast|autofillwithlast/.test(id)) return "last-application";
-  if (/createaccount|signup|register/.test(id)) return "create-account";
+  if (/lastapplication|previousapplication|useinforfromlast|autofillwithlast|applywithlast/.test(id)) {
+    return "last-application";
+  }
+  if (/createaccount|signup|register|newuser|startnewapplication|createnewaccount/.test(id)) return "create-account";
   if (/signin|loginlink|signInLink/i.test(el.getAttribute("data-automation-id") || "") || /signin|loginlink/.test(id)) {
     return "sign-in";
   }

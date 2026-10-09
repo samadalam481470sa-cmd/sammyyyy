@@ -6,6 +6,7 @@ import {
   feedMetaForUrl,
   fieldLooksFilled,
   hostHasPriorApply,
+  isAuthChoiceScreen,
   hydrateProfile,
   hydrateSession,
   bytesForUpload,
@@ -378,9 +379,7 @@ function boot() {
         const s = window.getComputedStyle(el);
         return s.display !== "none" && s.visibility !== "hidden";
       }).length;
-      const authChoiceScreen =
-        visibleFields <= 8 &&
-        authButtons.some((b) => b.action === "last-application" || b.action === "create-account" || b.action === "guest");
+      const authChoiceScreen = isAuthChoiceScreen(authButtons, visibleFields);
       if (hasPassword || looksLikeAppliedBeforePrompt(pageBlob) || authChoiceScreen) {
         const gate = clickAuthGate(document, returning, canSignIn);
         if (gate) {

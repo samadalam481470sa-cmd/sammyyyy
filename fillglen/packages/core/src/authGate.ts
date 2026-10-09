@@ -64,7 +64,7 @@ export function classifyAuthGate(label: string): AuthGateAction | null {
     return "last-application";
   }
   if (
-    /create (an )?account|sign up|signup|register|new user|i('m| am) new|i don't have an account|i do not have an account/.test(
+    /create (an )?account|create new account|sign up|signup|register|new user|new candidate|start new application|apply as (a )?new|i('m| am) new|i don't have an account|i do not have an account/.test(
       n
     )
   ) {
@@ -75,6 +75,14 @@ export function classifyAuthGate(label: string): AuthGateAction | null {
     return "sign-in";
   }
   return null;
+}
+
+/**
+ * Workday start: last application only after a real submit at this company.
+ * Every new company is Sign Up / Create Account — never last-application.
+ */
+export function workdayStartAction(submittedAtThisCompany: boolean): AuthGateAction {
+  return submittedAtThisCompany ? "last-application" : "create-account";
 }
 
 export function pickAuthGate(
@@ -92,7 +100,19 @@ export function pickAuthGate(
       null
     );
   }
+  // New company: never "Use last application", even if that button is on the page.
   return labeled.find((b) => b.action === "create-account") || labeled.find((b) => b.action === "guest") || null;
+}
+
+/** True when Workday (or similar) is showing Sign Up vs last application. */
+export function isAuthChoiceScreen(
+  buttons: { action?: AuthGateAction | null }[],
+  visibleFieldCount: number
+): boolean {
+  const hasLast = buttons.some((b) => b.action === "last-application");
+  const hasSignup = buttons.some((b) => b.action === "create-account" || b.action === "guest");
+  if (hasLast && hasSignup) return true;
+  return visibleFieldCount <= 8 && (hasLast || hasSignup);
 }
 
 export function classifyAppliedBeforeChoice(label: string): "yes" | "no" | null {

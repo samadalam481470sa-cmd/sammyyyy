@@ -6,6 +6,7 @@ import {
   decideKeepAuth,
   deriveBoardPassword,
   hostHasPriorApply,
+  isAuthChoiceScreen,
   loginForFill,
   loginHost,
   looksLikeAppliedBeforePrompt,
@@ -14,6 +15,7 @@ import {
   sameBoardCompany,
   shouldSkipWarmupFill,
   upsertBoardLogin,
+  workdayStartAction,
   workdayTenant,
 } from "../src/authGate.js";
 
@@ -112,6 +114,24 @@ describe("auth gate", () => {
       hostHasPriorApply(loginHost(austinUrl), [], [{ url: austinUrl, appliedAt: "2026-01-01T00:00:00.000Z" }], austinUrl),
       true
     );
+  });
+
+  it("never clicks Use last application on a brand-new Workday company", () => {
+    const buttons = [
+      { label: "Use Last Application" },
+      { label: "Sign Up" },
+      { label: "Sign In" },
+    ];
+    assert.equal(classifyAuthGate("Sign Up"), "create-account");
+    assert.equal(classifyAuthGate("Start New Application"), "create-account");
+    assert.equal(classifyAuthGate("Create New Account"), "create-account");
+    assert.equal(workdayStartAction(false), "create-account");
+    assert.equal(workdayStartAction(true), "last-application");
+    assert.equal(pickAuthGate(buttons, false)?.action, "create-account");
+    assert.equal(pickAuthGate(buttons, true)?.action, "last-application");
+    assert.equal(isAuthChoiceScreen(buttons.map((b) => ({ action: classifyAuthGate(b.label) })), 20), true);
+    assert.equal(isAuthChoiceScreen([{ action: "create-account" }], 20), false);
+    assert.equal(isAuthChoiceScreen([{ action: "create-account" }], 3), true);
   });
 
   it("honors Workday automation ids so a new company still hits Sign Up", () => {
