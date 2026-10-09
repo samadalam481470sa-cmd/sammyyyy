@@ -71,8 +71,9 @@ export function SettingsView({ onBack, lastAnalysis }: SettingsViewProps) {
       </ul>
 
       <p className="meta">
-        The bot yields every tick so pages do not freeze, waits for submit confirmation, then switches
-        smoothly to the next job.
+        The bot fills one dropdown at a time: click to open, click the matching choice, then move on.
+        It yields between fields so the tab does not freeze, waits for submit confirmation, then
+        switches to the next job.
       </p>
     </section>
   );

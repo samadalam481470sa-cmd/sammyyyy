@@ -18,14 +18,17 @@ export interface ReadyFill {
 export function buildAutofillBatch(
   questions: Question[],
   profile: Profile,
-  limit: number
+  limit: number,
+  skipIds: Iterable<string> = []
 ): { realQuestions: Question[]; ready: ReadyFill[]; remainder: number } {
+  const skip = new Set(skipIds);
   const realQuestions = filterRealQuestions(questions);
   const byId = new Map(realQuestions.map((q) => [q.id, q]));
   const plans = rankFillPlans(
     realQuestions
       .map((q) => planFill(q, profile))
       .filter((p) => {
+        if (skip.has(p.questionId)) return false;
         const q = byId.get(p.questionId);
         if (!shouldAutofillPlan(p, q)) return false;
         if (q && fieldLooksFilled(q.kind, q.value)) return false;

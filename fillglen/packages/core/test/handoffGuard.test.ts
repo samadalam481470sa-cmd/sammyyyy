@@ -45,7 +45,8 @@ describe("handoffGuard", () => {
     const start = 1_000_000;
     assert.equal(cycleOverBudget(start, start + KEEP_CYCLE_BUDGET_MS), true);
     assert.equal(cycleOverBudget(start, start + 100), false);
-    assert.equal(keepBusyExpired(start, start + 3000), true);
+    assert.equal(keepBusyExpired(start, start + 3000), false);
+    assert.equal(keepBusyExpired(start, start + 12_000), true);
     assert.equal(submitWaitElapsed(start, start + 700), true);
   });
 

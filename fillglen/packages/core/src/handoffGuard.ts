@@ -53,8 +53,8 @@ export function stuckMeansStay(): true {
   return true;
 }
 
-export const KEEP_CYCLE_BUDGET_MS = 900;
-export const KEEP_BUSY_WATCHDOG_MS = 2800;
+export const KEEP_CYCLE_BUDGET_MS = 1400;
+export const KEEP_BUSY_WATCHDOG_MS = 12000;
 export const KEEP_SUBMIT_CONFIRM_MS = 650;
 export const KEEP_HANDOFF_SETTLE_MS = 280;
 export const KEEP_CLOSE_AFTER_SUBMIT_MS = 800;

@@ -24,6 +24,7 @@ export * from "./fieldNoise.js";
 export * from "./fillPipeline.js";
 export * from "./pageAnalyze.js";
 export * from "./handoffGuard.js";
+export * from "./keepFreeze.js";
 export * from "./answers.js";
 export * from "./feeds.js";
 export * from "./mapsDiscover.js";

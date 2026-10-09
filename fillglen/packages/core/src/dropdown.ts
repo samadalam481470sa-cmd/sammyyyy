@@ -2,6 +2,32 @@ import { matchOption } from "./applyLoop.js";
 import { normalize } from "./fuzzy.js";
 import type { FieldKind, QuestionType } from "./types.js";
 
+export type FillControlMode = "type" | "dropdown" | "choice";
+export type DropdownSelectLayer =
+  | "classify"
+  | "close-other-menus"
+  | "open-menu"
+  | "wait-options"
+  | "match-choice"
+  | "click-choice"
+  | "settle"
+  | "next-field";
+
+export const DROPDOWN_SELECT_LAYERS: DropdownSelectLayer[] = [
+  "classify",
+  "close-other-menus",
+  "open-menu",
+  "wait-options",
+  "match-choice",
+  "click-choice",
+  "settle",
+  "next-field",
+];
+
+export const DROPDOWN_OPEN_MS = 180;
+export const DROPDOWN_OPTION_WAIT_MS = 1100;
+export const DROPDOWN_CLICK_SETTLE_MS = 200;
+
 /** Question types that almost always render as a dropdown / multi-select, never free text. */
 const DROPDOWN_TYPES = new Set<QuestionType>([
   "gender",
@@ -53,6 +79,24 @@ export function dropdownHintsFromAttrs(input: {
   return false;
 }
 
+/** Text boxes type. Dropdowns open a menu and click. Radios/checkboxes click a choice. */
+export function classifyFillControl(
+  kind: FieldKind,
+  type: QuestionType,
+  attrs?: Parameters<typeof dropdownHintsFromAttrs>[0]
+): FillControlMode {
+  if (kind === "radio" || kind === "checkbox") return "choice";
+  if (isDropdownFieldKind(kind) || isDropdownQuestionType(type)) return "dropdown";
+  if (attrs && dropdownHintsFromAttrs(attrs)) return "dropdown";
+  return "type";
+}
+
+/** Prefer the listbox this control opened so Male on gender is not Female on another menu. */
+export function resolveOpenOptionLabels(controlled: string[] | undefined, pageWide: string[]): string[] {
+  if (controlled && controlled.length) return controlled;
+  return pageWide;
+}
+
 /** Match a desired answer against currently visible option labels. */
 export function pickVisibleOption(value: string, optionLabels: string[]): string | null {
   return matchOption(value, optionLabels);
@@ -60,4 +104,32 @@ export function pickVisibleOption(value: string, optionLabels: string[]): string
 
 export function optionLabelOf(node: { text?: string; ariaLabel?: string; title?: string }): string {
   return (node.ariaLabel || node.title || node.text || "").replace(/\s+/g, " ").trim().slice(0, 220);
+}
+
+/** Plan the click-open → click-choice path before touching the page. */
+export function planDropdownSelect(input: {
+  kind: FieldKind;
+  type: QuestionType;
+  desired: string;
+  options?: string[];
+  controlledOptions?: string[];
+  attrs?: Parameters<typeof dropdownHintsFromAttrs>[0];
+}): {
+  mode: FillControlMode;
+  layers: DropdownSelectLayer[];
+  pick: string | null;
+  readyToClick: boolean;
+} {
+  const mode = classifyFillControl(input.kind, input.type, input.attrs);
+  if (mode === "type") {
+    return { mode, layers: [], pick: null, readyToClick: false };
+  }
+  const labels = resolveOpenOptionLabels(input.controlledOptions, input.options || []);
+  const pick = labels.length ? pickVisibleOption(input.desired, labels) : null;
+  return {
+    mode,
+    layers: DROPDOWN_SELECT_LAYERS,
+    pick,
+    readyToClick: Boolean(pick),
+  };
 }

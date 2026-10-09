@@ -14,12 +14,16 @@ import {
   mayHandoffToNextJob,
   submitWaitElapsed,
   buildAutofillBatch,
+  bumpCycle,
+  classifyFillControl,
+  cooldownAfterTick,
   fieldLooksFilled,
   fillBudgetForAnalysis,
   fillMatchedIntent,
   filterRealQuestions,
   hostHasPriorApply,
   isAuthChoiceScreen,
+  isStaleCycle,
   hydrateProfile,
   hydrateSession,
   applicationShape,
@@ -27,16 +31,23 @@ import {
   queryLocalStore,
   fillPaceForPage,
   KEEP_COOLDOWN_MS,
+  KEEP_DELTA_SCAN_GAP_MS,
   KEEP_DROPDOWN_SETTLE_MS,
   KEEP_FIELDS_PER_TICK,
   KEEP_FILL_GAP_MS,
+  KEEP_FULL_SCAN_GAP_MS,
   KEEP_INTERVAL_MS,
   KEEP_MUTATION_DEBOUNCE_MS,
   KEEP_SCAN_BURST_MS,
   KEEP_SLOW_GAP_MS,
   KEEP_STUCK_TICKS,
+  KEEP_TEXT_CACHE_MS,
+  mayRestoreFieldWrite,
+  scanMayAutofill,
+  shouldRetryResume,
+  shouldScanNow,
+  takeTickBatch,
   SCREEN_CLICK_BUDGET,
-  shouldAutofillPlan,
   trimScreenSkip,
   type PageAnalysis,
   type SubmitEvidence,
@@ -91,8 +102,19 @@ if (!window.__fillglen) {
   boot();
 }
 
+let pageTextAt = 0;
+let pageTextCached = "";
+
+function pageTextSlice(max = 4000): string {
+  const now = Date.now();
+  if (now - pageTextAt < KEEP_TEXT_CACHE_MS && pageTextCached) return pageTextCached.slice(0, max);
+  pageTextCached = document.body?.innerText?.slice(0, 4000) || "";
+  pageTextAt = now;
+  return pageTextCached.slice(0, max);
+}
+
 function pageTextNow(): string {
-  return document.body?.innerText?.slice(0, 2500) || "";
+  return pageTextSlice(2500);
 }
 
 function isVisibleTab(): boolean {
@@ -122,6 +144,14 @@ function boot() {
   let clickedSubmitAt = 0;
   let leavingJob = false;
   let keepBusySince = 0;
+  let cycleGen = 0;
+  let filledThisStep = new Set<string>();
+  let lastStepKey = "";
+  let lastFullScanAt = 0;
+  let lastDeltaScanAt = 0;
+  let lastResumeAt = 0;
+  let resumeDid = false;
+  let libraryCache: string[] | null = null;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -130,11 +160,7 @@ function boot() {
       if (paused) return;
       if (msg.type === "fill-one") applyOne(msg.questionId, msg.value);
       if (msg.type === "fill-plans") {
-        for (const plan of msg.plans) {
-          const q = last.find((x) => x.id === plan.questionId);
-          if (!shouldAutofillPlan(plan, q) || (q && fieldLooksFilled(q.kind, q.value))) continue;
-          applyOne(plan.questionId, plan.value);
-        }
+        keepCycle().catch(() => {});
       }
       if (msg.type === "focus") flashAndScroll(msg.questionId);
       if (msg.type === "undo") undo(msg.questionId);
@@ -210,11 +236,13 @@ function boot() {
           undoStack.splice(0, undoStack.length, ...keep.undoStack);
         }
       }
-    }
-    for (const q of merged) {
-      const live = questions.find((x) => x.id === q.id);
-      if (!q.value || fieldLooksFilled(q.kind, live?.value || "")) continue;
-      setFieldById(q.id, q.value);
+      let writes = 0;
+      for (const q of merged) {
+        const live = questions.find((x) => x.id === q.id);
+        if (!mayRestoreFieldWrite(false, writes, q, live?.value || "")) continue;
+        setFieldById(q.id, q.value);
+        writes += 1;
+      }
     }
     return merged;
   }
@@ -265,6 +293,14 @@ function boot() {
       if (window === window.top) post({ type: "scan", snapshot: snapshot([]) });
       return;
     }
+    if (reason === "full") {
+      if (!shouldScanNow(lastFullScanAt, KEEP_FULL_SCAN_GAP_MS) && last.length) return;
+      lastFullScanAt = Date.now();
+    } else if (!shouldScanNow(lastDeltaScanAt, KEEP_DELTA_SCAN_GAP_MS) && last.length) {
+      return;
+    } else {
+      lastDeltaScanAt = Date.now();
+    }
     const stored = await chrome.storage.local.get(["profile", "pausedOrigins", "finderMatches", "sessionMemory"]);
     const origin = location.origin;
     paused = ((stored.pausedOrigins as string[]) || []).includes(origin);
@@ -276,8 +312,8 @@ function boot() {
       last = questions;
       post({ type: "scan", snapshot: snapshot(questions, stored.finderMatches as Parameters<typeof snapshot>[1]) });
       persistPage("scan");
-      if (window === window.top && isVisibleTab() && questions.length > 0) {
-        const { ready } = buildAutofillBatch(questions, profile, 40);
+      if (scanMayAutofill(40) > 0 && window === window.top && isVisibleTab() && questions.length > 0) {
+        const { ready } = buildAutofillBatch(questions, profile, scanMayAutofill(40));
         for (const { plan } of ready) applyOne(plan.questionId, plan.value);
       }
       return;
@@ -355,6 +391,7 @@ function boot() {
     if (leavingJob) return;
     if (keepBusy) {
       if (keepBusyExpired(keepBusySince)) {
+        cycleGen = bumpCycle(cycleGen);
         keepBusy = false;
         keepBusySince = 0;
       } else {
@@ -362,9 +399,13 @@ function boot() {
       }
     }
     if (Date.now() < keepCooldownUntil) return;
+    const myGen = bumpCycle(cycleGen);
+    cycleGen = myGen;
     keepBusy = true;
     keepBusySince = Date.now();
     const cycleStarted = Date.now();
+    let cooldownMs = KEEP_COOLDOWN_MS;
+    const stale = () => isStaleCycle(myGen, cycleGen);
     try {
       const stored = await chrome.storage.local.get([
         "keepApplying",
@@ -381,7 +422,14 @@ function boot() {
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
       if (shouldSkipWarmupFill(location.href, stored.warmupUrl as string | undefined)) return;
-      const pageBlob = document.body?.innerText?.slice(0, 4000) || "";
+      const pageBlob = pageTextSlice(4000);
+      const stepKey = `${location.pathname}|${readWorkdayStep().label || ""}|${readWorkdayStep().index ?? ""}`;
+      if (stepKey !== lastStepKey) {
+        lastStepKey = stepKey;
+        filledThisStep = new Set();
+        resumeDid = false;
+      }
+      if (stale()) return;
       const pace = fillPaceForPage(pageBlob);
       const authButtonsEarly = collectAuthButtons(document);
       const hasPasswordEarly = Boolean(document.querySelector("input[type=password]"));
@@ -402,7 +450,7 @@ function boot() {
         hasPassword: hasPasswordEarly,
         hasFileInput: fileCount > 0 || /attach|enter manually|upload (your )?(resume|cv)/i.test(pageBlob),
         authButtonCount: authButtonsEarly.length,
-        captcha: detectCaptcha(document),
+        captcha: detectCaptcha(document, pageBlob),
         hasNext: advanceEarly?.kind === "next",
         hasSubmit: advanceEarly?.kind === "submit",
         hasApplyCta: /apply now|start application|apply for this job/i.test(pageBlob),
@@ -441,7 +489,7 @@ function boot() {
         stuckTicks = 0;
         return;
       }
-      if (detectCaptcha(document)) {
+      if (detectCaptcha(document, pageBlob)) {
         if (!waitingOnCaptcha) {
           waitingOnCaptcha = true;
           post({ type: "keep-status", status: "captcha", url });
@@ -514,39 +562,45 @@ function boot() {
       ]);
       last = questions;
       const filledCount = questions.filter((q) => fieldLooksFilled(q.kind, q.value)).length;
-      const signupWall = /sign up|create (an )?account|continue with google|sign in with google/i.test(
-        document.body?.innerText?.slice(0, 2000) || ""
-      );
+      const signupWall = /sign up|create (an )?account|continue with google|sign in with google/i.test(pageBlob);
       if (!googleClicked && signupWall && filledCount < 3 && clickGoogleSignIn(document)) {
         googleClicked = true;
         stuckTicks = 0;
         post({ type: "keep-status", status: "fill", url, detail: "google sign-in" });
         return;
       }
-      try {
-        const library: string[] = [];
+      if (shouldRetryResume(lastResumeAt, resumeDid)) {
+        lastResumeAt = Date.now();
         try {
-          const db = await queryLocalStore({ kind: "answer", q: "resume", limit: 8 });
-          for (const row of db.rows) {
-            const text = String(row.why || (row.meta as { answer?: string })?.answer || "");
-            if (text.length > 40) library.push(text);
+          if (!libraryCache) {
+            const library: string[] = [];
+            try {
+              const db = await queryLocalStore({ kind: "answer", q: "resume", limit: 8 });
+              for (const row of db.rows) {
+                const text = String(row.why || (row.meta as { answer?: string })?.answer || "");
+                if (text.length > 40) library.push(text);
+              }
+            } catch {
+              /* IndexedDB optional */
+            }
+            libraryCache = library;
+          }
+          const uploaded = await applyWidgetDocuments(document, profile, {
+            paste: typeof stored.popupPaste === "string" ? stored.popupPaste : "",
+            library: libraryCache,
+          });
+          if (uploaded.did) {
+            resumeDid = true;
+            stuckTicks = 0;
+            const shape = applicationShape(url, pageBlob);
+            post({ type: "keep-status", status: "fill", url, detail: uploaded.detail });
+            await new Promise((r) => setTimeout(r, Math.min(360, Math.round(shape.waitAfterResumeMs / 6))));
           }
         } catch {
-          /* IndexedDB optional */
+          /* File/DataTransfer unavailable */
         }
-        const uploaded = await applyWidgetDocuments(document, profile, {
-          paste: typeof stored.popupPaste === "string" ? stored.popupPaste : "",
-          library,
-        });
-        if (uploaded.did) {
-          stuckTicks = 0;
-          const shape = applicationShape(url, pageBlob);
-          post({ type: "keep-status", status: "fill", url, detail: uploaded.detail });
-          await new Promise((r) => setTimeout(r, Math.min(360, Math.round(shape.waitAfterResumeMs / 6))));
-        }
-      } catch {
-        /* File/DataTransfer unavailable */
       }
+      if (stale()) return;
       const late = analyzeApplyPage({
         ...earlyFacts,
         requiredEmpty: questions.filter((q) => q.required && !fieldLooksFilled(q.kind, q.value)).length,
@@ -569,19 +623,27 @@ function boot() {
       }
       const shape = applicationShape(url, pageBlob);
       const fillLimit =
-        late.action === "fill" ? Math.min(fillBudgetForAnalysis(late), shape.fieldsPerTick) : KEEP_FIELDS_PER_TICK;
-      const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, fillLimit);
+        late.action === "fill"
+          ? Math.min(fillBudgetForAnalysis(late), shape.fieldsPerTick, KEEP_FIELDS_PER_TICK)
+          : KEEP_FIELDS_PER_TICK;
+      const { realQuestions, ready: rawReady, remainder } = buildAutofillBatch(
+        questions,
+        profile,
+        Math.max(fillLimit, 8),
+        filledThisStep
+      );
+      const ready = takeTickBatch(rawReady, fillLimit);
       last = realQuestions;
       let hadCustom = false;
       let verified = 0;
       for (const { plan, question: q } of ready) {
-        if (cycleOverBudget(cycleStarted)) {
+        if (stale() || cycleOverBudget(cycleStarted)) {
           stuckTicks = 0;
           return;
         }
-        const useDropdown = fieldShouldUseDropdown(q.kind, q.type);
+        const mode = classifyFillControl(q.kind, q.type);
         let readBack = "";
-        if (useDropdown) {
+        if (mode === "dropdown" || mode === "choice") {
           hadCustom = true;
           const ok = await selectDropdownById(plan.questionId, plan.value);
           if (!ok) await clickMatchingDropdown(plan.questionId, plan.value);
@@ -589,40 +651,45 @@ function boot() {
           q.value = plan.value;
           q.status = "filled";
           q.source = "profile";
+          filledThisStep.add(plan.questionId);
           await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
-        } else {
-          const result = await applyOnePaced(plan.questionId, plan.value, pace);
-          readBack = result?.readBack || q.value || plan.value;
-          if (q.kind === "radio" || q.kind === "checkbox") {
-            await clickMatchingDropdown(plan.questionId, plan.value);
-            await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
-            readBack = plan.value;
+          if (fillMatchedIntent(plan.value, readBack, q.kind)) {
+            verified += 1;
+            q.status = "filled";
+          } else {
+            q.status = "needs-review";
           }
+          break;
         }
+        const result = await applyOnePaced(plan.questionId, plan.value, pace);
+        readBack = result?.readBack || q.value || plan.value;
         if (fillMatchedIntent(plan.value, readBack, q.kind)) {
           verified += 1;
           q.status = "filled";
+          filledThisStep.add(plan.questionId);
         } else {
           q.status = "needs-review";
         }
         await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : KEEP_FILL_GAP_MS));
       }
+      cooldownMs = cooldownAfterTick(ready.length, hadCustom);
       if (ready.length) {
         post({
           type: "keep-status",
           status: "fill",
           url,
-          detail: `filled ${verified}/${ready.length} real fields`,
+          detail: hadCustom
+            ? `opened dropdown and clicked ${ready[0]?.question.label || "choice"}`
+            : `filled ${verified}/${ready.length} real fields`,
         });
       }
-      // Still have empty fields — yield so the page can paint instead of freezing.
-      if (remainder > 0) {
+      if (remainder > 0 || hadCustom || ready.length) {
         stuckTicks = 0;
         return;
       }
-      await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
-      const after = filterRealQuestions(scanDocument(document, frameId, profile));
-      const stillEmpty = after.filter((q) => q.required && q.type !== "password" && !fieldLooksFilled(q.kind, q.value));
+      const stillEmpty = last.filter(
+        (q) => q.required && q.type !== "password" && !fieldLooksFilled(q.kind, q.value) && !filledThisStep.has(q.id)
+      );
       const found = findAdvanceControl(document, "keep-applying");
       if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
         stuckTicks += 1;
@@ -656,9 +723,11 @@ function boot() {
         }
       }
     } finally {
-      keepBusy = false;
-      keepBusySince = 0;
-      keepCooldownUntil = Date.now() + KEEP_COOLDOWN_MS;
+      if (myGen === cycleGen) {
+        keepBusy = false;
+        keepBusySince = 0;
+        keepCooldownUntil = Date.now() + cooldownMs;
+      }
       schedulePersist();
     }
   }
@@ -667,6 +736,7 @@ function boot() {
     if (keepTimer || window !== window.top) return;
     keepTimer = window.setInterval(() => {
       if (keepBusy && keepBusyExpired(keepBusySince)) {
+        cycleGen = bumpCycle(cycleGen);
         keepBusy = false;
         keepBusySince = 0;
       }
@@ -696,16 +766,15 @@ function boot() {
     watching = true;
     if (window === window.top) mountFab();
     scan("full");
-    KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("full"), ms));
+    KEEP_SCAN_BURST_MS.forEach((ms) => setTimeout(() => scan("delta"), ms));
     const obs = new MutationObserver(() => {
       if (keepBusy || leavingJob) return;
       clearTimeout((obs as unknown as { t?: number }).t);
       (obs as unknown as { t?: number }).t = window.setTimeout(() => {
         scan("delta");
-        if (!paused && !keepBusy && Date.now() >= keepCooldownUntil) keepCycle().catch(() => {});
       }, KEEP_MUTATION_DEBOUNCE_MS) as unknown as number;
     });
-    obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   function whenReady(fn: () => void) {
