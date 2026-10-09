@@ -111,13 +111,29 @@ export function OpportunitiesPage() {
       </div>
 
       <div
-        className={`flex min-h-0 flex-1 ${selected ? 'lg:grid lg:grid-cols-[1fr_420px]' : ''}`}
+        className={
+          selected
+            ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]'
+            : 'flex min-h-0 w-full flex-1 flex-col'
+        }
       >
-        <div className={`custom-scroll min-w-0 overflow-auto ${selected ? 'border-r border-border' : ''}`}>
+        <div
+          className={`custom-scroll min-h-0 min-w-0 w-full flex-1 overflow-auto ${
+            selected ? 'border-r border-border' : ''
+          }`}
+        >
           {loading && (
             <p className="px-6 py-8 text-sm text-ink-muted">Loading from database…</p>
           )}
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full table-fixed text-left text-sm">
+            <colgroup>
+              <col className="w-[14%]" />
+              <col className="w-[20%]" />
+              <col className="w-[22%]" />
+              <col className="w-[14%]" />
+              <col className="w-[18%]" />
+              <col className="w-[12%]" />
+            </colgroup>
             <thead className="sticky top-0 bg-canvas text-[11px] tracking-[0.06em] text-ink-subtle uppercase">
               <tr className="border-b border-border">
                 <th className="px-5 py-3 font-semibold">Project #</th>
@@ -142,11 +158,11 @@ export function OpportunitiesPage() {
                       active ? 'bg-accent-soft/60' : 'hover:bg-accent-soft/30'
                     }`}
                   >
-                    <td className="px-5 py-3.5 font-semibold text-navy-900">
+                    <td className="truncate px-5 py-3.5 font-semibold text-navy-900">
                       Project {opp.projectNumber}
                     </td>
-                    <td className="px-3 py-3.5 font-medium text-ink">{opp.projectName}</td>
-                    <td className="px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
+                    <td className="truncate px-3 py-3.5 font-medium text-ink">{opp.projectName}</td>
+                    <td className="truncate px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
                     <td className="px-3 py-3.5">
                       <span className={badgeClass(statusBadge(opp.status))}>{opp.status}</span>
                     </td>

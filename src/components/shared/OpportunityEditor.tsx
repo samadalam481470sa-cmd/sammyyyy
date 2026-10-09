@@ -38,10 +38,9 @@ interface OpportunityEditorProps {
 
 const DEFAULT_TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'status', label: 'Status & Stage' },
   { id: 'entity', label: 'Entity' },
   { id: 'diligence', label: 'Diligence' },
-  { id: 'actions', label: 'Next Actions' },
+  { id: 'actions', label: 'Next Action' },
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
@@ -186,13 +185,13 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           )}
         </div>
 
-        <div className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-2">
+        <div className="flex min-w-0 border-b border-border px-2 pt-2">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-t-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${
+              className={`min-w-0 flex-1 rounded-t-lg px-2 py-2 text-center text-xs font-semibold whitespace-nowrap transition-colors ${
                 tab === t.id
                   ? 'bg-accent-soft text-navy-900'
                   : 'text-ink-muted hover:bg-canvas hover:text-ink'
