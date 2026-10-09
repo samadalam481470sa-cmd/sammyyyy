@@ -1,6 +1,7 @@
 import metros from "../data/metros.json" with { type: "json" };
 import aliases from "../data/title-aliases.json" with { type: "json" };
 import employersSeed from "../data/dfw-employers.json" with { type: "json" };
+import usItEmployers from "../data/us-it-employers.json" with { type: "json" };
 import { titleRelevance } from "./answers.js";
 import { normalize, tokens } from "./fuzzy.js";
 
@@ -9,7 +10,22 @@ export const BLOCKED_JOB_HOSTS = ["linkedin.com", "indeed.com", "glassdoor.com"]
 export type WorkMode = "onsite" | "hybrid" | "remote";
 export type ExperienceLevel = "intern" | "new-grad" | "entry" | "mid" | "senior";
 export type AlertTiming = "instant" | "daily" | "weekly";
-export type BoardKind = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "usajobs" | "adzuna" | "career-page" | "unknown";
+export type BoardKind =
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "smartrecruiters"
+  | "usajobs"
+  | "adzuna"
+  | "taleo"
+  | "successfactors"
+  | "workday"
+  | "icims"
+  | "jobvite"
+  | "workable"
+  | "recruitee"
+  | "career-page"
+  | "unknown";
 
 export interface SearchSettings {
   homeCity: string;
@@ -30,19 +46,28 @@ export interface SearchSettings {
 
 export const DEFAULT_SEARCH: SearchSettings = {
   homeCity: "Carrollton, TX",
-  metro: "dfw",
-  radiusMiles: 20,
+  metro: "texas",
+  radiusMiles: 2500,
   remoteOk: true,
   hybridOk: true,
-  titles: ["software engineer", "it systems"],
-  nicheKeywords: ["cybersecurity compliance"],
-  industries: [],
+  titles: [
+    "software engineer",
+    "it systems",
+    "it support",
+    "systems administrator",
+    "help desk",
+    "network engineer",
+    "cybersecurity",
+    "information technology",
+  ],
+  nicheKeywords: ["cybersecurity compliance", "information technology", "systems administrator", "IT support"],
+  industries: ["information technology"],
   experienceLevel: "entry",
   salaryFloor: null,
   needsSponsorship: null,
   excludeCompanies: [],
   alertTiming: "daily",
-  scoreThreshold: 60,
+  scoreThreshold: 50,
 };
 
 export interface SourceLink {
@@ -119,6 +144,15 @@ export function detectBoardFromCareersUrl(url: string): { board: BoardKind; slug
     if (host.endsWith("lever.co") && parts[0]) return { board: "lever", slug: parts[0] };
     if (host.endsWith("ashbyhq.com") && parts[0]) return { board: "ashby", slug: parts[0] };
     if (host.endsWith("smartrecruiters.com") && parts[0]) return { board: "smartrecruiters", slug: parts[0] };
+    if (host.endsWith("taleo.net")) return { board: "taleo", slug: parts[0] || host.split(".")[0] };
+    if (host.includes("successfactors") || host.includes("sapsf.")) return { board: "successfactors", slug: host.split(".")[0] };
+    if (host.includes("myworkdayjobs") || host.includes("myworkdaysite") || host.includes("workday")) {
+      return { board: "workday", slug: host.split(".")[0] };
+    }
+    if (host.endsWith("icims.com")) return { board: "icims", slug: host.split(".")[0] };
+    if (host.endsWith("jobvite.com") && parts[0]) return { board: "jobvite", slug: parts[0] };
+    if (host.endsWith("workable.com") && parts[0]) return { board: "workable", slug: parts[0] };
+    if (host.endsWith("recruitee.com")) return { board: "recruitee", slug: host.split(".")[0] };
     return null;
   } catch {
     return null;
@@ -135,10 +169,10 @@ export function haversineMiles(a: { lat: number; lng: number }, b: { lat: number
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
 }
 
-export function geocodeLocation(text: string, metroId = "dfw"): { lat: number; lng: number; label: string } | null {
-  const metro = (metros as Record<string, { places: Record<string, { lat: number; lng: number }>; center: { lat: number; lng: number } }>)[
-    metroId
-  ];
+type MetroFile = Record<string, { places: Record<string, { lat: number; lng: number }>; center: { lat: number; lng: number } }>;
+
+function matchPlace(text: string, metroId: string): { lat: number; lng: number; label: string } | null {
+  const metro = (metros as MetroFile)[metroId];
   if (!metro) return null;
   const n = normalize(text);
   if (!n) return null;
@@ -150,6 +184,50 @@ export function geocodeLocation(text: string, metroId = "dfw"): { lat: number; l
     return { ...metro.center, label: "dfw" };
   }
   return null;
+}
+
+export function geocodeLocation(text: string, metroId = "texas"): { lat: number; lng: number; label: string } | null {
+  const direct = matchPlace(text, metroId);
+  if (direct) return direct;
+  for (const id of Object.keys(metros as MetroFile)) {
+    if (id === metroId) continue;
+    const hit = matchPlace(text, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+const TEXAS_HINT =
+  /\b(tx|texas|dallas|fort worth|dfw|houston|austin|san antonio|el paso|plano|irving|arlington|frisco|mckinney|carrollton|lubbock|corpus christi|amarillo|waco|midland|odessa|beaumont|tyler|college station|galveston|the woodlands|sugar land|killeen|laredo|brownsville|mcallen|denton|richardson|garland|grand prairie|mesquite|pasadena|pearland|round rock|cedar park)\b/;
+
+export function isTexasLocation(text: string): boolean {
+  return TEXAS_HINT.test(normalize(text));
+}
+
+export function isUsLocation(text: string): boolean {
+  if (!text) return false;
+  if (isTexasLocation(text)) return true;
+  const n = normalize(text);
+  if (/\b(united states|usa|united states of america|remote us|us remote|nationwide)\b/.test(n)) return true;
+  return /[A-Za-z],\s*(AL|AK|AZ|AR|CA|CO|CT|DC|DE|FL|GA|HI|IA|ID|IL|IN|KS|KY|LA|MA|MD|ME|MI|MN|MO|MS|MT|NC|ND|NE|NH|NJ|NM|NV|NY|OH|OK|OR|PA|RI|SC|SD|TN|UT|VA|VT|WA|WI|WV|WY|TX)\b/i.test(
+    text
+  );
+}
+
+export function isNonUsLocation(text: string): boolean {
+  const n = normalize(text);
+  if (isUsLocation(n) || isTexasLocation(n)) return false;
+  return /\b(united kingdom|london|england|uk remote|canada|toronto|vancouver|india|bengaluru|bangalore|hyderabad|pune|chennai|singapore|sydney|melbourne|berlin|munich|dublin|amsterdam|warsaw|krakow|poland|france|paris|emea|apac|germany|netherlands|ireland|australia|mexico city|sao paulo|tokyo|seoul|remote uk|remote eu|remote emea)\b/.test(
+    n
+  );
+}
+
+const IT_TITLE =
+  /\b(software|developer|programmer|sysadmin|systems analyst|systems administrator|cyber|security engineer|information (technology|security|systems)|it (support|systems|analyst|specialist|technician|coordinator|operations|engineer|manager)|help desk|desktop support|network engineer|site reliability|\bsre\b|devops|cloud engineer|data engineer|data analyst|database administrator|\bdba\b|qa engineer|\bsdet\b|platform engineer|infrastructure engineer|full[- ]stack|frontend|backend|machine learning|ml engineer|ai engineer|application engineer|service desk|end user support|\bit\b|\binfosec\b)\b/i;
+
+/** Conservative IT / software title check used to keep the built-in queue on-role. */
+export function looksLikeItRole(title: string): boolean {
+  return IT_TITLE.test(title);
 }
 
 export function classifyWorkMode(title: string, location: string, description: string): WorkMode {
@@ -245,16 +323,24 @@ export function ruleFilter(listing: CanonicalListing, settings: SearchSettings):
   if (settings.excludeCompanies.some((c) => normalize(c) === normalize(listing.company))) {
     return { pass: false, reason: "excluded company" };
   }
+  const where = `${listing.locationText} ${listing.remoteWhere || ""} ${listing.description.slice(0, 400)}`;
+  if (isNonUsLocation(where) && !isUsLocation(where)) {
+    return { pass: false, reason: "outside the United States" };
+  }
   if (listing.workMode === "remote") {
     if (!settings.remoteOk) return { pass: false, reason: "remote not welcome" };
   } else if (listing.workMode === "hybrid") {
     if (!settings.hybridOk && !settings.remoteOk) return { pass: false, reason: "hybrid not welcome" };
-  } else {
+  } else if (!isTexasLocation(listing.locationText)) {
     const home = geocodeLocation(settings.homeCity, settings.metro);
-    if (home && listing.lat != null && listing.lng != null) {
-      const miles = haversineMiles(home, { lat: listing.lat, lng: listing.lng });
+    const loc =
+      listing.lat != null && listing.lng != null
+        ? { lat: listing.lat, lng: listing.lng }
+        : geocodeLocation(listing.locationText, settings.metro);
+    if (home && loc) {
+      const miles = haversineMiles(home, loc);
       if (miles > settings.radiusMiles) return { pass: false, reason: `outside ${settings.radiusMiles} mile radius` };
-    } else if (home && !geocodeLocation(listing.locationText, settings.metro)) {
+    } else if (home && !loc && !isUsLocation(listing.locationText)) {
       return { pass: false, reason: "location not in metro" };
     }
   }
@@ -295,10 +381,21 @@ export function ruleScore(listing: CanonicalListing, settings: SearchSettings): 
   else if (!tooSenior(inferred, settings.experienceLevel)) score += 8;
   const warnings = warningSigns(listing);
   if (warnings.length) score -= 20;
+  if (isTexasLocation(listing.locationText) || isTexasLocation(listing.company)) {
+    score += 15;
+  } else if (isUsLocation(listing.locationText) || listing.workMode === "remote") {
+    score += 6;
+  }
+  if (isNonUsLocation(listing.locationText)) score -= 30;
   score = Math.max(0, Math.min(100, score));
+  const where = isTexasLocation(listing.locationText)
+    ? " Texas hiring"
+    : isUsLocation(listing.locationText)
+      ? " US location"
+      : "";
   const why = titleHit
-    ? `Title lines up with ${settings.titles[0] || "your targets"}${nicheHits.length ? ` and mentions ${nicheHits[0]}` : ""}.`
-    : `Nearby title; ${nicheHits.length ? `niche terms: ${nicheHits.join(", ")}` : "weak niche overlap"}.`;
+    ? `Title lines up with ${settings.titles[0] || "your targets"}${nicheHits.length ? ` and mentions ${nicheHits[0]}` : ""}.${where}`
+    : `Nearby title; ${nicheHits.length ? `niche terms: ${nicheHits.join(", ")}` : "weak niche overlap"}.${where}`;
   return { listingId: listing.id, score, why, inferredLevel: inferred, warnings, via: "rules" };
 }
 
@@ -324,8 +421,10 @@ export function coverage(
   seed: EmployerRecord[] = employersSeed.employers as EmployerRecord[],
   metro = "dfw"
 ) {
-  const metroSeed = seed.filter((e) => e.metro === metro);
-  const withFeed = mapped.filter((e) => e.metro === metro && e.slug && e.board !== "unknown");
+  const metroSeed = metro === "all" || metro === "texas" || metro === "us" ? seed : seed.filter((e) => e.metro === metro);
+  const withFeed = mapped.filter(
+    (e) => (metro === "all" || metro === "texas" || metro === "us" || e.metro === metro) && e.slug && e.board !== "unknown"
+  );
   return {
     metro,
     seedCount: metroSeed.length,
@@ -336,7 +435,19 @@ export function coverage(
 }
 
 export function seedEmployers(): EmployerRecord[] {
-  return employersSeed.employers as EmployerRecord[];
+  const rows = [
+    ...(employersSeed.employers as EmployerRecord[]),
+    ...(usItEmployers.employers as EmployerRecord[]),
+  ];
+  const seen = new Set<string>();
+  const unique: EmployerRecord[] = [];
+  for (const row of rows) {
+    const key = `${normalize(row.company)}|${row.board}|${row.slug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(row);
+  }
+  return unique;
 }
 
 export function aiScorePrompt(listing: CanonicalListing, settings: SearchSettings): { system: string; user: string } {

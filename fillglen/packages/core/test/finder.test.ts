@@ -14,7 +14,11 @@ import {
   haversineMiles,
   inferExperience,
   isBlockedJobUrl,
+  isNonUsLocation,
+  isTexasLocation,
+  isUsLocation,
   listingDedupeKey,
+  looksLikeItRole,
   ruleFilter,
   ruleScore,
   seedEmployers,
@@ -65,23 +69,40 @@ describe("geocode and radius", () => {
     assert.ok(c);
     const dallas = geocodeLocation("Dallas, TX")!;
     assert.ok(haversineMiles(c!, dallas) < 25);
-    assert.equal(geocodeLocation("Austin, TX, United States"), null);
+    const austin = geocodeLocation("Austin, TX, United States");
+    assert.ok(austin);
+    assert.ok(austin.lat < 31.5);
+    assert.ok(geocodeLocation("Houston, TX"));
     assert.ok(geocodeLocation("Remote - Dallas, TX"));
+    assert.ok(geocodeLocation("New York, NY"));
+    assert.ok(geocodeLocation("San Francisco, CA"));
   });
   it("drops on-site jobs outside the radius", () => {
-    const austin = job({
-      locationText: "Austin, TX",
-      lat: 30.2672,
-      lng: -97.7431,
+    const nyc = job({
+      locationText: "New York, NY",
+      lat: 40.7128,
+      lng: -74.006,
       workMode: "onsite",
     });
-    const r = ruleFilter(austin, { ...DEFAULT_SEARCH, homeCity: "Carrollton, TX", radiusMiles: 20, remoteOk: false });
+    const r = ruleFilter(nyc, { ...DEFAULT_SEARCH, homeCity: "Carrollton, TX", radiusMiles: 20, remoteOk: false });
     assert.equal(r.pass, false);
     assert.match(r.reason || "", /radius|location/);
   });
   it("keeps remote when welcome", () => {
     const r = ruleFilter(job({ workMode: "remote", locationText: "Remote - US" }), DEFAULT_SEARCH);
     assert.equal(r.pass, true);
+  });
+  it("keeps Texas on-site IT jobs and drops non-US postings", () => {
+    assert.equal(isTexasLocation("Austin, TX"), true);
+    assert.equal(isUsLocation("New York, NY"), true);
+    assert.equal(isNonUsLocation("London, UK"), true);
+    const tx = ruleFilter(job({ locationText: "Houston, TX", lat: 29.76, lng: -95.37, workMode: "onsite" }), DEFAULT_SEARCH);
+    assert.equal(tx.pass, true);
+    const uk = ruleFilter(
+      job({ locationText: "London, UK", lat: 51.5, lng: -0.1, workMode: "onsite", description: "Office in London, United Kingdom." }),
+      DEFAULT_SEARCH
+    );
+    assert.equal(uk.pass, false);
   });
   it("drops no-sponsorship jobs when the user needs a visa", () => {
     const r = ruleFilter(
@@ -162,11 +183,22 @@ describe("employer mapping", () => {
     assert.deepEqual(detectBoardFromCareersUrl("https://boards.greenhouse.io/acme/jobs/1"), { board: "greenhouse", slug: "acme" });
     assert.deepEqual(detectBoardFromCareersUrl("https://jobs.lever.co/acme"), { board: "lever", slug: "acme" });
     assert.deepEqual(detectBoardFromCareersUrl("https://jobs.ashbyhq.com/acme"), { board: "ashby", slug: "acme" });
+    assert.equal(detectBoardFromCareersUrl("https://apply.workable.com/acme")?.board, "workable");
+    assert.equal(detectBoardFromCareersUrl("https://acme.wd5.myworkdaysite.com/careers")?.board, "workday");
   });
   it("reports DFW coverage honestly", () => {
     const c = coverage(seedEmployers(), seedEmployers(), "dfw");
     assert.ok(c.seedCount >= 1);
     assert.ok(c.unmapped.includes("American Airlines") || c.unmapped.includes("Texas Instruments") || c.mappedCount < c.seedCount);
     assert.match(c.note, /every job/i);
+  });
+  it("seeds Texas-preferring US IT employers with public feeds", () => {
+    const seed = seedEmployers();
+    assert.ok(seed.some((e) => e.company === "Tesla" && e.board === "greenhouse"));
+    assert.ok(seed.some((e) => e.company === "CrowdStrike" && e.slug === "crowdstrike"));
+    assert.ok(seed.some((e) => /american airlines|texas instruments|dell/i.test(e.company) && e.board === "unknown"));
+    assert.ok(looksLikeItRole("Software Engineer"));
+    assert.ok(looksLikeItRole("IT Support Specialist"));
+    assert.equal(looksLikeItRole("Barista"), false);
   });
 });

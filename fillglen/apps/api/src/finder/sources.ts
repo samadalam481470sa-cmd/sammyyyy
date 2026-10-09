@@ -24,6 +24,8 @@ export async function fetchEmployerFeed(employer: EmployerRecord): Promise<Canon
   if (employer.board === "lever") return fetchLever(employer);
   if (employer.board === "ashby") return fetchAshby(employer);
   if (employer.board === "smartrecruiters") return fetchSmartRecruiters(employer);
+  if (employer.board === "workable") return fetchWorkable(employer);
+  if (employer.board === "recruitee") return fetchRecruitee(employer);
   return [];
 }
 
@@ -128,6 +130,52 @@ async function fetchSmartRecruiters(employer: EmployerRecord): Promise<Canonical
   );
 }
 
+async function fetchWorkable(employer: EmployerRecord): Promise<CanonicalListing[]> {
+  const r = await fetch(`https://apply.workable.com/api/v1/widget/accounts/${employer.slug}`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as {
+    jobs?: { title: string; url?: string; shortcode?: string; description?: string; location?: { city?: string; country?: string } }[];
+  };
+  return (data.jobs || [])
+    .filter((j) => j.url || j.shortcode)
+    .map((j) =>
+      toListing({
+        id: `wk-${employer.slug}-${j.shortcode || j.title}`,
+        title: j.title,
+        company: employer.company,
+        locationText: [j.location?.city, j.location?.country].filter(Boolean).join(", "),
+        description: stripHtml(j.description || ""),
+        url: j.url || `https://apply.workable.com/${employer.slug}/j/${j.shortcode}/`,
+        source: "workable",
+        employerSlug: employer.slug,
+        metro: employer.metro,
+      })
+    );
+}
+
+async function fetchRecruitee(employer: EmployerRecord): Promise<CanonicalListing[]> {
+  const r = await fetch(`https://${employer.slug}.recruitee.com/api/offers`);
+  if (!r.ok) return [];
+  const data = (await r.json()) as {
+    offers?: { id?: string; title: string; careers_url?: string; location?: string; description?: string }[];
+  };
+  return (data.offers || [])
+    .filter((j) => j.careers_url)
+    .map((j) =>
+      toListing({
+        id: `rt-${employer.slug}-${j.id || j.title}`,
+        title: j.title,
+        company: employer.company,
+        locationText: j.location || "",
+        description: stripHtml(j.description || ""),
+        url: j.careers_url!,
+        source: "recruitee",
+        employerSlug: employer.slug,
+        metro: employer.metro,
+      })
+    );
+}
+
 export async function fetchUsaJobs(locationName: string): Promise<CanonicalListing[]> {
   const key = process.env.USAJOBS_API_KEY;
   const email = process.env.USAJOBS_EMAIL;
@@ -198,7 +246,7 @@ function toListing(input: {
   if (isBlockedJobUrl(input.url)) {
     throw new Error("blocked source");
   }
-  const geo = geocodeLocation(input.locationText, input.metro === "austin" ? "austin" : "dfw");
+  const geo = geocodeLocation(input.locationText, input.metro || "texas");
   const seen = nowIso();
   const listing: CanonicalListing = {
     id: input.id,

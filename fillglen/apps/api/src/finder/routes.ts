@@ -47,7 +47,7 @@ export function mountFinder(app: Express, auth: Auth) {
   });
 
   app.get("/v1/finder/coverage", auth, (_req, res) => {
-    res.json(getCoverage("dfw"));
+    res.json(getCoverage("texas"));
   });
 
   app.post("/v1/finder/employers", auth, (req, res) => {

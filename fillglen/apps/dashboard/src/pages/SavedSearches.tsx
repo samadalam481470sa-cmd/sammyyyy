@@ -26,7 +26,10 @@ export default function SavedSearches() {
       }}
     >
       <h1 className="text-2xl">Saved searches</h1>
-      <p className="text-sm text-[#5c6b64]">The Chrome extension does not search. These settings run on the server every hour.</p>
+      <p className="text-sm text-[#5c6b64]">
+        Defaults cover US IT roles with Texas preferred. The Chrome extension does not search. These settings run on the
+        server every hour.
+      </p>
       <label>
         Home city
         <input value={settings.homeCity} onChange={(e) => set("homeCity", e.target.value)} />

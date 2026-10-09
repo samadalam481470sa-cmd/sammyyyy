@@ -72,8 +72,20 @@ export async function runFetch(opts: { includeUsa?: boolean; includeAdzuna?: boo
       /* dead slug — coverage stays honest */
     }
   }
-  if (opts.includeUsa) all.push(...(await fetchUsaJobs("Dallas, TX")));
-  if (opts.includeAdzuna) all.push(...(await fetchAdzuna("software", "Dallas")));
+  if (opts.includeUsa) {
+    for (const loc of ["Dallas, TX", "Austin, TX", "Houston, TX", "San Antonio, TX", "United States"]) {
+      all.push(...(await fetchUsaJobs(loc)));
+    }
+  }
+  if (opts.includeAdzuna) {
+    for (const [what, where] of [
+      ["IT", "Texas"],
+      ["software engineer", "Texas"],
+      ["information technology", "United States"],
+    ] as const) {
+      all.push(...(await fetchAdzuna(what, where)));
+    }
+  }
   const unique = dedupeListings(all);
   const seenIds = new Set(unique.map((u) => u.id));
   for (const row of unique) upsertListing(row);

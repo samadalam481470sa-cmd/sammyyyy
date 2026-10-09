@@ -1,6 +1,6 @@
 {
   "metro": "dfw",
-  "notes": "Seed mapped from public ATS feeds and local employer directories. Coverage is mappedCount/seedCount — not a claim of every job in DFW.",
+  "notes": "Texas employer seed from public ATS feeds and local directories. Mapped slugs are pulled every run. Large Texas IT employers on Workday, Taleo, or custom career sites stay unmapped on purpose so coverage is honest — Fillglen cannot list every company in Texas.",
   "employers": [
     {
       "company": "Match Group",
@@ -21,22 +21,13 @@
       "hqHint": "Dallas, TX"
     },
     {
-      "company": "Capital One",
-      "metro": "dfw",
-      "careersUrl": "https://www.capitalonecareers.com/",
-      "board": "unknown",
-      "slug": "",
-      "sourceKind": "career-fair",
-      "hqHint": "Plano, TX"
-    },
-    {
       "company": "CrowdStrike",
       "metro": "dfw",
       "careersUrl": "https://www.crowdstrike.com/careers/",
-      "board": "unknown",
-      "slug": "",
+      "board": "greenhouse",
+      "slug": "crowdstrike",
       "sourceKind": "industry-association",
-      "hqHint": "Remote / Texas"
+      "hqHint": "Austin / Dallas / remote US"
     },
     {
       "company": "Cloudflare",
@@ -66,6 +57,15 @@
       "hqHint": "Austin, TX"
     },
     {
+      "company": "Capital One",
+      "metro": "dfw",
+      "careersUrl": "https://www.capitalonecareers.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "career-fair",
+      "hqHint": "Plano, TX"
+    },
+    {
       "company": "American Airlines",
       "metro": "dfw",
       "careersUrl": "https://jobs.aa.com/",
@@ -82,6 +82,213 @@
       "slug": "",
       "sourceKind": "chamber",
       "hqHint": "Dallas, TX"
+    },
+    {
+      "company": "AT&T",
+      "metro": "dfw",
+      "careersUrl": "https://att.jobs/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Dallas, TX"
+    },
+    {
+      "company": "Southwest Airlines",
+      "metro": "dfw",
+      "careersUrl": "https://careers.southwestair.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Dallas, TX"
+    },
+    {
+      "company": "Toyota Motor North America",
+      "metro": "dfw",
+      "careersUrl": "https://www.toyota.com/usa/careers/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Plano, TX"
+    },
+    {
+      "company": "JPMorgan Chase",
+      "metro": "dfw",
+      "careersUrl": "https://careers.jpmorgan.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Plano, TX"
+    },
+    {
+      "company": "Charles Schwab",
+      "metro": "dfw",
+      "careersUrl": "https://www.aboutschwab.com/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Westlake, TX"
+    },
+    {
+      "company": "Cisco",
+      "metro": "dfw",
+      "careersUrl": "https://jobs.cisco.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "industry-association",
+      "hqHint": "Richardson, TX"
+    },
+    {
+      "company": "Ericsson",
+      "metro": "dfw",
+      "careersUrl": "https://www.ericsson.com/en/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "industry-association",
+      "hqHint": "Plano, TX"
+    },
+    {
+      "company": "Lockheed Martin",
+      "metro": "dfw",
+      "careersUrl": "https://www.lockheedmartinjobs.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Fort Worth, TX"
+    },
+    {
+      "company": "Bell Textron",
+      "metro": "dfw",
+      "careersUrl": "https://www.bellflight.com/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Fort Worth, TX"
+    },
+    {
+      "company": "Dell Technologies",
+      "metro": "austin",
+      "careersUrl": "https://jobs.dell.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Round Rock, TX"
+    },
+    {
+      "company": "Oracle",
+      "metro": "austin",
+      "careersUrl": "https://careers.oracle.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "IBM",
+      "metro": "austin",
+      "careersUrl": "https://www.ibm.com/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "Apple",
+      "metro": "austin",
+      "careersUrl": "https://jobs.apple.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "Samsung Austin Semiconductor",
+      "metro": "austin",
+      "careersUrl": "https://www.samsung.com/us/careers/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "NXP Semiconductors",
+      "metro": "austin",
+      "careersUrl": "https://www.nxp.com/company/about-nxp/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "industry-association",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "AMD",
+      "metro": "austin",
+      "careersUrl": "https://www.amd.com/en/corporate/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "industry-association",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "USAA",
+      "metro": "san-antonio",
+      "careersUrl": "https://www.usaajobs.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "San Antonio, TX"
+    },
+    {
+      "company": "H-E-B",
+      "metro": "san-antonio",
+      "careersUrl": "https://careers.heb.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "San Antonio, TX"
+    },
+    {
+      "company": "ExxonMobil",
+      "metro": "houston",
+      "careersUrl": "https://jobs.exxonmobil.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Houston, TX"
+    },
+    {
+      "company": "Halliburton",
+      "metro": "houston",
+      "careersUrl": "https://jobs.halliburton.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Houston, TX"
+    },
+    {
+      "company": "Baker Hughes",
+      "metro": "houston",
+      "careersUrl": "https://careers.bakerhughes.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Houston, TX"
+    },
+    {
+      "company": "Hewlett Packard Enterprise",
+      "metro": "houston",
+      "careersUrl": "https://careers.hpe.com/",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Houston / Spring, TX"
+    },
+    {
+      "company": "SpaceX",
+      "metro": "texas",
+      "careersUrl": "https://www.spacex.com/careers",
+      "board": "unknown",
+      "slug": "",
+      "sourceKind": "chamber",
+      "hqHint": "Starbase / Bastrop, TX"
     }
   ]
 }

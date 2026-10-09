@@ -8,4 +8,4 @@ Paste a resume, then **Autofill & keep applying**. The extension loads the built
 
 Or build locally: `npm run build -w @fillglen/extension` and select `fillglen/apps/extension/dist`.
 
-Host access is limited to Greenhouse, Lever, Ashby, SmartRecruiters, iCIMS, and Workday. LinkedIn is not in the match list and is blocked in code.
+Autofill runs on the major US applicant systems (Workday, Greenhouse, Lever, Ashby, Taleo, SuccessFactors, iCIMS, Jobvite, BambooHR, ADP, UKG, Paycom, Paylocity, Dayforce, Phenom, Eightfold, Avature, Rippling, JazzHR, and others) plus generic company `/apply` forms. LinkedIn Easy Apply is blocked. Search prefers Texas IT roles, then other United States openings from public feeds — not every company in Texas.

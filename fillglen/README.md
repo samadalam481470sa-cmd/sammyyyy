@@ -12,7 +12,7 @@ It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes L
 
 - `packages/core` — types, classify/resolve pipeline, adapters, match score, tailor, AI gates
 - `apps/extension` — TypeScript + React + Vite + `@crxjs/vite-plugin` (side panel, pop-out, popup, content scripts)
-- `apps/api` — Express + Zod + Helmet + rate limit + audit log (PostgreSQL schema in `src/schema.sql`; local JSON store when `DATABASE_URL` is unset). The **24/7 local finder** lives here: hourly fetch of public Greenhouse/Lever/Ashby/SmartRecruiters feeds, USAJOBS and Adzuna when keys exist, rule filters, optional Claude/OpenAI scoring, alerts. Chrome does not search.
+- `apps/api` — Express + Zod + Helmet + rate limit + audit log (PostgreSQL schema in `src/schema.sql`; local JSON store when `DATABASE_URL` is unset). The **24/7 local finder** lives here: hourly fetch of public Greenhouse/Lever/Ashby/SmartRecruiters/Workable feeds, USAJOBS and Adzuna when keys exist, rule filters, optional Claude/OpenAI scoring, alerts. Chrome does not search.
 - `apps/dashboard` — React 19, Vite, Tailwind, Recharts. **Local jobs** map/list and **Saved searches**.
 
 ## Download and deploy
@@ -70,6 +70,8 @@ The always-on work runs on the Fillglen API (`apps/api`), not in Chrome. Manifes
 
 The AI never creates job listings. It only reads, sorts, and scores real listings pulled from real sources. Every row must have a link to the original posting, the source it came from, and `firstSeenAt` / `lastCheckedAt`. `assertRealListing` rejects invented rows. LinkedIn, Indeed, and Glassdoor URLs are blocked.
 
+Autofill is not limited to Workday. The extension fills the major US applicant systems (Greenhouse, Lever, Ashby, SmartRecruiters, iCIMS, Workday, Taleo, SuccessFactors, Oracle Cloud, Jobvite, BambooHR, Workable, ADP, UKG, Paycom, Paylocity, Dayforce, Brassring, Phenom, Eightfold, Avature, Rippling, JazzHR, and others) plus generic `/apply` forms. LinkedIn Easy Apply stays blocked.
+
 ### User settings
 
 Saved on **Saved searches** (`/searches`) and applied on every server run: home city and radius, remote/hybrid welcome, target titles, niche keywords and industries, experience level, salary floor, visa sponsorship, excluded companies, alert timing (instant / daily / weekly), and score threshold.
@@ -78,16 +80,16 @@ Saved on **Saved searches** (`/searches`) and applied on every server run: home 
 
 Only official APIs or public feeds (check each source's terms before connecting):
 
-1. Company job boards on Greenhouse, Lever, Ashby, and SmartRecruiters (largest accurate source).
-2. USAJOBS when `USAJOBS_API_KEY` and `USAJOBS_EMAIL` are set. Add local government pages only where they allow it.
-3. Licensed aggregators such as Adzuna when `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` are set.
+1. Company job boards on Greenhouse, Lever, Ashby, SmartRecruiters, Workable, and Recruitee (largest accurate source). The seed prefers Texas IT hiring, then other United States roles. It is not every company in Texas — Workday/Taleo career sites without a public JSON feed stay unmapped on purpose.
+2. USAJOBS when `USAJOBS_API_KEY` and `USAJOBS_EMAIL` are set (Dallas, Austin, Houston, San Antonio, and US-wide).
+3. Licensed aggregators such as Adzuna when `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` are set (Texas IT and US).
 4. Company career pages only when there is no feed — detect the ATS from the pasted careers URL. Respect robots and terms.
 
 Do not scrape LinkedIn, Indeed, or Glassdoor.
 
 ### Finding local and niche employers
 
-Big job sites miss small and niche companies. `packages/core/data/dfw-employers.json` is a DFW-first seed (chamber / journal / career-fair style sources). Mapped slugs are pulled every run; American Airlines and Texas Instruments stay unmapped on purpose so coverage is honest. Users can paste a careers link; the server maps Greenhouse/Lever/Ashby/SmartRecruiters automatically. Coverage is `mappedCount / seedCount` — no system finds every job.
+Big job sites miss small and niche companies. `packages/core/data/dfw-employers.json` is a Texas seed (chamber / journal / career-fair style sources). `packages/core/data/us-it-employers.json` adds US IT companies with public feeds. Mapped slugs are pulled every run; Dell, AT&T, American Airlines, Texas Instruments, USAA, and other Workday/custom boards stay unmapped on purpose so coverage is honest. Users can paste a careers link; the server maps Greenhouse/Lever/Ashby/SmartRecruiters/Workable automatically. Coverage is `mappedCount / seedCount` — no system finds every job.
 
 ### Pipeline on every run
 

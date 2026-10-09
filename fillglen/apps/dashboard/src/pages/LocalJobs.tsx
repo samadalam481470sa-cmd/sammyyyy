@@ -104,8 +104,8 @@ export default function LocalJobs() {
         <div>
           <h1 className="text-2xl">Local jobs</h1>
           <p className="text-sm text-[#5c6b64]">
-            24/7 search runs on the Fillglen server from public feeds. Listings always include a source link and seen
-            dates. LinkedIn, Indeed, and Glassdoor are not scraped.
+            Search prefers Texas IT hiring, then other United States roles, from public ATS feeds. LinkedIn, Indeed, and
+            Glassdoor are not scraped. This is not every company in Texas — only mapped public boards we can pull.
           </p>
         </div>
         <button
@@ -123,7 +123,7 @@ export default function LocalJobs() {
       </div>
       {coverage ? (
         <p className="text-sm">
-          DFW coverage: {coverage.mappedCount} of {coverage.seedCount} seed employers have a public feed we can pull.{" "}
+          US/Texas IT coverage: {coverage.mappedCount} of {coverage.seedCount} seed employers have a public feed we can pull.{" "}
           {coverage.note}
           {coverage.unmapped?.length ? ` Unmapped: ${coverage.unmapped.join(", ")}.` : ""}
         </p>

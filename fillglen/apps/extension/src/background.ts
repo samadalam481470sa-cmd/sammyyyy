@@ -5,6 +5,7 @@ import {
   fetchBuiltInJobQueue,
   hydrateProfile,
   isSupportedApplyUrl,
+  looksLikeApplicationPage,
   nextQueueItem,
   planPage,
   shouldBlockPage,
@@ -243,7 +244,7 @@ async function maybeTrack(snap: ScanSnapshot) {
 }
 
 function looksApply(url?: string) {
-  return Boolean(url && isSupportedApplyUrl(url) && !shouldBlockPage(url));
+  return Boolean(url && (isSupportedApplyUrl(url) || looksLikeApplicationPage(url)) && !shouldBlockPage(url));
 }
 
 function looksKeepTab(url?: string) {
@@ -302,7 +303,7 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     const lookup = (finderMatches?.lookup || finderMatches?.top || []) as ApplyQueueItem[];
     let builtIn: ApplyQueueItem[] = [];
     try {
-      builtIn = await fetchBuiltInJobQueue(60);
+      builtIn = await fetchBuiltInJobQueue(100);
     } catch {
       builtIn = [];
     }

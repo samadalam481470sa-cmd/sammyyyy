@@ -5,6 +5,7 @@ import {
   feedMetaForUrl,
   fieldLooksFilled,
   hydrateProfile,
+  looksLikeApplicationPage,
   mayAdvance,
   planPage,
   shouldBlockPage,
@@ -39,7 +40,9 @@ if (!window.__fillglen) {
 
 function boot() {
   const url = location.href;
-  const blocked = shouldBlockPage(url, document.body?.innerText?.slice(0, 2000) || "");
+  const pageText = document.body?.innerText?.slice(0, 2500) || "";
+  const blocked = shouldBlockPage(url, pageText);
+  const applyLike = looksLikeApplicationPage(url, pageText);
   const frameId = window === window.top ? "top" : `frame:${location.host}${location.pathname.slice(0, 40)}`;
 
   let port: chrome.runtime.Port | null = null;
@@ -169,6 +172,12 @@ function boot() {
       const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
+      if (
+        !looksLikeApplicationPage(location.href, document.body?.innerText?.slice(0, 2500) || "") &&
+        !/accounts\.google\.com/i.test(location.host)
+      ) {
+        return;
+      }
       if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
         return;
@@ -261,19 +270,30 @@ function boot() {
     if (r.keepApplying) startKeepLoop();
   });
 
-  if (window === window.top) mountFab();
+  let watching = false;
+  function watchPage() {
+    if (watching) return;
+    watching = true;
+    if (window === window.top) mountFab();
+    scan("full");
+    [200, 600, 1500, 3000].forEach((ms) => setTimeout(() => scan("full"), ms));
+    const obs = new MutationObserver(() => {
+      clearTimeout((obs as unknown as { t?: number }).t);
+      (obs as unknown as { t?: number }).t = window.setTimeout(() => {
+        scan("delta");
+        if (!paused) keepCycle().catch(() => {});
+      }, 120) as unknown as number;
+    });
+    obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
+  }
 
-  scan("full");
-  [200, 600, 1500, 3000, 6000].forEach((ms) => setTimeout(() => scan("full"), ms));
-
-  const obs = new MutationObserver(() => {
-    clearTimeout((obs as unknown as { t?: number }).t);
-    (obs as unknown as { t?: number }).t = window.setTimeout(() => {
-      scan("delta");
-      if (!paused) keepCycle().catch(() => {});
-    }, 120) as unknown as number;
+  if (applyLike) watchPage();
+  chrome.storage.local.get(["keepApplying"], (r) => {
+    if (r.keepApplying) watchPage();
   });
-  obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.keepApplying?.newValue) watchPage();
+  });
 
   document.addEventListener(
     "input",

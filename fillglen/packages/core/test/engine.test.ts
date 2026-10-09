@@ -25,6 +25,7 @@ import { scoreMatch } from "../src/matchScore.js";
 import { tailorResume } from "../src/tailor.js";
 import { buildAiPrompt, parseAiDraft } from "../src/ai.js";
 import { adapterFor, isSupportedApplyUrl } from "../src/adapters.js";
+import { isKnownAtsHost, looksLikeApplicationPage } from "../src/ats.js";
 import { bestSavedMatch, tokenSetRatio } from "../src/fuzzy.js";
 import { EMPTY_PROFILE, type Profile, type Question } from "../src/types.js";
 
@@ -340,9 +341,26 @@ describe("adapters", () => {
     assert.equal(adapterFor("https://acme.myworkdayjobs.com/en-US/careers")?.id, "workday");
     assert.equal(adapterFor("https://careers-acme.icims.com/jobs/1")?.id, "icims");
     assert.equal(adapterFor("https://jobs.smartrecruiters.com/acme/1")?.id, "smartrecruiters");
+    assert.equal(adapterFor("https://amc.taleo.net/careersection/jobdetail.ftl")?.id, "taleo");
+    assert.equal(adapterFor("https://career4.successfactors.com/career")?.id, "successfactors");
+    assert.equal(adapterFor("https://jobs.jobvite.com/acme/job/1")?.id, "jobvite");
+    assert.equal(adapterFor("https://acme.wd1.myworkdayjobs.com/en-US/Careers")?.id, "workday");
+    assert.equal(adapterFor("https://acme.wd12.myworkdaysite.com/en-US/Careers")?.id, "workday");
+    assert.equal(adapterFor("https://acme.avature.net/careers")?.id, "avature");
+    assert.equal(adapterFor("https://acme.paycomonline.net/v4/ats/web.php/jobs")?.id, "paycom");
+    assert.equal(adapterFor("https://acme.successfactors.eu/career")?.id, "successfactors");
+    assert.equal(adapterFor("https://performancemanager.sapsf.com/career")?.id, "successfactors");
+    assert.equal(adapterFor("https://www.usajobs.gov/job/1")?.id, "usajobs");
+    assert.equal(adapterFor("https://example.com/jobs/42/apply")?.id, "ats");
   });
   it("flags apply paths as supported", () => {
     assert.equal(isSupportedApplyUrl("https://example.com/jobs/42/apply"), true);
+    assert.equal(isKnownAtsHost("https://acme.wd5.myworkdayjobs.com/Careers"), true);
+    assert.equal(isKnownAtsHost("https://amc.taleo.net/careersection/2/jobdetail.ftl"), true);
+    assert.equal(isKnownAtsHost("https://acme.phenompeople.com/careers"), true);
+    assert.equal(looksLikeApplicationPage("https://acme.bamboohr.com/careers/12"), true);
+    assert.equal(looksLikeApplicationPage("https://jobs.dayforcehcm.com/en-US/acme/CANDIDATEPORTAL/job/1"), true);
+    assert.equal(looksLikeApplicationPage("https://www.linkedin.com/jobs/view/1"), false);
   });
 });
 
