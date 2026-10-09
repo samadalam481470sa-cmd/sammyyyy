@@ -22,7 +22,7 @@ import {
   isAuthChoiceScreen,
   hydrateProfile,
   hydrateSession,
-  bytesForUpload,
+  applyWidgetDocuments,
   fillPaceForPage,
   KEEP_COOLDOWN_MS,
   KEEP_DROPDOWN_SETTLE_MS,
@@ -56,7 +56,6 @@ import {
   type ScanSnapshot,
 } from "@fillglen/core";
 import {
-  attachFileToInput,
   clickAdvance,
   clickAppliedBefore,
   clickAuthGate,
@@ -398,7 +397,7 @@ function boot() {
         readyState: document.readyState,
         visibleFieldCount: visibleEarly,
         hasPassword: hasPasswordEarly,
-        hasFileInput: fileCount > 0,
+        hasFileInput: fileCount > 0 || /attach|enter manually|upload (your )?(resume|cv)/i.test(pageBlob),
         authButtonCount: authButtonsEarly.length,
         captcha: detectCaptcha(document),
         hasNext: advanceEarly?.kind === "next",
@@ -522,16 +521,10 @@ function boot() {
         return;
       }
       try {
-        const packed = bytesForUpload(profile);
-        const copy = new Uint8Array(packed.bytes.byteLength);
-        copy.set(packed.bytes);
-        const file = new File([copy], packed.name, { type: packed.mime });
-        for (const input of findFileInputs(document)) {
-          if (input.files && input.files.length) continue;
-          if (attachFileToInput(input, file)) {
-            stuckTicks = 0;
-            post({ type: "keep-status", status: "fill", url, detail: `uploaded ${packed.name}` });
-          }
+        const uploaded = await applyWidgetDocuments(document, profile);
+        if (uploaded.did) {
+          stuckTicks = 0;
+          post({ type: "keep-status", status: "fill", url, detail: uploaded.detail });
         }
       } catch {
         /* File/DataTransfer unavailable */

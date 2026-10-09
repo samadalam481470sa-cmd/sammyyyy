@@ -775,9 +775,7 @@ export function clickAppliedBefore(doc: Document, returning: boolean): "yes" | "
 export function findFileInputs(doc: Document): HTMLInputElement[] {
   return [...doc.querySelectorAll("input[type=file]")].filter((n) => {
     const el = n as HTMLInputElement;
-    if (el.disabled) return false;
-    const s = window.getComputedStyle(el);
-    return s.display !== "none";
+    return !el.disabled && el.type === "file";
   }) as HTMLInputElement[];
 }
 
@@ -786,8 +784,10 @@ export function attachFileToInput(el: HTMLInputElement, file: File): boolean {
     const dt = new DataTransfer();
     dt.items.add(file);
     el.files = dt.files;
+    el.dispatchEvent(new FocusEvent("focus", { bubbles: true }));
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
     return Boolean(el.files?.length);
   } catch {
     return false;

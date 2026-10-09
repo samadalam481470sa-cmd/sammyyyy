@@ -15,6 +15,7 @@ export * from "./finder.js";
 export * from "./applyLoop.js";
 export * from "./authGate.js";
 export * from "./resumeFiles.js";
+export * from "./resumeAttach.js";
 export * from "./screenAct.js";
 export * from "./dropdown.js";
 export * from "./fieldNoise.js";

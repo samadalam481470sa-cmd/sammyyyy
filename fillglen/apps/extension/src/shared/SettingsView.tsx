@@ -57,6 +57,10 @@ export function SettingsView({ onBack, lastAnalysis }: SettingsViewProps) {
       <h2 className="fg-settings-h">Rules it always keeps</h2>
       <ul className="fg-settings-ul">
         <li>Uses only your resume and the profile fields you typed.</li>
+        <li>
+          Resume/CV: attaches the widget PDF to hidden file inputs, or clicks Enter manually and pastes the
+          same resume text. It does not open Dropbox or Google Drive.
+        </li>
         <li>Opens dropdowns and clicks the matching option — it does not type into menus.</li>
         <li>A CAPTCHA waits for you. Fillglen never solves it.</li>
         <li>LinkedIn Easy Apply is blocked.</li>

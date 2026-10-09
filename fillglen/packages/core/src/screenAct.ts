@@ -18,7 +18,7 @@ const DETECTED =
 
 /** Never click these — money, logout, LinkedIn Easy Apply, destructive. */
 const NEVER =
-  /log ?out|sign ?out|delete (my )?account|close account|withdraw( application)?|cancel application|not interested|skip (this )?(company|job)|unsubscribe|report (job|user)|block (user|company)|unfollow|easy apply|share (on|via)|tweet|facebook|instagram|pinterest|delete resume|remove account|disable (keep|autofill)|donate|buy now|add to cart|pay now|credit card|checkout|place order|delete (job|listing)|trash|uninstall|remove (my )?(profile|resume)|deactivate/;
+  /log ?out|sign ?out|delete (my )?account|close account|withdraw( application)?|cancel application|not interested|skip (this )?(company|job)|unsubscribe|report (job|user)|block (user|company)|unfollow|easy apply|share (on|via)|tweet|facebook|instagram|pinterest|delete resume|remove account|disable (keep|autofill)|donate|buy now|add to cart|pay now|credit card|checkout|place order|delete (job|listing)|trash|uninstall|remove (my )?(profile|resume)|deactivate|dropbox|google drive|onedrive|one drive/;
 
 /**
  * Safe on-screen helpers that unblock the form. Auth gates (sign up / last
