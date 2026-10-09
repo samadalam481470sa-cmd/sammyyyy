@@ -357,13 +357,21 @@ function boot() {
     if (document.getElementById("fillglen-fab")) return;
     const root = document.createElement("div");
     root.id = "fillglen-fab";
-    root.style.cssText = "all:initial; position:fixed; bottom:20px; right:20px; z-index:2147483647;";
+    root.style.cssText =
+      "all:initial; position:fixed; bottom:20px; right:20px; z-index:2147483647; display:flex; gap:8px; align-items:center;";
+    const db = document.createElement("button");
+    db.textContent = "Database";
+    db.title = "Open Fillglen database in this extension";
+    db.style.cssText =
+      "height:44px;padding:0 14px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
+    db.addEventListener("click", () => post({ type: "open-panel-database" }));
     const btn = document.createElement("button");
     btn.textContent = "Fg";
     btn.title = "Open Fillglen live question window";
     btn.style.cssText =
       "width:44px;height:44px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
     btn.addEventListener("click", () => post({ type: "open-panel" }));
+    root.appendChild(db);
     root.appendChild(btn);
     document.documentElement.appendChild(root);
   }

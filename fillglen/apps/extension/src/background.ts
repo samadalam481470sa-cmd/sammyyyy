@@ -103,7 +103,10 @@ chrome.runtime.onConnect.addListener((port) => {
         );
         await pushState(tabId);
       }
-      if (msg.type === "open-panel") {
+      if (msg.type === "open-panel" || msg.type === "open-panel-database") {
+        if (msg.type === "open-panel-database") {
+          await chrome.storage.local.set({ panelTab: "database" });
+        }
         chrome.sidePanel.open({ tabId }).catch(() => {});
       }
     });

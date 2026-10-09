@@ -186,6 +186,10 @@ function Popup() {
   return (
     <div className="fg-root fg-popup">
       <Wordmark />
+      <button className="primary fg-db-go" onClick={() => persistUi({ view: "database" })}>
+        <strong>Database</strong>
+        <span>Opens in this extension · {dbTotal} stored</span>
+      </button>
       <p className="fg-lede">{status}</p>
 
       <div className="toolbar fg-actions">
@@ -197,10 +201,6 @@ function Popup() {
         </button>
         <span className="meta">{liveJobs.length} saved · {dbTotal} in this extension</span>
       </div>
-      <button className="primary fg-db-go" onClick={() => persistUi({ view: "database" })}>
-        <strong>Go to Database</strong>
-        <span>{dbTotal} stored in this extension — fetch here, not a website</span>
-      </button>
 
       <section className="fg-card fg-discover">
         <div className="fg-card-head">

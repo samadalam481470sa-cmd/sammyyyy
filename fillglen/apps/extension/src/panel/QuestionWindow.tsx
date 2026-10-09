@@ -118,6 +118,16 @@ export function QuestionWindow(props: QuestionWindowProps) {
     const onChange = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       if (area !== "local") return;
       if (Array.isArray(changes.liveJobs?.newValue)) setStoredLive(changes.liveJobs.newValue as ApplyQueueItem[]);
+      const nextTab = changes.panelTab?.newValue;
+      if (
+        nextTab === "all" ||
+        nextTab === "needs-you" ||
+        nextTab === "filled" ||
+        nextTab === "live" ||
+        nextTab === "database"
+      ) {
+        setTab(nextTab);
+      }
     };
     onChanged.addListener(onChange);
     return () => onChanged.removeListener(onChange);

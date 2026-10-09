@@ -16,6 +16,7 @@ export type ToBackground =
   | { type: "delta"; questions: Question[] }
   | { type: "typed"; questionId: string; value: string }
   | { type: "open-panel" }
+  | { type: "open-panel-database" }
   | { type: "create-application"; snapshot: ScanSnapshot }
   | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string };
 
