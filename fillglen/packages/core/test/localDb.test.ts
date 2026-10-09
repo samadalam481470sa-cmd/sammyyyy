@@ -155,6 +155,19 @@ describe("local database", () => {
     assert.ok(found.total >= 1);
   });
 
+  it("hides EEO and contact saved answers from Database browse", () => {
+    const eeo = answerRecord({ pattern: "gender identity", answer: "Male", tags: ["eeo"] });
+    const zip = answerRecord({ pattern: "zip code", answer: "75006", tags: ["contact"] });
+    const keep = answerRecord({ pattern: "how did you hear", answer: "Company careers page" });
+    const job = jobRecord({ url: "https://jobs.example/1", title: "SWE", company: "Acme" });
+    const all = queryRecords([eeo, zip, keep, job], { limit: 20 });
+    assert.equal(all.rows.some((r) => r.kind === "answer"), false);
+    assert.equal(all.rows[0].kind, "job");
+    const answers = queryRecords([eeo, zip, keep, job], { kind: "answer", limit: 20 });
+    assert.equal(answers.rows.length, 1);
+    assert.equal(answers.rows[0].title, "how did you hear");
+  });
+
   it("memory IndexedDB fallback upserts and queries", async () => {
     resetMemoryStore();
     await putLocalRecords([

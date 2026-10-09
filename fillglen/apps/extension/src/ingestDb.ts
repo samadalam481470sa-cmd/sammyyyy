@@ -56,7 +56,9 @@ export async function ingestFromStorage(extra: DbRecord[] = []): Promise<DbStats
   }
   const profile = stored.profile as Profile | undefined;
   for (const ans of profile?.answers || []) {
-    records.push(answerRecord(ans));
+    const row = answerRecord(ans);
+    if (row.kind === "answer" && (ans.tags?.includes("eeo") || ans.tags?.includes("contact"))) continue;
+    records.push(row);
   }
   await putLocalRecords(records);
   const stats = await localDbStats();

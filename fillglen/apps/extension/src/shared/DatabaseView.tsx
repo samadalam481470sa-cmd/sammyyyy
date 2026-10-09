@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { DbQueryResult, DbRecord, DbStats } from "@fillglen/core";
-import { EMPTY_DB_STATS, isDbKind, queryLocalStore } from "@fillglen/core";
+import { EMPTY_DB_STATS, isDbKind, isPrivateAnswerRecord, queryLocalStore } from "@fillglen/core";
 
-const KINDS = ["", "job", "employer", "application", "harvest", "event", "answer"] as const;
+const KINDS = ["", "job", "employer", "application", "harvest", "event"] as const;
 
 type ChromeLite = {
   storage?: {
@@ -100,7 +100,7 @@ export function DatabaseView({
     }
   }
 
-  const rows = result?.rows || [];
+  const rows = (result?.rows || []).filter((row) => row.kind !== "answer" && !isPrivateAnswerRecord(row));
   const total = result?.total ?? stats.total;
 
   return (

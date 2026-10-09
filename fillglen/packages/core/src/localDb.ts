@@ -359,12 +359,26 @@ export function dbStats(records: DbRecord[]): DbStats {
   return stats;
 }
 
+const PRIVATE_ANSWER =
+  /country code|zip code|gender identity|sexual orientation|race\/ethnicity|race ethnicity|veteran status|i have a disability|identify as transgender|first-generation professional|first generation/;
+
+/** EEO / contact library rows stay in the profile for autofill — they do not belong on the Database screen. */
+export function isPrivateAnswerRecord(row: Pick<DbRecord, "kind" | "title" | "text" | "meta">): boolean {
+  if (row.kind !== "answer") return false;
+  const tags = Array.isArray(row.meta?.tags) ? (row.meta.tags as string[]).join(" ") : "";
+  const blob = `${row.title} ${row.text} ${tags}`.toLowerCase();
+  if (/\beeo\b|\bcontact\b/.test(tags) || /\beeo\b/.test(blob)) return true;
+  return PRIVATE_ANSWER.test(blob);
+}
+
 function kindsOf(query: DbQuery): DbKind[] | null {
   if (!query.kind) return null;
   return Array.isArray(query.kind) ? query.kind : [query.kind];
 }
 
 function matches(row: DbRecord, query: DbQuery): boolean {
+  if (isPrivateAnswerRecord(row)) return false;
+  if (!query.kind && row.kind === "answer") return false;
   const kinds = kindsOf(query);
   if (kinds && !kinds.includes(row.kind)) return false;
   if (query.status && row.status !== query.status) return false;
