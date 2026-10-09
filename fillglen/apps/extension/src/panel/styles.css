@@ -63,6 +63,36 @@ button { background: var(--paper); border: 1px solid var(--line); border-radius:
 button.primary { background: var(--pine); color: var(--cream); border-color: var(--pine); }
 button.on { background: var(--ink); color: var(--cream); }
 button:disabled { opacity: 0.55; cursor: default; }
+.fg-bot-toggle {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: none;
+  background: var(--pine);
+  color: var(--cream);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 22px rgba(27, 58, 47, 0.22);
+  cursor: pointer;
+}
+.fg-bot-toggle span {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.88;
+}
+.fg-bot-toggle.fg-bot-on {
+  background: var(--clay);
+  box-shadow: 0 10px 22px rgba(184, 92, 56, 0.24);
+}
+.fg-bot-toggle:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 .banner { background: var(--sand); padding: 10px 12px; border-radius: 10px; }
 .banner.done { background: #dceade; }
 .empty { padding: 28px 8px; }

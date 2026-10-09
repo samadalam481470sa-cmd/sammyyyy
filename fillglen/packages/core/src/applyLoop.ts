@@ -1,16 +1,32 @@
 import { normalize, tokenSetRatio } from "./fuzzy.js";
 import { isFinalSubmitLabel, isStepAdvanceLabel } from "./submitGuard.js";
 
-/** Pick the dropdown / radio option that matches a profile answer. */
+/** Pick the dropdown / radio option that matches a profile answer (exact → phrase → fuzzy). */
 export function matchOption(value: string, options: string[]): string | null {
   if (!value || !options.length) return null;
   const n = normalize(value);
+  if (!n) return null;
   const cleaned = options.map((o) => o.trim()).filter(Boolean);
   const exact = cleaned.find((o) => normalize(o) === n);
   if (exact) return exact;
+  // Prefer options that start with the answer ("Male", "United States (+1)").
+  if (n.length >= 2) {
+    const starts = cleaned.find((o) => {
+      const on = normalize(o);
+      return on === n || on.startsWith(`${n} `) || on.startsWith(`${n}(`) || on.startsWith(`${n}+`);
+    });
+    if (starts) return starts;
+  }
+  // Whole-phrase hit inside a longer label ("South Asian (inclusive…)").
+  const phrase = cleaned.find((o) => ` ${normalize(o)} `.includes(` ${n} `));
+  if (phrase) return phrase;
   const contained = cleaned.find((o) => {
     const on = normalize(o);
-    return on.includes(n) || n.includes(on);
+    if (on.length < 2) return false;
+    if (n.length >= 3 && on.includes(n)) return true;
+    // Only let a short option swallow a long answer when the option is distinctive.
+    if (on.length >= 4 && n.includes(on)) return true;
+    return false;
   });
   if (contained) return contained;
   let best: { o: string; s: number } | null = null;
@@ -18,7 +34,8 @@ export function matchOption(value: string, options: string[]): string | null {
     const s = tokenSetRatio(o, value);
     if (!best || s > best.s) best = { o, s };
   }
-  return best && best.s >= 0.5 ? best.o : null;
+  const min = n.length <= 3 ? 0.86 : 0.62;
+  return best && best.s >= min ? best.o : null;
 }
 
 export function classifyAdvanceLabel(label: string): "next" | "submit" | null {

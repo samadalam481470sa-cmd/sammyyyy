@@ -26,11 +26,18 @@ export function includesNormalized(haystack: string, needle: string): boolean {
 export function bestSavedMatch(
   question: string,
   answers: { pattern: string; answer: string }[],
-  min = 0.5
+  min = 0.55
 ): { pattern: string; answer: string; score: number } | null {
   let best: { pattern: string; answer: string; score: number } | null = null;
+  const q = normalize(question);
   for (const item of answers) {
-    const score = Math.max(tokenSetRatio(question, item.pattern), includesNormalized(question, item.pattern) ? 0.9 : 0);
+    const pattern = normalize(item.pattern);
+    if (!pattern) continue;
+    const ratio = tokenSetRatio(question, item.pattern);
+    // Containment only when the pattern is specific enough to avoid wrong-field hits.
+    const contained =
+      pattern.length >= 6 && (` ${q} `.includes(` ${pattern} `) || q.includes(pattern)) ? 0.92 : 0;
+    const score = Math.max(ratio, contained);
     if (score >= min && (!best || score > best.score)) best = { ...item, score };
   }
   return best;

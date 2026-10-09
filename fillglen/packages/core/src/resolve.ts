@@ -1,3 +1,4 @@
+import { matchOption } from "./applyLoop.js";
 import { bestEffortAnswer, pickCitizenAnswer, pickCountryAnswer, pickDemographicOption } from "./answers.js";
 import { classifyAiBucket, isSelfId } from "./classify.js";
 import { bestSavedMatch } from "./fuzzy.js";
@@ -114,16 +115,38 @@ export function planFill(question: Question, profile: Profile): FillPlan {
       type: "password",
     };
   }
-  const saved = bestSavedMatch(question.label, profile.answers);
+  // Known field types: profile/self-id first so a loose Q&A pattern cannot mis-fill Name/Email.
+  if (isSelfId(question.type) || (question.type !== "unknown" && question.type !== "factual" && question.type !== "motivation" && question.type !== "behavioral")) {
+    const typed = valueForType(question.type, profile, question.options);
+    if (typed) {
+      const value =
+        question.options?.length && question.type !== "zip" && question.type !== "phone" && question.type !== "email"
+          ? matchOption(typed, question.options) || typed
+          : typed;
+      return {
+        questionId: question.id,
+        value,
+        source: "profile",
+        status: "filled",
+        confidence: "high",
+        type: question.type,
+      };
+    }
+  }
+
+  const saved = bestSavedMatch(question.label, profile.answers, question.type === "unknown" ? 0.62 : 0.55);
   if (saved) {
-    return {
-      questionId: question.id,
-      value: saved.answer,
-      source: "saved",
-      status: "filled",
-      confidence: saved.score >= 0.8 ? "high" : "check-this",
-      type: question.type,
-    };
+    const mapped = question.options?.length ? matchOption(saved.answer, question.options) : saved.answer;
+    if (mapped || !question.options?.length) {
+      return {
+        questionId: question.id,
+        value: mapped || saved.answer,
+        source: "saved",
+        status: "filled",
+        confidence: saved.score >= 0.8 ? "high" : "check-this",
+        type: question.type,
+      };
+    }
   }
 
   if (isSelfId(question.type)) {

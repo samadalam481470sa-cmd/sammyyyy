@@ -32,8 +32,8 @@ export interface QuestionWindowProps {
   onInsertDraft: (id: string, text: string) => void;
   onPopout?: () => void;
   onEdit: (id: string, value: string) => void;
-  onStartKeep?: () => void;
-  onStopKeep?: () => void;
+  onStartKeep: () => void;
+  onStopKeep: () => void;
   liveJobs?: ApplyQueueItem[];
   onOpenLiveJob?: (url: string) => void;
 }
@@ -263,19 +263,23 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <i style={{ width: `${questions.length ? (answered / questions.length) * 100 : 0}%` }} />
         </div>
       </div>
+      <button
+        type="button"
+        className={`fg-bot-toggle${props.keepApplying ? " fg-bot-on" : ""}`}
+        disabled={props.paused && !props.keepApplying}
+        onClick={() => {
+          if (props.keepApplying) props.onStopKeep();
+          else props.onStartKeep();
+        }}
+      >
+        {props.keepApplying ? "Pause auto bot" : "Start auto bot"}
+        <span>{props.keepApplying ? "Running 24/7 — click to pause" : "Fill, submit, next listing — one button"}</span>
+      </button>
       <div className="toolbar">
         <button className="primary" onClick={props.onFillPage} disabled={props.paused}>
           Fill this step
         </button>
-        {props.keepApplying ? (
-          <button onClick={props.onStopKeep}>Stop keep applying</button>
-        ) : (
-          <button className="primary" onClick={props.onStartKeep} disabled={props.paused}>
-            Autofill & keep applying
-          </button>
-        )}
         <button onClick={() => props.onUndo()}>Undo page</button>
-        <button onClick={props.onPause}>{props.paused ? "Resume site" : "Pause this site"}</button>
         {props.onPopout && !props.popout ? <button onClick={props.onPopout}>Pop out</button> : null}
         <button className="primary" onClick={() => setTabPersist("live")}>
           Live jobs

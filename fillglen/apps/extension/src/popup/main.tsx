@@ -200,9 +200,49 @@ function Popup() {
     );
   }
 
+  async function toggleAutoBot() {
+    if (keepBusy) return;
+    if (keepApplying) {
+      setKeepBusy(true);
+      await chrome.runtime.sendMessage({ type: "stop-keep-applying" });
+      setKeepApplying(false);
+      setKeepBusy(false);
+      persistUi({ status: "Paused. Click Resume auto bot when you want it to keep applying again." });
+      return;
+    }
+    if (!profile.contact.legalName && !paste && !profile.documents.length) {
+      persistUi({ status: "Paste or upload a resume first." });
+      return;
+    }
+    if (paste && !profile.contact.email) {
+      const parsed = hydrateProfile(parseResumeText(paste));
+      save({ ...parsed, rawResumeText: paste, documents: profile.documents });
+    }
+    setKeepBusy(true);
+    await chrome.runtime.sendMessage({ type: "start-keep-applying" });
+    setKeepApplying(true);
+    await refreshQueue();
+    setKeepBusy(false);
+    persistUi({
+      status:
+        "Auto bot is on 24/7 while Chrome is open. It opens dropdowns and clicks the right answers from your resume, submits, then opens the next listing.",
+    });
+  }
+
   return (
     <div className="fg-root fg-popup">
       <Wordmark />
+      <button
+        type="button"
+        className={`fg-bot-toggle${keepApplying ? " fg-bot-on" : ""}`}
+        disabled={keepBusy}
+        onClick={() => {
+          toggleAutoBot().catch(() => setKeepBusy(false));
+        }}
+      >
+        {keepBusy ? "Working…" : keepApplying ? "Pause auto bot" : "Start auto bot"}
+        <span>{keepApplying ? "Running 24/7 — click to pause" : "Fill, submit, next listing — one button"}</span>
+      </button>
       <button className="primary fg-db-go" onClick={() => persistUi({ view: "database" })}>
         <strong>Database</strong>
         <span>Opens in this extension · {dbTotal} stored</span>
@@ -324,6 +364,20 @@ function Popup() {
             />
           </label>
           <label>
+            Zip
+            <input
+              value={profile.contact.zip}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, zip: e.target.value } })}
+            />
+          </label>
+          <label>
+            Country
+            <input
+              value={profile.contact.country}
+              onChange={(e) => save({ ...profile, contact: { ...profile.contact, country: e.target.value } })}
+            />
+          </label>
+          <label>
             LinkedIn
             <input
               value={profile.contact.linkedin}
@@ -332,51 +386,6 @@ function Popup() {
           </label>
         </div>
       </section>
-
-      <div className="toolbar fg-actions">
-        <button
-          className="primary"
-          disabled={keepBusy}
-          onClick={async () => {
-            if (!profile.contact.legalName && !paste && !profile.documents.length) {
-              persistUi({ status: "Paste or upload a resume first." });
-              return;
-            }
-            if (paste && !profile.contact.email) {
-              const parsed = hydrateProfile(parseResumeText(paste));
-              save({ ...parsed, rawResumeText: paste, documents: profile.documents });
-            }
-            setKeepBusy(true);
-            await chrome.runtime.sendMessage({ type: "start-keep-applying" });
-            setKeepApplying(true);
-            await refreshQueue();
-            setKeepBusy(false);
-            persistUi({
-              status:
-                "Keep applying is on 24/7 while Chrome is open. It fills, signs up or uses last resume, saves logins to Chrome, submits, then opens the next listing. Unknown questions use the resume, or No.",
-            });
-          }}
-        >
-          Autofill & keep applying
-        </button>
-        <button
-          onClick={async () => {
-            await chrome.runtime.sendMessage({ type: "stop-keep-applying" });
-            setKeepApplying(false);
-            persistUi({ status: "Stopped. Live jobs stay saved." });
-          }}
-        >
-          Stop
-        </button>
-        <button
-          onClick={async () => {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab?.id) chrome.sidePanel.open({ tabId: tab.id });
-          }}
-        >
-          Open live window
-        </button>
-      </div>
 
       <section className="fg-card">
         <div className="fg-card-head">
@@ -411,10 +420,9 @@ function Popup() {
 
       <p className="meta fg-foot-note">
         {keepApplying
-          ? "Keep applying is on 24/7 while Chrome is open — it fills from your saved profile, clicks the application screen, submits, and opens the next listing."
-          : "Keep applying is off."}{" "}
-        Switching tabs saves listings, typed answers, keep
-        applying, and this window.
+          ? "Auto bot is on — use the big Pause button above to stop."
+          : "Auto bot is paused — use the big Start button above to resume."}{" "}
+        Switching tabs saves listings, typed answers, and this window.
         {savedAt ? ` Last saved ${new Date(savedAt).toLocaleTimeString()}.` : " Nothing saved yet this session."}
         {lastJob ? ` Last job ${lastJob}.` : ""} Database is a button in this same window — it does not open another
         site. Unknown form questions use the resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy
