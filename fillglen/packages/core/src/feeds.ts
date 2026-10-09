@@ -13,30 +13,46 @@ import type { ApplyQueueItem } from "./applyLoop.js";
 import type { EmployerRecord } from "./finder.js";
 import { rankJobsForResume, resumeSearchHints } from "./resumeMatch.js";
 import type { Profile } from "./types.js";
+import { fetchDeepSearchJobs } from "./deepSearch.js";
+import { fetchGovernmentJobsBoard, fetchUsaJobsPublic, looksLikeBogusJob, looksLikeGovItRole } from "./govJobs.js";
 
 /**
  * Pull public ATS feeds for the built-in employer seed plus map-discovered companies.
+ * Also runs the extra government / public-records layer. Failures there never drop the seed queue.
  * Runs in the extension so keep-applying does not need the 24/7 API.
  */
 export async function fetchBuiltInJobQueue(
   limit = 100,
-  opts?: { profile?: Profile | null; extraEmployers?: EmployerRecord[] }
+  opts?: {
+    profile?: Profile | null;
+    extraEmployers?: EmployerRecord[];
+    onDeepLayer?: (info: { employers: EmployerRecord[]; gov: number; records: number }) => void | Promise<void>;
+  }
 ): Promise<ApplyQueueItem[]> {
   const hints = resumeSearchHints(opts?.profile);
   const settled = await Promise.all(
     seedEmployers(opts?.extraEmployers || []).map((emp) => fetchEmployerBoardJobs(emp).catch(() => [] as ApplyQueueItem[]))
   );
-  const items = settled.flat();
+  const deep = await fetchDeepSearchJobs(limit).catch(() => ({
+    jobs: [] as ApplyQueueItem[],
+    employers: [] as EmployerRecord[],
+    gov: 0,
+    records: 0,
+  }));
+  if (opts?.onDeepLayer) {
+    await opts.onDeepLayer({ employers: deep.employers, gov: deep.gov, records: deep.records });
+  }
+  const items = [...settled.flat(), ...deep.jobs];
   const expanded = expandTitles(hints.titles);
   const niche = hints.keywords.map(normalize);
   const filtered = items.filter((j) => {
-    if (!j.url || isBlockedJobUrl(j.url)) return false;
+    if (!j.url || isBlockedJobUrl(j.url) || looksLikeBogusJob(j)) return false;
     const loc = j.location || "";
     if (loc && isNonUsLocation(loc)) return false;
     const n = normalize(j.title);
     const titleHit = titleRelevance(j.title, [...hints.titles, ...expanded]) >= 0.45;
     const nicheHit = niche.some((k) => k.length > 2 && (n.includes(k) || normalize(j.company).includes(k)));
-    return titleHit || nicheHit || looksLikeItRole(j.title);
+    return titleHit || nicheHit || looksLikeItRole(j.title) || looksLikeGovItRole(j.title);
   });
   const ranked = rankJobsForResume(filtered, opts?.profile);
   ranked.sort((a, b) => {
@@ -164,6 +180,16 @@ export async function fetchEmployerBoardJobs(employer: EmployerRecord): Promise<
         source: "recruitee",
         location: j.location,
       }));
+  }
+  if (employer.board === "governmentjobs") {
+    return fetchGovernmentJobsBoard(employer);
+  }
+  if (employer.board === "usajobs") {
+    const batches = await Promise.all([
+      fetchUsaJobsPublic("information technology", "Texas"),
+      fetchUsaJobsPublic("IT specialist", employer.hqHint || "Dallas, Texas"),
+    ]);
+    return batches.flat();
   }
   return [];
 }

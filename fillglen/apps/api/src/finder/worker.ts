@@ -16,7 +16,7 @@ async function cycle() {
   const fetch = await runFetch({ includeUsa: true, includeAdzuna: true });
   const recheck = await recheckOpen();
   console.log(
-    `Fillglen finder: fetched=${fetch.fetched} stored=${fetch.stored} closed=${recheck.closed} maps=${maps?.companiesSeen ?? 0}`
+    `Fillglen finder: fetched=${fetch.fetched} stored=${fetch.stored} closed=${recheck.closed} maps=${maps?.companiesSeen ?? 0} (includes government boards and public filings)`
   );
   archiveFinderCycle({
     fetched: fetch.fetched,

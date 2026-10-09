@@ -616,9 +616,30 @@ async function rebuildQueue(): Promise<ApplyQueueItem[]> {
   const lookup = (finderMatches?.lookup || finderMatches?.top || []) as ApplyQueueItem[];
   let builtIn: ApplyQueueItem[] = [];
   try {
-    builtIn = await fetchBuiltInJobQueue(100, {
+        builtIn = await fetchBuiltInJobQueue(100, {
       profile: hydrateProfile((profile as Profile) || EMPTY_PROFILE),
       extraEmployers: (discoveredEmployers as EmployerRecord[]) || [],
+      onDeepLayer: async ({ employers: rows, gov, records }) => {
+        const stored = await chrome.storage.local.get(["discoveredEmployers", "discoverStatus"]);
+        const existing = (stored.discoveredEmployers as EmployerRecord[]) || [];
+        const known = new Set(existing.map((e) => e.company.toLowerCase()));
+        const merged = [...existing];
+        for (const rec of rows) {
+          if (!rec?.company || known.has(rec.company.toLowerCase())) continue;
+          known.add(rec.company.toLowerCase());
+          merged.push(rec);
+        }
+        const status = stored.discoverStatus || {};
+        await chrome.storage.local.set({
+          discoveredEmployers: merged.slice(-400),
+          discoverStatus: {
+            ...status,
+            govJobs: gov,
+            recordsCompanies: (status.recordsCompanies || 0) + records,
+            lastAt: new Date().toISOString(),
+          },
+        });
+      },
     });
   } catch {
     builtIn = [];

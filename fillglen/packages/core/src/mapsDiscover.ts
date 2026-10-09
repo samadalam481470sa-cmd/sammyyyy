@@ -29,6 +29,8 @@ export interface DiscoverStatus {
   companiesSeen: number;
   sitesChecked: number;
   mappedFeeds: number;
+  govJobs?: number;
+  recordsCompanies?: number;
   lastTile?: string;
   lastAt?: string;
   note: string;
@@ -40,6 +42,8 @@ export const EMPTY_DISCOVER: DiscoverStatus = {
   companiesSeen: 0,
   sitesChecked: 0,
   mappedFeeds: 0,
+  govJobs: 0,
+  recordsCompanies: 0,
   note: "Map discovery is off. Turn on Autofill & keep applying, or leave the Fillglen API running.",
 };
 
@@ -267,9 +271,11 @@ export function nextDiscoverStatus(prev: DiscoverStatus, patch: Partial<Discover
 }
 
 export function discoverNote(status: DiscoverStatus): string {
+  const gov = status.govJobs || 0;
+  const rec = status.recordsCompanies || 0;
   return `Texas map scan: ${status.companiesSeen} companies seen, ${status.sitesChecked} career sites checked, ${status.mappedFeeds} public job feeds mapped${
     status.lastTile ? ` · last area ${status.lastTile}` : ""
-  }. Not every business in Texas is on a public map. Google Maps is not scraped.`;
+  }. Extra research: ${gov} government postings, ${rec} companies from public filings/directories. Not every business in Texas is on a public map. Google Maps is not scraped.`;
 }
 
 export async function fetchOverpassTile(

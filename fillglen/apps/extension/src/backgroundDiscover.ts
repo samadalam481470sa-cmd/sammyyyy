@@ -1,6 +1,7 @@
 import {
   EMPTY_DISCOVER,
   TEXAS_MAP_TILES,
+  discoverDirectoryEmployers,
   discoverNote,
   fetchOverpassTile,
   inspectCompanyCareers,
@@ -80,8 +81,20 @@ export async function runDiscoverTick(): Promise<DiscoverStatus> {
       known.add(rec.company.toLowerCase());
       if (rec.slug) status = nextDiscoverStatus(status, { mappedFeeds: status.mappedFeeds + 1 });
     }
+    const fromDirs = await discoverDirectoryEmployers(fetchHtml).catch(() => [] as EmployerRecord[]);
+    const extra = fromDirs;
+    for (const rec of extra) {
+      if (known.has(rec.company.toLowerCase())) continue;
+      employers.push(rec);
+      known.add(rec.company.toLowerCase());
+      if (rec.slug) status = nextDiscoverStatus(status, { mappedFeeds: status.mappedFeeds + 1 });
+    }
     if (employers.length > 400) employers = employers.slice(-400);
-    status = nextDiscoverStatus(status, { running: true });
+    status = nextDiscoverStatus(status, {
+      running: true,
+      govJobs: status.govJobs || 0,
+      recordsCompanies: (status.recordsCompanies || 0) + extra.length,
+    });
     const stored = { ...status, note: discoverNote(status) };
     await chrome.storage.local.set({ discoverStatus: stored, discoveredEmployers: employers });
     return stored;

@@ -219,7 +219,7 @@ function Popup() {
 
       <section className="fg-card fg-discover">
         <div className="fg-card-head">
-          <strong>Texas map scan</strong>
+          <strong>Texas map + government research</strong>
           <span>{keepApplying ? "Running while this widget is on" : "Scanning in the background"}</span>
         </div>
         <p className="meta">{discover.note || EMPTY_DISCOVER.note}</p>
@@ -233,12 +233,12 @@ function Popup() {
             <span>Career sites</span>
           </div>
           <div>
-            <em>{liveJobs.length}</em>
-            <span>Live jobs</span>
+            <em>{discover.govJobs || 0}</em>
+            <span>Gov jobs</span>
           </div>
           <div>
-            <em>{dbTotal}</em>
-            <span>Database</span>
+            <em>{discover.recordsCompanies || 0}</em>
+            <span>Filings</span>
           </div>
         </div>
       </section>

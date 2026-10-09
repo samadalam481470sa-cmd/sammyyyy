@@ -16,6 +16,7 @@ export type BoardKind =
   | "ashby"
   | "smartrecruiters"
   | "usajobs"
+  | "governmentjobs"
   | "adzuna"
   | "taleo"
   | "successfactors"
@@ -153,6 +154,12 @@ export function detectBoardFromCareersUrl(url: string): { board: BoardKind; slug
     if (host.endsWith("jobvite.com") && parts[0]) return { board: "jobvite", slug: parts[0] };
     if (host.endsWith("workable.com") && parts[0]) return { board: "workable", slug: parts[0] };
     if (host.endsWith("recruitee.com")) return { board: "recruitee", slug: host.split(".")[0] };
+    if (host.endsWith("governmentjobs.com")) {
+      const idx = parts.indexOf("careers");
+      const slug = (idx >= 0 ? parts[idx + 1] : parts[0]) || "";
+      if (slug) return { board: "governmentjobs", slug };
+    }
+    if (host.endsWith("usajobs.gov")) return { board: "usajobs", slug: "usajobs" };
     return null;
   } catch {
     return null;
@@ -223,7 +230,7 @@ export function isNonUsLocation(text: string): boolean {
 }
 
 const IT_TITLE =
-  /\b(software|developer|programmer|sysadmin|systems analyst|systems administrator|cyber|security engineer|information (technology|security|systems)|it (support|systems|analyst|specialist|technician|coordinator|operations|engineer|manager)|help desk|desktop support|network engineer|site reliability|\bsre\b|devops|cloud engineer|data engineer|data analyst|database administrator|\bdba\b|qa engineer|\bsdet\b|platform engineer|infrastructure engineer|full[- ]stack|frontend|backend|machine learning|ml engineer|ai engineer|application engineer|service desk|end user support|\bit\b|\binfosec\b)\b/i;
+  /\b(software|developer|programmer|sysadmin|systems analyst|systems administrator|cyber|security engineer|information (technology|security|systems)|it (support|systems|analyst|specialist|technician|coordinator|operations|engineer|manager)|help desk|desktop support|network engineer|site reliability|\bsre\b|devops|cloud engineer|data engineer|data analyst|database administrator|\bdba\b|qa engineer|\bsdet\b|platform engineer|infrastructure engineer|full[- ]stack|frontend|backend|machine learning|ml engineer|ai engineer|application engineer|service desk|end user support|it specialist|computer scientist|gis analyst|applications developer|\bit\b|\binfosec\b)\b/i;
 
 /** Conservative IT / software title check used to keep the built-in queue on-role. */
 export function looksLikeItRole(title: string): boolean {
@@ -284,7 +291,9 @@ export function tooSenior(inferred: ExperienceLevel | "unknown", target: Experie
 export function warningSigns(listing: CanonicalListing): string[] {
   const w: string[] = [];
   if (!listing.company || /confidential|unlisted/i.test(listing.company)) w.push("No company name");
-  if (/wire money|pay a fee|training fee|whatsapp/i.test(listing.description)) w.push("Payment or off-platform request");
+  if (/wire money|pay a fee|training fee|whatsapp|telegram|crypto pump|make \$\d+ a day/i.test(listing.description)) {
+    w.push("Payment or off-platform request");
+  }
   const first = Date.parse(listing.firstSeenAt);
   const posted = listing.postedAt ? Date.parse(listing.postedAt) : first;
   if (Number.isFinite(posted) && Date.now() - posted > 1000 * 60 * 60 * 24 * 90) w.push("Reposted or open for months");

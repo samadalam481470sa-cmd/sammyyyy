@@ -10,6 +10,8 @@ import {
   ruleScore,
   scoreCacheKey,
   DEFAULT_SEARCH,
+  fetchDeepSearchJobs,
+  queueItemToListing,
   seedEmployers,
   settingsFromResume,
   type CanonicalListing,
@@ -38,6 +40,24 @@ function employers(): EmployerRecord[] {
 
 export function getCoverage(metro = "dfw") {
   return coverage(employers(), seedEmployers(), metro);
+}
+
+function upsertEmployer(rec: EmployerRecord) {
+  const hit = db.find(
+    "employers",
+    (e) => e.company === rec.company && (e.slug === rec.slug || e.careersUrl === rec.careersUrl)
+  );
+  if (hit) {
+    if (rec.slug && (!hit.slug || hit.board === "unknown")) {
+      db.update(
+        "employers",
+        (e) => e.company === rec.company && e.careersUrl === hit.careersUrl,
+        rec as unknown as Record<string, unknown>
+      );
+    }
+    return;
+  }
+  db.insert("employers", rec as unknown as Record<string, unknown>);
 }
 
 export function upsertListing(incoming: CanonicalListing) {
@@ -89,6 +109,19 @@ export async function runFetch(opts: { includeUsa?: boolean; includeAdzuna?: boo
     ] as const) {
       all.push(...(await fetchAdzuna(what, where)));
     }
+  }
+  try {
+    const deep = await fetchDeepSearchJobs(80);
+    for (const job of deep.jobs) {
+      try {
+        all.push(queueItemToListing(job));
+      } catch {
+        /* skip rows that fail the real-listing gate */
+      }
+    }
+    for (const emp of deep.employers) upsertEmployer(emp);
+  } catch {
+    /* extra research layer is optional */
   }
   const unique = dedupeListings(all);
   const seenIds = new Set(unique.map((u) => u.id));

@@ -185,6 +185,7 @@ describe("employer mapping", () => {
     assert.deepEqual(detectBoardFromCareersUrl("https://jobs.ashbyhq.com/acme"), { board: "ashby", slug: "acme" });
     assert.equal(detectBoardFromCareersUrl("https://apply.workable.com/acme")?.board, "workable");
     assert.equal(detectBoardFromCareersUrl("https://acme.wd5.myworkdaysite.com/careers")?.board, "workday");
+    assert.equal(detectBoardFromCareersUrl("https://www.governmentjobs.com/careers/dallas")?.board, "governmentjobs");
   });
   it("reports DFW coverage honestly", () => {
     const c = coverage(seedEmployers(), seedEmployers(), "dfw");

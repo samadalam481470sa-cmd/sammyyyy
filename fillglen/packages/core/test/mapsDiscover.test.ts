@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  EMPTY_DISCOVER,
   TEXAS_MAP_TILES,
   commonCareerPaths,
   detectAtsInHtml,
+  discoverNote,
   extractCareerLinks,
   googlePlacesQuery,
   looksLikeItCompany,
@@ -36,6 +38,11 @@ describe("Texas map tiles", () => {
   });
   it("writes a Places text query for the tile", () => {
     assert.match(googlePlacesQuery(TEXAS_MAP_TILES[1]), /Austin/);
+  });
+  it("mentions the extra government and filings layer in the scan note", () => {
+    const note = discoverNote({ ...EMPTY_DISCOVER, companiesSeen: 2, govJobs: 5, recordsCompanies: 3 });
+    assert.match(note, /government postings/);
+    assert.match(note, /filings/);
   });
 });
 

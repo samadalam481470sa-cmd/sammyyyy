@@ -1,0 +1,234 @@
+{
+  "notes": "Texas and nearby local-government career boards plus public directories. Jobs are pulled from the live board, never invented. Federal roles come from USAJOBS when the feed answers.",
+  "jobBoards": [
+    {
+      "company": "City of Dallas",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/dallas",
+      "board": "governmentjobs",
+      "slug": "dallas",
+      "sourceKind": "city-government",
+      "hqHint": "Dallas, TX"
+    },
+    {
+      "company": "City of Fort Worth",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/fortworth",
+      "board": "governmentjobs",
+      "slug": "fortworth",
+      "sourceKind": "city-government",
+      "hqHint": "Fort Worth, TX"
+    },
+    {
+      "company": "City of Arlington",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/arlingtontx",
+      "board": "governmentjobs",
+      "slug": "arlingtontx",
+      "sourceKind": "city-government",
+      "hqHint": "Arlington, TX"
+    },
+    {
+      "company": "City of Plano",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/plano",
+      "board": "governmentjobs",
+      "slug": "plano",
+      "sourceKind": "city-government",
+      "hqHint": "Plano, TX"
+    },
+    {
+      "company": "City of Irving",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/irving",
+      "board": "governmentjobs",
+      "slug": "irving",
+      "sourceKind": "city-government",
+      "hqHint": "Irving, TX"
+    },
+    {
+      "company": "City of Frisco",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/frisco",
+      "board": "governmentjobs",
+      "slug": "frisco",
+      "sourceKind": "city-government",
+      "hqHint": "Frisco, TX"
+    },
+    {
+      "company": "City of McKinney",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/mckinney",
+      "board": "governmentjobs",
+      "slug": "mckinney",
+      "sourceKind": "city-government",
+      "hqHint": "McKinney, TX"
+    },
+    {
+      "company": "City of Denton",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/denton",
+      "board": "governmentjobs",
+      "slug": "denton",
+      "sourceKind": "city-government",
+      "hqHint": "Denton, TX"
+    },
+    {
+      "company": "City of Garland",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/garland",
+      "board": "governmentjobs",
+      "slug": "garland",
+      "sourceKind": "city-government",
+      "hqHint": "Garland, TX"
+    },
+    {
+      "company": "City of Carrollton",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/cityofcarrollton",
+      "board": "governmentjobs",
+      "slug": "cityofcarrollton",
+      "sourceKind": "city-government",
+      "hqHint": "Carrollton, TX"
+    },
+    {
+      "company": "City of Richardson",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/richardson",
+      "board": "governmentjobs",
+      "slug": "richardson",
+      "sourceKind": "city-government",
+      "hqHint": "Richardson, TX"
+    },
+    {
+      "company": "City of Austin",
+      "metro": "austin",
+      "careersUrl": "https://www.governmentjobs.com/careers/austintexas",
+      "board": "governmentjobs",
+      "slug": "austintexas",
+      "sourceKind": "city-government",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "City of Houston",
+      "metro": "houston",
+      "careersUrl": "https://www.governmentjobs.com/careers/houston",
+      "board": "governmentjobs",
+      "slug": "houston",
+      "sourceKind": "city-government",
+      "hqHint": "Houston, TX"
+    },
+    {
+      "company": "City of San Antonio",
+      "metro": "san-antonio",
+      "careersUrl": "https://www.governmentjobs.com/careers/sanantonio",
+      "board": "governmentjobs",
+      "slug": "sanantonio",
+      "sourceKind": "city-government",
+      "hqHint": "San Antonio, TX"
+    },
+    {
+      "company": "City of El Paso",
+      "metro": "texas",
+      "careersUrl": "https://www.governmentjobs.com/careers/elpaso",
+      "board": "governmentjobs",
+      "slug": "elpaso",
+      "sourceKind": "city-government",
+      "hqHint": "El Paso, TX"
+    },
+    {
+      "company": "City of Lubbock",
+      "metro": "texas",
+      "careersUrl": "https://www.governmentjobs.com/careers/lubbock",
+      "board": "governmentjobs",
+      "slug": "lubbock",
+      "sourceKind": "city-government",
+      "hqHint": "Lubbock, TX"
+    },
+    {
+      "company": "Travis County",
+      "metro": "austin",
+      "careersUrl": "https://www.governmentjobs.com/careers/traviscounty",
+      "board": "governmentjobs",
+      "slug": "traviscounty",
+      "sourceKind": "county-government",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "Tarrant County",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/tarrantcounty",
+      "board": "governmentjobs",
+      "slug": "tarrantcounty",
+      "sourceKind": "county-government",
+      "hqHint": "Fort Worth, TX"
+    },
+    {
+      "company": "Collin County",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/collincounty",
+      "board": "governmentjobs",
+      "slug": "collincounty",
+      "sourceKind": "county-government",
+      "hqHint": "McKinney, TX"
+    },
+    {
+      "company": "Denton County",
+      "metro": "dfw",
+      "careersUrl": "https://www.governmentjobs.com/careers/dentoncounty",
+      "board": "governmentjobs",
+      "slug": "dentoncounty",
+      "sourceKind": "county-government",
+      "hqHint": "Denton, TX"
+    },
+    {
+      "company": "Harris County",
+      "metro": "houston",
+      "careersUrl": "https://www.governmentjobs.com/careers/harriscountytx",
+      "board": "governmentjobs",
+      "slug": "harriscountytx",
+      "sourceKind": "county-government",
+      "hqHint": "Houston, TX"
+    },
+    {
+      "company": "Bexar County",
+      "metro": "san-antonio",
+      "careersUrl": "https://www.governmentjobs.com/careers/bexarcounty",
+      "board": "governmentjobs",
+      "slug": "bexarcounty",
+      "sourceKind": "county-government",
+      "hqHint": "San Antonio, TX"
+    },
+    {
+      "company": "USAJOBS",
+      "metro": "texas",
+      "careersUrl": "https://www.usajobs.gov/Search/Results?k=information%20technology&l=texas",
+      "board": "usajobs",
+      "slug": "usajobs",
+      "sourceKind": "federal-government",
+      "hqHint": "United States"
+    }
+  ],
+  "directories": [
+    {
+      "name": "City of Dallas economic development",
+      "url": "https://www.dallas-ecodev.org/",
+      "metro": "dfw"
+    },
+    {
+      "name": "Austin economic development",
+      "url": "https://www.austintexas.gov/department/economic-development",
+      "metro": "austin"
+    },
+    {
+      "name": "Houston economic development",
+      "url": "https://www.houstontx.gov/ecodev/",
+      "metro": "houston"
+    },
+    {
+      "name": "San Antonio economic development",
+      "url": "https://www.saedf.org/",
+      "metro": "san-antonio"
+    }
+  ]
+}

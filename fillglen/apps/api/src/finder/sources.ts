@@ -2,8 +2,11 @@ import {
   assertRealListing,
   classifyWorkMode,
   detectBoardFromCareersUrl,
+  fetchGovernmentJobsBoard,
+  fetchUsaJobsPublic,
   geocodeLocation,
   isBlockedJobUrl,
+  queueItemToListing,
   remoteWhereText,
   type BoardKind,
   type CanonicalListing,
@@ -26,6 +29,16 @@ export async function fetchEmployerFeed(employer: EmployerRecord): Promise<Canon
   if (employer.board === "smartrecruiters") return fetchSmartRecruiters(employer);
   if (employer.board === "workable") return fetchWorkable(employer);
   if (employer.board === "recruitee") return fetchRecruitee(employer);
+  if (employer.board === "governmentjobs") {
+    return (await fetchGovernmentJobsBoard(employer)).map((j) => queueItemToListing(j, employer.metro || "texas"));
+  }
+  if (employer.board === "usajobs") {
+    const batches = await Promise.all([
+      fetchUsaJobsPublic("information technology", "Texas"),
+      fetchUsaJobsPublic("IT specialist", "Dallas, Texas"),
+    ]);
+    return batches.flat().map((j) => queueItemToListing(j, employer.metro || "texas"));
+  }
   return [];
 }
 
