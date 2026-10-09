@@ -37,6 +37,7 @@ export default defineManifest({
     "https://*.icims.com/*",
     "https://*.myworkdayjobs.com/*",
     "https://*.workday.com/*",
+    "https://accounts.google.com/*",
   ],
   content_scripts: [
     {
@@ -50,6 +51,12 @@ export default defineManifest({
         "https://*.workday.com/*",
       ],
       js: ["src/content/index.ts"],
+      run_at: "document_end",
+      all_frames: true,
+    },
+    {
+      matches: ["https://accounts.google.com/*"],
+      js: ["src/content/googleAccount.ts"],
       run_at: "document_end",
       all_frames: true,
     },

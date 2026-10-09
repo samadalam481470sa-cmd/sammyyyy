@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import {
+  applicationStats,
+  isGoogleSignInLabel,
+  pickDemographicOption,
+  titleRelevance,
+} from "../src/answers.js";
 import { classifyQuestion, classifyAiBucket, isSelfId, neverSendToAi } from "../src/classify.js";
 import { planFill, valueForType } from "../src/resolve.js";
 import { shouldBlockPage, isLinkedInEasyApply } from "../src/linkedin.js";
@@ -87,7 +93,10 @@ describe("classify rules", () => {
   });
   it("maps self-id gender/race/veteran/disability", () => {
     assert.equal(classifyQuestion({ label: "Gender" }).type, "gender");
+    assert.equal(classifyQuestion({ label: "What is your Sex?" }).type, "gender");
     assert.equal(classifyQuestion({ label: "Race / ethnicity" }).type, "race");
+    assert.equal(classifyQuestion({ label: "Yes, I have read and consent to the terms and conditions" }).type, "consent");
+    assert.equal(classifyQuestion({ label: "Are you a US citizen?" }).type, "citizenship");
     assert.equal(classifyQuestion({ label: "Protected veteran status" }).type, "veteran");
     assert.equal(classifyQuestion({ label: "Disability status" }).type, "disability");
   });
@@ -142,10 +151,45 @@ describe("resolve values", () => {
     assert.match(plan.value, /Decline/);
     assert.equal(plan.source, "profile");
   });
-  it("does not invent a motivation answer", () => {
+  it("writes a factual motivation answer from the profile instead of leaving it blank", () => {
     const plan = planFill(q({ label: "Why this role?", type: "motivation" }), profile());
-    assert.equal(plan.value, "");
-    assert.equal(plan.status, "needs-you");
+    assert.match(plan.value, /US citizen/i);
+    assert.match(plan.value, /TypeScript|Engineer|Dallas/i);
+    assert.equal(plan.status, "filled");
+  });
+  it("maps greenhouse EEO wording and checks terms", () => {
+    const sex = planFill(
+      q({
+        label: "What is your Sex?",
+        type: "gender",
+        kind: "select",
+        options: ["Select", "Male", "Female", "I don't wish to answer"],
+      }),
+      profile()
+    );
+    assert.match(sex.value, /wish to answer/i);
+    const veteran = planFill(
+      q({
+        label: "Are you a protected veteran?",
+        type: "veteran",
+        kind: "select",
+        options: ["I identify as one or more of the classifications of a protected veteran", "I am not a protected veteran", "I don't wish to answer"],
+      }),
+      profile()
+    );
+    assert.match(veteran.value, /not a protected veteran/i);
+    const terms = planFill(
+      q({ label: "Yes, I have read and consent to the terms and conditions", type: "consent", kind: "checkbox" }),
+      profile()
+    );
+    assert.match(terms.value, /yes/i);
+  });
+  it("defaults citizenship to US", () => {
+    const plan = planFill(
+      q({ label: "Are you a US citizen?", type: "citizenship", options: ["Yes", "No"] }),
+      profile()
+    );
+    assert.equal(plan.value, "Yes");
   });
   it("answers work authorization from preferences", () => {
     const plan = planFill(q({ label: "Authorized?", type: "workAuthorization", options: ["Yes", "No"] }), profile());
@@ -299,6 +343,37 @@ describe("adapters", () => {
   });
   it("flags apply paths as supported", () => {
     assert.equal(isSupportedApplyUrl("https://example.com/jobs/42/apply"), true);
+  });
+});
+
+describe("best-effort answers and google sign-in", () => {
+  it("maps decline wording onto greenhouse sex options", () => {
+    const picked = pickDemographicOption("gender", "Decline to self-identify", [
+      "Male",
+      "Female",
+      "I don't wish to answer",
+    ]);
+    assert.match(picked, /wish to answer/i);
+  });
+  it("clicks Continue with Google, not Google Calendar", () => {
+    assert.equal(isGoogleSignInLabel("Continue with Google"), true);
+    assert.equal(isGoogleSignInLabel("Sign up with Google"), true);
+    assert.equal(isGoogleSignInLabel("Google Calendar"), false);
+  });
+  it("counts response rate from interviews not from all rows", () => {
+    const s = applicationStats([
+      { status: "applied", createdAt: new Date().toISOString() },
+      { status: "applied", createdAt: new Date().toISOString() },
+      { status: "phone-screen", createdAt: new Date().toISOString() },
+      { status: "saved", createdAt: new Date().toISOString() },
+    ]);
+    assert.equal(s.applied, 3);
+    assert.equal(s.responses, 1);
+    assert.equal(s.responseRate, "33%");
+  });
+  it("does not treat sales engineer as a software engineer title", () => {
+    assert.ok(titleRelevance("Sales Engineer", ["software engineer"]) < 0.4);
+    assert.ok(titleRelevance("Senior Software Engineer", ["software engineer"]) >= 0.55);
   });
 });
 

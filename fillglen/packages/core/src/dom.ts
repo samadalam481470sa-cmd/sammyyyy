@@ -1,3 +1,4 @@
+import { firstEmailInText, isConsentLabel, isGoogleSignInLabel } from "./answers.js";
 import { classifyQuestion } from "./classify.js";
 import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
 import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
@@ -13,7 +14,9 @@ function visible(el: HTMLElement): boolean {
 }
 
 function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
-  const nodes = root.querySelectorAll("input, textarea, select, [role='combobox'], [role='listbox'], [data-automation-id]");
+  const nodes = root.querySelectorAll(
+    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [data-automation-id]"
+  );
   nodes.forEach((n) => {
     if (n instanceof HTMLElement) out.push(n);
     const sr = (n as HTMLElement).shadowRoot;
@@ -39,39 +42,72 @@ function kindOf(el: HTMLElement): FieldKind {
   return "text";
 }
 
-function labelFor(el: HTMLElement): string {
+function tidy(text: string): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, 220);
+}
+
+export function labelFor(el: HTMLElement): string {
   const id = el.id;
   if (id) {
     const byFor = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-    if (byFor?.textContent) return byFor.textContent.trim();
+    if (byFor?.textContent) return tidy(byFor.textContent);
   }
   const wrap = el.closest("label");
-  if (wrap?.textContent) return wrap.textContent.trim().replace(/\s+/g, " ").slice(0, 200);
+  if (wrap?.textContent) return tidy(wrap.textContent);
   const aria = el.getAttribute("aria-label") || el.getAttribute("aria-labelledby");
-  if (aria && !el.getAttribute("aria-labelledby")) return aria;
+  if (aria && !el.getAttribute("aria-labelledby")) return tidy(aria);
   if (el.getAttribute("aria-labelledby")) {
     const ids = el.getAttribute("aria-labelledby")!.split(/\s+/);
     const text = ids
       .map((i) => document.getElementById(i)?.textContent || "")
       .join(" ")
       .trim();
-    if (text) return text;
+    if (text) return tidy(text);
   }
   const prev = el.closest("div, li, fieldset")?.querySelector("label, legend, span, p");
-  return (el.getAttribute("placeholder") || prev?.textContent || el.getAttribute("name") || "").trim().slice(0, 200);
+  return tidy(el.getAttribute("placeholder") || prev?.textContent || el.getAttribute("name") || "");
+}
+
+export function groupLabel(el: HTMLElement): string {
+  const legend = el.closest("fieldset")?.querySelector("legend");
+  if (legend?.textContent) return tidy(legend.textContent);
+  const field = el.closest(".field, .application-question, [class*='question'], [class*='Question']");
+  const heading = field?.querySelector(":scope > label, :scope > h3, :scope > h4, :scope > .label");
+  if (heading?.textContent) return tidy(heading.textContent);
+  return labelFor(el);
+}
+
+function optionText(el: HTMLInputElement): string {
+  const wrap = el.closest("label");
+  if (wrap?.textContent) return tidy(wrap.textContent);
+  const next = el.nextElementSibling;
+  if (next?.textContent) return tidy(next.textContent);
+  return tidy(el.getAttribute("aria-label") || el.value || "");
 }
 
 export function scanDocument(doc: Document, frameId = "top", profile?: Profile): Question[] {
   const found: HTMLElement[] = [];
   walkShadow(doc, found);
   const questions: Question[] = [];
+  const seenRadio = new Set<string>();
   let position = 0;
   for (const el of found) {
     if (!visible(el)) continue;
     if (el instanceof HTMLInputElement && ["hidden", "submit", "button", "image"].includes(el.type)) continue;
     const controlLabel = el.getAttribute("value") || el.textContent || "";
     if (isFinalSubmitLabel(controlLabel) || classifyAdvanceLabel(controlLabel)) continue;
-    const label = labelFor(el);
+    if (el instanceof HTMLInputElement && el.type === "radio") {
+      const key = el.name || el.id || `radio-${position}`;
+      if (seenRadio.has(key)) continue;
+      seenRadio.add(key);
+    }
+    const isRadio = el instanceof HTMLInputElement && el.type === "radio";
+    const radioGroup = isRadio
+      ? ((el.name
+          ? [...doc.querySelectorAll(`input[type="radio"][name="${CSS.escape(el.name)}"]`)]
+          : [el]) as HTMLInputElement[])
+      : [];
+    const label = isRadio ? groupLabel(el) : el instanceof HTMLSelectElement ? groupLabel(el) : labelFor(el);
     if (!label && kindOf(el) === "text" && !(el instanceof HTMLInputElement)) continue;
     const classified = classifyQuestion(
       {
@@ -83,15 +119,30 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
       },
       profile?.answers
     );
-    const value =
-      el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement
-        ? el.value
-        : (el.textContent || "").trim();
-    const required = el.hasAttribute("required") || el.getAttribute("aria-required") === "true" || /\*/.test(label);
-    const options =
-      el instanceof HTMLSelectElement ? Array.from(el.options).map((o) => o.text) : undefined;
+    let value = "";
+    let options: string[] | undefined;
+    if (isRadio) {
+      options = radioGroup.map(optionText);
+      const checked = radioGroup.find((r) => r.checked);
+      value = checked ? optionText(checked) : "";
+    } else if (el instanceof HTMLInputElement && el.type === "checkbox") {
+      value = el.checked ? optionText(el) || "Yes" : "";
+    } else if (el instanceof HTMLSelectElement) {
+      options = Array.from(el.options).map((o) => o.text);
+      value = el.options[el.selectedIndex]?.text || el.value;
+    } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      value = el.value;
+    } else {
+      value = tidy(el.textContent || "");
+    }
+    const required =
+      el.hasAttribute("required") ||
+      el.getAttribute("aria-required") === "true" ||
+      radioGroup.some((r) => r.hasAttribute("required") || r.getAttribute("aria-required") === "true") ||
+      /\*/.test(label);
+    const id = stableQuestionId({ label, name: el.getAttribute("name") || el.id, position, frameId });
     questions.push({
-      id: stableQuestionId({ label, name: el.getAttribute("name") || el.id, position, frameId }),
+      id,
       label: label || "(unlabeled field)",
       required,
       kind: kindOf(el),
@@ -106,7 +157,8 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
       options,
       position,
     });
-    el.setAttribute("data-fillglen-id", questions[questions.length - 1].id);
+    const stamp = [el, ...radioGroup];
+    for (const node of stamp) node.setAttribute("data-fillglen-id", id);
     position += 1;
   }
   return questions;
@@ -128,14 +180,37 @@ export function setFieldById(id: string, value: string): { ok: boolean; readBack
     | null;
   if (!el) return { ok: false, readBack: "", error: "Field left the page." };
   try {
-    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
+    if (el instanceof HTMLInputElement && el.type === "radio") {
+      const group = (el.name
+        ? ([...document.querySelectorAll(`input[type="radio"][name="${CSS.escape(el.name)}"]`)] as HTMLInputElement[])
+        : [el]);
+      const texts = group.map(optionText);
+      const picked = matchOption(value, texts);
+      const node = group.find((r) => {
+        const t = optionText(r);
+        return picked
+          ? normalize(t) === normalize(picked) || t === picked
+          : normalize(t) === normalize(value) || r.value === value;
+      });
+      if (node && !node.checked) node.click();
+      else if (node) {
+        node.checked = true;
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else if (el instanceof HTMLInputElement && el.type === "checkbox") {
       const label = labelFor(el);
-      const hit = matchOption(value, [el.value, label, el.getAttribute("aria-label") || ""]);
-      const on = Boolean(hit);
-      el.checked = on;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-      if (el.type === "radio" && on) el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const hit =
+        isConsentLabel(label) ||
+        isConsentLabel(value) ||
+        /^(true|yes|on|1)$/i.test(value) ||
+        Boolean(matchOption(value, [el.value, label, optionText(el), "Yes"]));
+      if (hit !== el.checked) el.click();
+      else {
+        el.checked = hit;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     } else if (el instanceof HTMLSelectElement) {
       const texts = Array.from(el.options).map((o) => o.text);
       const picked = matchOption(value, texts);
@@ -192,7 +267,7 @@ function openAndPickCustom(el: HTMLElement, value: string): boolean {
 export function clickMatchingDropdown(id: string, value: string): boolean {
   const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
   if (!el) return false;
-  if (el instanceof HTMLSelectElement) {
+  if (el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox"))) {
     const result = setFieldById(id, value);
     return result.ok;
   }
@@ -232,9 +307,44 @@ export function findAdvanceControl(
 export function clickAdvance(mode: "fill-only" | "keep-applying" = "fill-only"): { kind: "next" | "submit" } | null {
   const found = findAdvanceControl(document, mode);
   if (!found) return null;
-  found.el.scrollIntoView({ block: "center" });
+  found.el.scrollIntoView({ block: "nearest" });
   found.el.click();
   return { kind: found.kind };
+}
+
+export function clickGoogleSignIn(doc: Document): boolean {
+  const els = [...doc.querySelectorAll("button, a, [role='button'], div[role='link']")] as HTMLElement[];
+  for (const el of els) {
+    if (!visible(el)) continue;
+    const label = tidy(el.getAttribute("aria-label") || el.getAttribute("value") || el.textContent || "");
+    if (!isGoogleSignInLabel(label)) continue;
+    el.click();
+    return true;
+  }
+  return false;
+}
+
+export function clickVisibleGoogleAccount(doc: Document): boolean {
+  const identified = [...doc.querySelectorAll("[data-identifier], [data-email]")] as HTMLElement[];
+  const rows = identified.filter((el) => {
+    if (!visible(el)) return false;
+    const ident = el.getAttribute("data-identifier") || el.getAttribute("data-email") || "";
+    const text = el.textContent || "";
+    if (/use another account|add account/.test(normalize(text))) return false;
+    return ident.includes("@") || Boolean(firstEmailInText(text));
+  });
+  const target = rows[0];
+  if (target) {
+    target.click();
+    return true;
+  }
+  const fallback = [...doc.querySelectorAll("div[role='link'], li, button")] as HTMLElement[];
+  const withEmail = fallback
+    .filter((el) => visible(el) && firstEmailInText(el.textContent || "") && !/use another account|add account/.test(normalize(el.textContent || "")))
+    .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+  if (!withEmail[0]) return false;
+  withEmail[0].click();
+  return true;
 }
 
 export function readWorkdayStep(): { label: string; index?: number; total?: number } {

@@ -12,5 +12,6 @@ export * from "./adapters.js";
 export * from "./parseResume.js";
 export * from "./finder.js";
 export * from "./applyLoop.js";
+export * from "./answers.js";
 export * from "./feeds.js";
 export { planPage, planFill, valueForType } from "./resolve.js";

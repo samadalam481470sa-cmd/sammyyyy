@@ -46,6 +46,8 @@
     { "type": "resume", "patterns": ["resume", "cv", "curriculum"] },
     { "type": "coverLetter", "patterns": ["cover letter"] },
     { "type": "workAuthorization", "patterns": ["authorized to work", "legally authorized", "work authorization", "eligible to work"] },
+    { "type": "citizenship", "patterns": ["us citizen", "u.s. citizen", "citizenship", "nationality", "us person", "u.s. person"] },
+    { "type": "consent", "patterns": ["terms and conditions", "i have read and consent", "i agree to the", "privacy policy", "i accept the terms"] },
     { "type": "visaSponsorship", "patterns": ["visa sponsorship", "require sponsorship", "need sponsorship", "h-1b"] },
     { "type": "salary", "patterns": ["salary", "compensation", "expected pay", "pay expectation"] },
     { "type": "startDate", "patterns": ["start date", "available to start", "earliest start"] },

@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   buildAiPrompt,
   EMPTY_PROFILE,
+  hydrateProfile,
   parseAiDraft,
   parseResumeText,
   scoreMatch,
@@ -75,7 +76,7 @@ app.get("/v1/profile", auth, (req, res) => {
   if (!row) return res.json(EMPTY_PROFILE);
   const profile = row.profile as Profile;
   profile.selfIdentification = JSON.parse(decryptField(String(row.selfEnc), SECRET));
-  res.json(profile);
+  res.json(hydrateProfile(profile));
 });
 
 app.put("/v1/profile", auth, (req, res) => {
@@ -93,7 +94,7 @@ app.put("/v1/profile", auth, (req, res) => {
 app.post("/v1/profile/parse", auth, (req, res) => {
   const parsed = z.object({ text: z.string().min(20) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  res.json(parseResumeText(parsed.data.text));
+  res.json(hydrateProfile(parseResumeText(parsed.data.text)));
 });
 
 app.get("/v1/answers", auth, (req, res) => {

@@ -59,7 +59,7 @@ export function classifyQuestion(input: ClassifyInput, saved: SavedAnswer[] = []
 }
 
 export function classifyAiBucket(type: QuestionType): "profile-only" | "draft" | "never" | "needs-you" {
-  if (neverSendToAi(type)) return "never";
+  if (neverSendToAi(type) || type === "citizenship" || type === "consent") return "never";
   if (type === "motivation" || type === "behavioral" || type === "coverLetter") return "draft";
   if (type === "unknown") return "needs-you";
   return "profile-only";

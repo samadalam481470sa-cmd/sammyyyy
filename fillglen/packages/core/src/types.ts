@@ -61,6 +61,8 @@ export type QuestionType =
   | "race"
   | "veteran"
   | "disability"
+  | "citizenship"
+  | "consent"
   | "motivation"
   | "behavioral"
   | "factual"
@@ -178,6 +180,8 @@ export interface Preferences {
   startDate: string;
   workAuthorized: boolean;
   needsSponsorship: boolean;
+  /** Current product default: every applicant is a US citizen. */
+  usCitizen: boolean;
 }
 
 /** Defaults to Decline. Encrypt at rest. Never send to the AI model. */
@@ -297,15 +301,44 @@ export const EMPTY_PROFILE: Profile = {
     startDate: "",
     workAuthorized: true,
     needsSponsorship: false,
+    usCitizen: true,
   },
   selfIdentification: {
     gender: "Decline to self-identify",
     race: "Decline to self-identify",
-    veteran: "Decline to self-identify",
-    disability: "Decline to self-identify",
+    veteran: "I am not a protected veteran",
+    disability: "No, I don't have a disability",
   },
   rawResumeText: "",
 };
+
+/** Fill missing fields with US-citizen product defaults without wiping a saved profile. */
+export function hydrateProfile(raw: Partial<Profile> | null | undefined): Profile {
+  const p = raw || {};
+  return {
+    ...EMPTY_PROFILE,
+    ...p,
+    contact: {
+      ...EMPTY_PROFILE.contact,
+      ...(p.contact || {}),
+      country: p.contact?.country || "United States",
+    },
+    preferences: {
+      ...EMPTY_PROFILE.preferences,
+      ...(p.preferences || {}),
+      workAuthorized: p.preferences?.workAuthorized !== false,
+      needsSponsorship: p.preferences?.needsSponsorship === true,
+      usCitizen: p.preferences?.usCitizen !== false,
+    },
+    selfIdentification: { ...EMPTY_PROFILE.selfIdentification, ...(p.selfIdentification || {}) },
+    work: p.work || EMPTY_PROFILE.work,
+    education: p.education || EMPTY_PROFILE.education,
+    skills: p.skills || EMPTY_PROFILE.skills,
+    documents: p.documents || EMPTY_PROFILE.documents,
+    answers: p.answers || EMPTY_PROFILE.answers,
+    rawResumeText: p.rawResumeText || "",
+  };
+}
 
 export function splitName(full: string): { first: string; last: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);

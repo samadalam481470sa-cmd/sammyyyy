@@ -3,6 +3,7 @@ import {
   EMPTY_PROFILE,
   canonicalJobUrl,
   fetchBuiltInJobQueue,
+  hydrateProfile,
   isSupportedApplyUrl,
   nextQueueItem,
   planPage,
@@ -19,7 +20,7 @@ const snapshots = new Map<number, ScanSnapshot>();
 
 async function loadProfile(): Promise<Profile> {
   const stored = await chrome.storage.local.get(["profile"]);
-  return (stored.profile as Profile) || EMPTY_PROFILE;
+  return hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
 }
 
 async function isPaused(origin: string): Promise<boolean> {
@@ -245,6 +246,10 @@ function looksApply(url?: string) {
   return Boolean(url && isSupportedApplyUrl(url) && !shouldBlockPage(url));
 }
 
+function looksKeepTab(url?: string) {
+  return looksApply(url) || /accounts\.google\.com/i.test(url || "");
+}
+
 async function ping(tabId: number, url: string) {
   if (!looksApply(url)) return;
   if (adapterFor(url) || isSupportedApplyUrl(url)) {
@@ -281,7 +286,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     if (!r.keepApplying) return;
     chrome.tabs.query({}, (tabs) => {
       for (const t of tabs) {
-        if (t.id && looksApply(t.url)) sendToTab(t.id, { type: "keep-tick" });
+        if (t.id && looksKeepTab(t.url)) sendToTab(t.id, { type: "keep-tick" });
       }
     });
   });
@@ -346,7 +351,7 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
     const next = nextQueueItem(applyQueue, currentUrl || "");
     const url = next?.url || applyQueue[0]?.url;
     if (url && canonicalJobUrl(url) !== canonicalJobUrl(currentUrl || "")) {
-      setTimeout(() => chrome.tabs.update(tabId, { url }), 1200);
+      setTimeout(() => chrome.tabs.update(tabId, { url }), 280);
     }
   }
 }

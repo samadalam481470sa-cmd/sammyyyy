@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { EMPTY_PROFILE, parseResumeText, type Profile } from "@fillglen/core";
+import { EMPTY_PROFILE, hydrateProfile, parseResumeText, type Profile } from "@fillglen/core";
 import { Logo } from "../panel/QuestionWindow";
 import "../panel/styles.css";
 
@@ -15,7 +15,7 @@ function Popup() {
 
   useEffect(() => {
     chrome.storage.local.get(["profile", "apiBase", "sessionToken", "finderMatches", "keepApplying"], (r) => {
-      if (r.profile) setProfile(r.profile);
+      if (r.profile) setProfile(hydrateProfile(r.profile));
       if (r.finderMatches) setMatches(r.finderMatches);
       setKeepApplying(Boolean(r.keepApplying));
       const base = r.apiBase || "http://127.0.0.1:8787";
@@ -59,7 +59,7 @@ function Popup() {
         <button
           className="primary"
           onClick={() => {
-            const parsed = parseResumeText(paste);
+            const parsed = hydrateProfile(parseResumeText(paste));
             save(parsed);
             setStatus("Parsed. Review name and email, then open an application.");
           }}
@@ -74,7 +74,7 @@ function Popup() {
               return;
             }
             if (paste && !profile.contact.email) {
-              const parsed = parseResumeText(paste);
+              const parsed = hydrateProfile(parseResumeText(paste));
               save(parsed);
             }
             await chrome.runtime.sendMessage({ type: "start-keep-applying" });

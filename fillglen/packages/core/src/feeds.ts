@@ -1,5 +1,6 @@
+import { titleRelevance } from "./answers.js";
 import { DEFAULT_SEARCH, expandTitles, isBlockedJobUrl, seedEmployers } from "./finder.js";
-import { normalize, tokenSetRatio } from "./fuzzy.js";
+import { normalize } from "./fuzzy.js";
 import type { ApplyQueueItem } from "./applyLoop.js";
 import type { EmployerRecord } from "./finder.js";
 
@@ -17,13 +18,12 @@ export async function fetchBuiltInJobQueue(limit = 60): Promise<ApplyQueueItem[]
   const filtered = items.filter((j) => {
     if (!j.url || isBlockedJobUrl(j.url)) return false;
     const n = normalize(j.title);
-    const titleHit = expanded.some((t) => n.includes(t) || tokenSetRatio(j.title, t) > 0.5);
+    const titleHit = titleRelevance(j.title, [...DEFAULT_SEARCH.titles, ...expanded]) >= 0.55;
     const nicheHit = niche.some((k) => n.includes(k) || normalize(j.company).includes(k));
-    return titleHit || nicheHit;
+    const roleHit = /software|developer|systems analyst|cyber|security engineer|it systems/.test(n);
+    return titleHit || nicheHit || roleHit;
   });
-  const unique = uniqueJobs(filtered, limit);
-  if (unique.length >= 8) return unique;
-  return uniqueJobs(items, limit);
+  return uniqueJobs(filtered, limit);
 }
 
 function uniqueJobs(list: ApplyQueueItem[], limit: number): ApplyQueueItem[] {

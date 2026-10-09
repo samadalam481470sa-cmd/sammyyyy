@@ -70,7 +70,7 @@ function project(lat: number, lng: number) {
 export default function LocalJobs() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [coverage, setCoverage] = useState<{ mappedCount: number; seedCount: number; unmapped: string[]; note: string } | null>(null);
-  const [minScore, setMinScore] = useState(50);
+  const [minScore, setMinScore] = useState(60);
   const [mode, setMode] = useState("all");
   const [msg, setMsg] = useState("");
 
@@ -87,12 +87,15 @@ export default function LocalJobs() {
 
   const shown = useMemo(
     () =>
-      jobs.filter((j) => j.score >= minScore && (mode === "all" || j.workMode === mode) && j.status === "open"),
+      jobs
+        .filter((j) => j.score >= minScore && (mode === "all" || j.workMode === mode) && j.status === "open")
+        .sort((a, b) => b.score - a.score || b.lastCheckedAt.localeCompare(a.lastCheckedAt)),
     [jobs, minScore, mode]
   );
   const pins = useMemo(
-    () => jobs.filter((j) => j.status === "open" && j.lat != null && j.lng != null && (mode === "all" || j.workMode === mode)),
-    [jobs, mode]
+    () =>
+      shown.filter((j) => j.lat != null && j.lng != null),
+    [shown]
   );
 
   return (
@@ -180,7 +183,9 @@ export default function LocalJobs() {
               <p className="text-sm text-[#5c6b64]">
                 {j.company} · {j.locationText} · {j.workMode} · {j.source}
               </p>
-              <p className="text-sm mt-1">{j.why}</p>
+              <p className="text-sm mt-1">
+                Match {j.score}/100 · {j.why}
+              </p>
               {j.warnings?.length ? <p className="text-xs text-[#9b2c2c]">{j.warnings.join(" · ")}</p> : null}
               <p className="text-xs mt-1">
                 First seen {j.firstSeenAt.slice(0, 10)} · Last checked {j.lastCheckedAt.slice(0, 10)}

@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { EMPTY_PROFILE, scoreMatch } from "@fillglen/core";
+import { EMPTY_PROFILE, hydrateProfile, scoreMatch, type Profile } from "@fillglen/core";
 import { api, token } from "../api";
 
 export default function JobDetail() {
   const { id } = useParams();
   const [state, setState] = useState<{ applications: any[]; jobs: any[]; events: any[] } | null>(null);
+  const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   useEffect(() => {
-    if (token()) api("/v1/applications").then(setState).catch(() => {});
+    if (!token()) return;
+    api("/v1/applications").then(setState).catch(() => {});
+    api("/v1/profile")
+      .then((p) => setProfile(hydrateProfile(p)))
+      .catch(() => {});
   }, []);
   const app = state?.applications?.find((a) => a.id === id);
   const job = state?.jobs?.find((j) => j.id === app?.jobId);
   const events = (state?.events || []).filter((e) => e.applicationId === id);
   if (!app || !job) return <p>Open this record after the extension creates it, or add one from the board.</p>;
-  const match = scoreMatch(job.description || job.title || "", EMPTY_PROFILE);
+  const match = scoreMatch(job.description || job.title || "", profile);
   return (
     <article className="space-y-4">
       <h1 className="text-2xl">{job.title}</h1>

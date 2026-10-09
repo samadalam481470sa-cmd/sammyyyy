@@ -48,6 +48,15 @@ function resumeBlob(profile: Profile): string {
   return normalize(parts.join(" "));
 }
 
+function phraseList(line: string): string[] {
+  const rest = line.split(/:|;/)[1];
+  if (!rest) return [];
+  return rest
+    .split(/,|\/|•|\|/)
+    .map((p) => normalize(p))
+    .filter((p) => p.length > 1 && !STOP.has(p));
+}
+
 export function extractKeywords(description: string): { required: string[]; preferred: string[] } {
   const lines = description.split(/\n+/);
   const required: string[] = [];
@@ -55,6 +64,11 @@ export function extractKeywords(description: string): { required: string[]; pref
   for (const line of lines) {
     const n = normalize(line);
     const bucket = /preferred|nice to have|bonus/.test(n) ? preferred : required;
+    const listed = phraseList(line);
+    if (listed.length) {
+      bucket.push(...listed);
+      continue;
+    }
     if (!/(required|must|qualif|preferred|nice to have|skills|experience)/.test(n) && line.length > 80) continue;
     for (const t of tokens(line)) {
       if (t.length < 3 || STOP.has(t) || /^\d+$/.test(t)) continue;
@@ -98,12 +112,14 @@ export function scoreMatch(description: string, profile: Profile, knownSkills: s
     .slice(0, 8);
 
   const score = total === 0 ? 0 : Math.round((points / total) * 100);
+  const missingUniq = [...new Set(missing)].filter((m) => !matched.includes(m));
   return {
     score,
     matched: [...new Set(matched)],
-    missing: [...new Set(missing)].filter((m) => !matched.includes(m)),
+    missing: missingUniq,
     haveButNotOnResume,
-    explanation:
-      "This score is keyword overlap between the posting and your profile. It is not a prediction of whether any company's ATS will pass your resume — no tool can know that.",
+    explanation: `Keyword overlap ${score}: ${matched.slice(0, 6).join(", ") || "none yet"}${
+      missingUniq.length ? `; missing ${missingUniq.slice(0, 4).join(", ")}` : ""
+    }. Not a prediction of whether an ATS will pass the resume.`,
   };
 }

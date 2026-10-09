@@ -1,7 +1,8 @@
 import metros from "../data/metros.json" with { type: "json" };
 import aliases from "../data/title-aliases.json" with { type: "json" };
 import employersSeed from "../data/dfw-employers.json" with { type: "json" };
-import { normalize, tokenSetRatio, tokens } from "./fuzzy.js";
+import { titleRelevance } from "./answers.js";
+import { normalize, tokens } from "./fuzzy.js";
 
 export const BLOCKED_JOB_HOSTS = ["linkedin.com", "indeed.com", "glassdoor.com"];
 
@@ -280,13 +281,14 @@ export function scoreCacheKey(listingId: string, settings: SearchSettings): stri
 export function ruleScore(listing: CanonicalListing, settings: SearchSettings): ScoreCard {
   assertRealListing(listing);
   const expanded = expandTitles(settings.titles);
-  const titleHit = expanded.some((t) => normalize(listing.title).includes(t) || tokenSetRatio(listing.title, t) > 0.5);
+  const relevance = titleRelevance(listing.title, [...settings.titles, ...expanded]);
+  const titleHit = relevance >= 0.55;
   const niche = [...settings.nicheKeywords, ...settings.industries];
   const blob = `${listing.title} ${listing.description}`;
   const nicheHits = niche.filter((k) => normalize(blob).includes(normalize(k)) || expandTitles([k]).some((a) => normalize(blob).includes(a)));
   let score = 0;
   if (titleHit) score += 45;
-  else score += Math.round(40 * Math.max(...expanded.map((t) => tokenSetRatio(listing.title, t)), 0));
+  else score += Math.round(40 * relevance);
   score += Math.min(35, nicheHits.length * 12);
   const inferred = inferExperience(listing.description, listing.title);
   if (inferred === settings.experienceLevel || inferred === "unknown") score += 15;

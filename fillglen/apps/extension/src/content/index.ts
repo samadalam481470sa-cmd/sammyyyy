@@ -3,6 +3,8 @@ import {
   diffQuestions,
   EMPTY_PROFILE,
   feedMetaForUrl,
+  fieldLooksFilled,
+  hydrateProfile,
   mayAdvance,
   planPage,
   shouldBlockPage,
@@ -12,7 +14,9 @@ import {
 } from "@fillglen/core";
 import {
   clickAdvance,
+  clickGoogleSignIn,
   clickMatchingDropdown,
+  clickVisibleGoogleAccount,
   detectCaptcha,
   findAdvanceControl,
   flashAndScroll,
@@ -45,6 +49,8 @@ function boot() {
   let keepTimer: number | undefined;
   let stuckTicks = 0;
   let waitingOnCaptcha = false;
+  let keepBusy = false;
+  let googleClicked = false;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -117,7 +123,7 @@ function boot() {
     const origin = location.origin;
     paused = ((stored.pausedOrigins as string[]) || []).includes(origin);
     if (paused) return;
-    const profile = (stored.profile as Profile) || EMPTY_PROFILE;
+    const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
     const questions = scanDocument(document, frameId, profile);
     if (reason === "full" || last.length === 0) {
       last = questions;
@@ -157,61 +163,81 @@ function boot() {
   }
 
   async function keepCycle() {
-    if (window !== window.top) return;
-    const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
-    const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
-    if (!stored.keepApplying || paused || originPaused || blocked) return;
-    if (detectCaptcha(document)) {
-      if (!waitingOnCaptcha) {
-        waitingOnCaptcha = true;
-        post({ type: "keep-status", status: "captcha", url });
-      }
-      return;
-    }
-    if (waitingOnCaptcha) {
-      waitingOnCaptcha = false;
-      post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
-    }
-    const profile = (stored.profile as Profile) || EMPTY_PROFILE;
-    const questions = scanDocument(document, frameId, profile);
-    last = questions;
-    const plans = planPage(questions, profile);
-    for (const plan of plans) {
-      if (!plan.value) continue;
-      applyOne(plan.questionId, plan.value);
-      const q = questions.find((x) => x.id === plan.questionId);
-      if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio")) {
-        clickMatchingDropdown(plan.questionId, plan.value);
-      }
-    }
-    await new Promise((r) => setTimeout(r, 450));
-    const stillEmpty = questions.filter((q) => q.required && !q.value);
-    const found = findAdvanceControl(document, "keep-applying");
-    if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
-      stuckTicks += 1;
-      if (stuckTicks >= 8) {
+    if (window !== window.top || keepBusy) return;
+    keepBusy = true;
+    try {
+      const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
+      const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
+      if (!stored.keepApplying || paused || originPaused || blocked) return;
+      if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
-        post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+        return;
       }
-      return;
-    }
-    const clicked = clickAdvance("keep-applying");
-    if (clicked?.kind === "next") {
-      stuckTicks = 0;
-      post({ type: "keep-status", status: "advanced", url });
-      return;
-    }
-    if (clicked?.kind === "submit") {
-      stuckTicks = 0;
-      post({ type: "keep-status", status: "submitted", url });
-      return;
-    }
-    if (stillEmpty.length) {
-      stuckTicks += 1;
-      if (stuckTicks >= 8) {
+      if (detectCaptcha(document)) {
+        if (!waitingOnCaptcha) {
+          waitingOnCaptcha = true;
+          post({ type: "keep-status", status: "captcha", url });
+        }
+        return;
+      }
+      if (waitingOnCaptcha) {
+        waitingOnCaptcha = false;
+        post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
+      }
+      const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
+      const questions = scanDocument(document, frameId, profile);
+      last = questions;
+      const filledCount = questions.filter((q) => fieldLooksFilled(q.kind, q.value)).length;
+      const signupWall = /sign up|create (an )?account|continue with google|sign in with google/i.test(
+        document.body?.innerText?.slice(0, 2000) || ""
+      );
+      if (!googleClicked && signupWall && filledCount < 3 && clickGoogleSignIn(document)) {
+        googleClicked = true;
         stuckTicks = 0;
-        post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+        post({ type: "keep-status", status: "fill", url, detail: "google sign-in" });
+        return;
       }
+      const plans = planPage(questions, profile);
+      for (const plan of plans) {
+        if (!plan.value) continue;
+        applyOne(plan.questionId, plan.value);
+        const q = questions.find((x) => x.id === plan.questionId);
+        if (q && (q.kind === "select" || q.kind === "custom-select" || q.kind === "typeahead" || q.kind === "radio" || q.kind === "checkbox")) {
+          clickMatchingDropdown(plan.questionId, plan.value);
+        }
+      }
+      await new Promise((r) => setTimeout(r, 70));
+      const after = scanDocument(document, frameId, profile);
+      const stillEmpty = after.filter((q) => q.required && !fieldLooksFilled(q.kind, q.value));
+      const found = findAdvanceControl(document, "keep-applying");
+      if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
+        stuckTicks += 1;
+        if (stuckTicks >= 12) {
+          stuckTicks = 0;
+          post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+        }
+        return;
+      }
+      const clicked = clickAdvance("keep-applying");
+      if (clicked?.kind === "next") {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "advanced", url });
+        return;
+      }
+      if (clicked?.kind === "submit") {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "submitted", url });
+        return;
+      }
+      if (stillEmpty.length) {
+        stuckTicks += 1;
+        if (stuckTicks >= 12) {
+          stuckTicks = 0;
+          post({ type: "keep-status", status: "stuck", url, detail: `${stillEmpty.length} required empty` });
+        }
+      }
+    } finally {
+      keepBusy = false;
     }
   }
 
@@ -219,7 +245,7 @@ function boot() {
     if (keepTimer || window !== window.top) return;
     keepTimer = window.setInterval(() => {
       keepCycle().catch(() => {});
-    }, 2500);
+    }, 400);
   }
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -242,7 +268,10 @@ function boot() {
 
   const obs = new MutationObserver(() => {
     clearTimeout((obs as unknown as { t?: number }).t);
-    (obs as unknown as { t?: number }).t = window.setTimeout(() => scan("delta"), 200) as unknown as number;
+    (obs as unknown as { t?: number }).t = window.setTimeout(() => {
+      scan("delta");
+      if (!paused) keepCycle().catch(() => {});
+    }, 120) as unknown as number;
   });
   obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "hidden"] });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { applicationStats } from "@fillglen/core";
 import { api, token } from "../api";
 
 export default function Home() {
@@ -13,9 +14,10 @@ export default function Home() {
       .then((r) => setLocalCount(r.count || 0))
       .catch(() => {});
   }, []);
-  const week = data.applications.filter((a) => Date.now() - new Date(a.createdAt).getTime() < 7 * 86400000).length;
-  const applied = data.applications.filter((a) => a.status === "applied").length;
-  const chart = ["saved", "applied", "phone-screen", "rejected"].map((status) => ({
+  const stats = applicationStats(data.applications);
+  const week = stats.week;
+  const applied = stats.applied;
+  const chart = ["saved", "applied", "phone-screen", "technical", "final", "offer", "rejected"].map((status) => ({
     status,
     n: data.applications.filter((a) => a.status === status).length,
   }));
@@ -33,7 +35,7 @@ export default function Home() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card label="Applications this week" value={week} />
         <Card label="Marked applied" value={applied} />
-        <Card label="Response rate" value={applied ? `${Math.round((applied / Math.max(data.applications.length, 1)) * 100)}%` : "—"} />
+        <Card label="Response rate" value={stats.responseRate} />
         <Card label="New local matches" value={localCount == null ? "…" : localCount} />
       </div>
       <div className="h-56 bg-[#fffbf5] border border-[#d9d0c4] rounded-xl p-3">

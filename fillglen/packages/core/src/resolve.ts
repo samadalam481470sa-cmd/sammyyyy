@@ -1,3 +1,4 @@
+import { bestEffortAnswer, pickCitizenAnswer, pickDemographicOption } from "./answers.js";
 import { classifyAiBucket, isSelfId } from "./classify.js";
 import { bestSavedMatch } from "./fuzzy.js";
 import { splitName, type FillPlan, type Profile, type Question, type QuestionType } from "./types.js";
@@ -43,9 +44,13 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
     case "website":
       return c.portfolio || c.website;
     case "workAuthorization":
-      return yesNo(profile.preferences.workAuthorized, options);
+      return pickDemographicOption("workAuthorization", yesNo(profile.preferences.workAuthorized !== false, options), options);
     case "visaSponsorship":
-      return yesNo(profile.preferences.needsSponsorship, options);
+      return yesNo(profile.preferences.needsSponsorship === true, options);
+    case "citizenship":
+      return pickCitizenAnswer(options);
+    case "consent":
+      return pickDemographicOption("consent", "Yes", options);
     case "salary":
       if (profile.preferences.salaryMin && profile.preferences.salaryMax) {
         return `${profile.preferences.salaryMin}-${profile.preferences.salaryMax}`;
@@ -74,13 +79,13 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
     case "workEnd":
       return latestJob?.endDate ?? "";
     case "gender":
-      return profile.selfIdentification.gender;
+      return pickDemographicOption("gender", profile.selfIdentification.gender, options);
     case "race":
-      return profile.selfIdentification.race;
+      return pickDemographicOption("race", profile.selfIdentification.race, options);
     case "veteran":
-      return profile.selfIdentification.veteran;
+      return pickDemographicOption("veteran", profile.selfIdentification.veteran, options);
     case "disability":
-      return profile.selfIdentification.disability;
+      return pickDemographicOption("disability", profile.selfIdentification.disability, options);
     default:
       return "";
   }
@@ -113,11 +118,12 @@ export function planFill(question: Question, profile: Profile): FillPlan {
 
   const bucket = classifyAiBucket(question.type);
   if (bucket === "draft") {
+    const drafted = bestEffortAnswer(question, profile);
     return {
       questionId: question.id,
-      value: "",
-      source: "none",
-      status: "needs-you",
+      value: drafted,
+      source: drafted ? "profile" : "none",
+      status: drafted ? "filled" : "needs-you",
       confidence: "check-this",
       type: question.type,
     };
@@ -135,11 +141,12 @@ export function planFill(question: Question, profile: Profile): FillPlan {
     };
   }
 
+  const effort = bestEffortAnswer(question, profile);
   return {
     questionId: question.id,
-    value: "",
-    source: "none",
-    status: "needs-you",
+    value: effort,
+    source: effort ? "profile" : "none",
+    status: effort ? "filled" : "needs-you",
     confidence: "check-this",
     type: question.type,
   };
