@@ -4,6 +4,7 @@ import {
   detectBoardFromCareersUrl,
   fetchGovernmentJobsBoard,
   fetchUsaJobsPublic,
+  fetchWorkdayBoard,
   geocodeLocation,
   isBlockedJobUrl,
   queueItemToListing,
@@ -31,6 +32,9 @@ export async function fetchEmployerFeed(employer: EmployerRecord): Promise<Canon
   if (employer.board === "recruitee") return fetchRecruitee(employer);
   if (employer.board === "governmentjobs") {
     return (await fetchGovernmentJobsBoard(employer)).map((j) => queueItemToListing(j, employer.metro || "texas"));
+  }
+  if (employer.board === "workday") {
+    return (await fetchWorkdayBoard(employer)).map((j) => queueItemToListing(j, employer.metro || "texas"));
   }
   if (employer.board === "usajobs") {
     const batches = await Promise.all([

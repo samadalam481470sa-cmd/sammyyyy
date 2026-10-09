@@ -14,7 +14,13 @@ import type { EmployerRecord } from "./finder.js";
 import { rankJobsForResume, resumeSearchHints } from "./resumeMatch.js";
 import type { Profile } from "./types.js";
 import { fetchDeepSearchJobs } from "./deepSearch.js";
-import { fetchGovernmentJobsBoard, fetchUsaJobsPublic, looksLikeBogusJob, looksLikeGovItRole } from "./govJobs.js";
+import {
+  fetchGovernmentJobsBoard,
+  fetchUsaJobsPublic,
+  fetchWorkdayBoard,
+  looksLikeBogusJob,
+  looksLikeGovItRole,
+} from "./govJobs.js";
 
 /**
  * Pull public ATS feeds for the built-in employer seed plus map-discovered companies.
@@ -183,6 +189,9 @@ export async function fetchEmployerBoardJobs(employer: EmployerRecord): Promise<
   }
   if (employer.board === "governmentjobs") {
     return fetchGovernmentJobsBoard(employer);
+  }
+  if (employer.board === "workday") {
+    return fetchWorkdayBoard(employer);
   }
   if (employer.board === "usajobs") {
     const batches = await Promise.all([

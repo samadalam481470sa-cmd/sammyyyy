@@ -2,6 +2,7 @@ import {
   adapterFor,
   EMPTY_PROFILE,
   canonicalJobUrl,
+  discoverNote,
   fetchBuiltInJobQueue,
   hydrateProfile,
   markLiveJob,
@@ -630,14 +631,15 @@ async function rebuildQueue(): Promise<ApplyQueueItem[]> {
           merged.push(rec);
         }
         const status = stored.discoverStatus || {};
+        const next = {
+          ...status,
+          govJobs: gov,
+          recordsCompanies: (status.recordsCompanies || 0) + records,
+          lastAt: new Date().toISOString(),
+        };
         await chrome.storage.local.set({
           discoveredEmployers: merged.slice(-400),
-          discoverStatus: {
-            ...status,
-            govJobs: gov,
-            recordsCompanies: (status.recordsCompanies || 0) + records,
-            lastAt: new Date().toISOString(),
-          },
+          discoverStatus: { ...next, note: discoverNote(next) },
         });
       },
     });

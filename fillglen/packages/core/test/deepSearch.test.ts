@@ -13,6 +13,9 @@ import {
   parseUsaJobsApi,
   parseUsaJobsSearchHtml,
   parseUsaSpendingAwards,
+  parseWorkdayCxs,
+  workdayCxsUrl,
+  cleanFilingCompany,
   queueItemToListing,
   seedEmployerRecords,
   uniqueSolidJobs,
@@ -76,6 +79,36 @@ describe("government job parsers", () => {
     assert.match(api[0].title, /IT Specialist/);
   });
 
+  it("reads Workday CXS job JSON into real apply URLs", () => {
+    const careers = "https://austintexas.wd5.myworkdayjobs.com/COA_Careers";
+    assert.equal(
+      workdayCxsUrl(careers),
+      "https://austintexas.wd5.myworkdayjobs.com/wday/cxs/austintexas/COA_Careers/jobs"
+    );
+    const jobs = parseWorkdayCxs(
+      {
+        total: 2,
+        jobPostings: [
+          {
+            title: "IT Systems Analyst",
+            externalPath: "/job/One-Texas-Center/IT-Systems-Analyst_JR1",
+            locationsText: "Austin, TX",
+          },
+          {
+            title: "Lifeguard",
+            externalPath: "/job/Pool/Lifeguard_JR2",
+            locationsText: "Austin, TX",
+          },
+        ],
+      },
+      "City of Austin",
+      careers
+    );
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].source, "workday");
+    assert.match(jobs[0].url, /COA_Careers\/job\//);
+  });
+
   it("detects governmentjobs and usajobs career URLs", () => {
     const neo = detectBoardFromCareersUrl("https://www.governmentjobs.com/careers/austintexas");
     assert.deepEqual(neo, { board: "governmentjobs", slug: "austintexas" });
@@ -119,6 +152,7 @@ describe("public filings and directories", () => {
     });
     assert.equal(hits.length, 1);
     assert.equal(hits[0].company, "North Texas Cloud Inc.");
+    assert.equal(cleanFilingCompany("LOUISIANA-PACIFIC CORP  (LPX)  (CIK 0000060519)"), "LOUISIANA-PACIFIC CORP");
     assert.match(hits[0].url, /sec\.gov/);
   });
 

@@ -200,6 +200,24 @@
       "hqHint": "San Antonio, TX"
     },
     {
+      "company": "City of Austin",
+      "metro": "austin",
+      "careersUrl": "https://austintexas.wd5.myworkdayjobs.com/COA_Careers",
+      "board": "workday",
+      "slug": "austintexas/COA_Careers",
+      "sourceKind": "city-government",
+      "hqHint": "Austin, TX"
+    },
+    {
+      "company": "Texas A&M University System",
+      "metro": "texas",
+      "careersUrl": "https://tamus.wd1.myworkdayjobs.com/TAMUS_External",
+      "board": "workday",
+      "slug": "tamus/TAMUS_External",
+      "sourceKind": "state-government",
+      "hqHint": "College Station, TX"
+    },
+    {
       "company": "USAJOBS",
       "metro": "texas",
       "careersUrl": "https://www.usajobs.gov/Search/Results?k=information%20technology&l=texas",

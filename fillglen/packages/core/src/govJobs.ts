@@ -12,7 +12,8 @@ import {
 } from "./finder.js";
 import { normalize } from "./fuzzy.js";
 
-export const GOV_USER_AGENT = "Fillglen/0.1 (public job research; +https://fillglen.local)";
+export const GOV_USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 export interface GovBoardSeed extends EmployerRecord {
   kind?: string;
@@ -88,7 +89,7 @@ export function queueItemToListing(j: ApplyQueueItem, metro = "texas"): Canonica
 
 export function looksLikeGovItRole(title: string): boolean {
   if (looksLikeItRole(title)) return true;
-  return /\b(it specialist|information technology specialist|computer scientist|applications developer|gis analyst|technology analyst|cybersecurity specialist|network administrator|systems support|computer operator|telecommunications|records systems|digital services)\b/i.test(
+  return /\b(it specialist|information technology specialist|computer scientist|applications developer|applications analyst|business systems|programmer analyst|gis analyst|technology analyst|technology specialist|cybersecurity specialist|security specialist|network administrator|systems support|computer operator|telecommunications|records systems|digital services)\b/i.test(
     title
   );
 }
@@ -194,6 +195,52 @@ export function parseUsaJobsSearchHtml(html: string): ApplyQueueItem[] {
   return out.filter((j) => !looksLikeBogusJob(j) && looksLikeGovItRole(j.title));
 }
 
+export function extractWorkdayCareersUrl(html: string): string | null {
+  const m = html.match(/https:\/\/[a-z0-9.-]+\.myworkdayjobs\.com\/(?:en-US\/)?[A-Za-z0-9_-]+/i);
+  return m ? m[0].replace(/\/en-US\//i, "/") : null;
+}
+
+export function workdayCxsUrl(careersUrl: string): string | null {
+  try {
+    const u = new URL(careersUrl);
+    if (!u.hostname.includes("myworkdayjobs.com")) return null;
+    const tenant = u.hostname.split(".")[0];
+    const site = u.pathname.split("/").filter((p) => p && !/^en-?us$/i.test(p))[0];
+    if (!tenant || !site) return null;
+    return `https://${u.hostname}/wday/cxs/${tenant}/${site}/jobs`;
+  } catch {
+    return null;
+  }
+}
+
+export function parseWorkdayCxs(
+  raw: unknown,
+  company: string,
+  careersUrl: string
+): ApplyQueueItem[] {
+  const jobs = (raw as { jobPostings?: { title?: string; externalPath?: string; locationsText?: string }[] })
+    ?.jobPostings || [];
+  let origin = "";
+  let site = "";
+  try {
+    const u = new URL(careersUrl);
+    origin = u.origin;
+    site = u.pathname.split("/").filter((p) => p && !/^en-?us$/i.test(p))[0] || "";
+  } catch {
+    return [];
+  }
+  return jobs
+    .filter((j) => j.title && j.externalPath)
+    .map((j) => ({
+      url: `${origin}/${site}${j.externalPath}`.replace(/([^:]\/)\/+/g, "$1"),
+      title: String(j.title),
+      company,
+      source: "workday",
+      location: j.locationsText || "Texas, United States",
+    }))
+    .filter((j) => !looksLikeBogusJob(j) && looksLikeGovItRole(j.title));
+}
+
 export function parseUsaJobsApi(raw: unknown): ApplyQueueItem[] {
   const data = raw as {
     SearchResult?: { SearchResultItems?: { MatchedObjectDescriptor?: Record<string, string | undefined> }[] };
@@ -224,7 +271,7 @@ export async function fetchPage(
   url: string,
   opts?: { timeoutMs?: number; headers?: Record<string, string> }
 ): Promise<{ ok: boolean; status: number; text: string; json?: unknown }> {
-  try {
+  const once = async () => {
     const r = await fetch(url, {
       signal: AbortSignal.timeout(opts?.timeoutMs ?? 8000),
       redirect: "follow",
@@ -245,26 +292,57 @@ export async function fetchPage(
       }
     }
     return { ok: r.ok, status: r.status, text: text.slice(0, 400_000), json };
+  };
+  try {
+    const first = await once();
+    if (first.ok || first.text) return first;
+  } catch {
+    /* retry once */
+  }
+  try {
+    return await once();
   } catch {
     return { ok: false, status: 0, text: "" };
   }
 }
 
+export async function fetchWorkdayBoard(employer: EmployerRecord): Promise<ApplyQueueItem[]> {
+  const careers = employer.careersUrl || "";
+  const cxs = workdayCxsUrl(careers);
+  if (!cxs) return [];
+  const json = await postWorkdayCxs(cxs, 0);
+  return json ? parseWorkdayCxs(json, employer.company, careers) : [];
+}
+
+async function postWorkdayCxs(url: string, offset: number): Promise<unknown | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      if (attempt) await new Promise((r) => setTimeout(r, 600));
+      const r = await fetch(url, {
+        method: "POST",
+        signal: AbortSignal.timeout(6000),
+        headers: {
+          "content-type": "application/json",
+          Accept: "application/json",
+          "User-Agent": GOV_USER_AGENT,
+        },
+        body: JSON.stringify({ appliedFacets: {}, limit: 50, offset }),
+      });
+      if (!r.ok) continue;
+      return await r.json();
+    } catch {
+      /* retry */
+    }
+  }
+  return null;
+}
+
 export async function fetchGovernmentJobsBoard(employer: EmployerRecord): Promise<ApplyQueueItem[]> {
   if (employer.board !== "governmentjobs" || !employer.slug) return [];
   const slug = employer.slug;
-  const pages = [
-    `https://www.governmentjobs.com/careers/${slug}`,
-    `https://www.governmentjobs.com/careers/${slug}?sort=PostingDate%7CDescending&page=1`,
-  ];
-  for (const url of pages) {
-    const page = await fetchPage(url, { timeoutMs: 6000 });
-    if (!page.text) continue;
-    const jobs = parseGovernmentJobsHtml(page.text, slug, employer.company);
-    if (jobs.length) return jobs;
-    if (page.ok) break;
-  }
-  return [];
+  const page = await fetchPage(`https://www.governmentjobs.com/careers/${slug}`, { timeoutMs: 4500 });
+  if (!page.text) return [];
+  return parseGovernmentJobsHtml(page.text, slug, employer.company);
 }
 
 export async function fetchUsaJobsPublic(keywords: string, location: string): Promise<ApplyQueueItem[]> {
@@ -299,19 +377,22 @@ export async function mapPool<T, R>(items: T[], size: number, fn: (item: T) => P
 let govBoardCursor = 0;
 
 export async function fetchAllGovernmentJobs(): Promise<ApplyQueueItem[]> {
-  const boards = govEmployerSeed().filter((e) => e.board === "governmentjobs");
+  const boards = govEmployerSeed();
+  const neo = boards.filter((e) => e.board === "governmentjobs");
+  const workday = boards.filter((e) => e.board === "workday");
   const slice: EmployerRecord[] = [];
-  if (boards.length) {
-    const take = Math.min(4, boards.length);
-    for (let i = 0; i < take; i++) slice.push(boards[(govBoardCursor + i) % boards.length]);
-    govBoardCursor = (govBoardCursor + take) % boards.length;
+  if (neo.length) {
+    const take = Math.min(3, neo.length);
+    for (let i = 0; i < take; i++) slice.push(neo[(govBoardCursor + i) % neo.length]);
+    govBoardCursor = (govBoardCursor + take) % neo.length;
   }
-  const boardJobs = await mapPool(slice, 3, fetchGovernmentJobsBoard);
+  const neoJobs = await mapPool(slice, 3, fetchGovernmentJobsBoard);
+  const wdJobs = await mapPool(workday, 2, fetchWorkdayBoard);
   const usa = await Promise.all(
     [
       fetchUsaJobsPublic("information technology", "Texas"),
       fetchUsaJobsPublic("cybersecurity", "United States"),
     ].map((p) => p.catch(() => [] as ApplyQueueItem[]))
   );
-  return [...boardJobs.flat(), ...usa.flat()];
+  return [...neoJobs.flat(), ...wdJobs.flat(), ...usa.flat()];
 }

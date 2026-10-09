@@ -33,6 +33,14 @@ export function companySlugGuesses(company: string): string[] {
   return [...new Set([compact, dashed, first].filter((s) => s.length >= 3))].slice(0, 2);
 }
 
+export function cleanFilingCompany(name: string): string {
+  return name
+    .replace(/\s*\(CIK\s*\d+\)/gi, "")
+    .replace(/\s*\([A-Z0-9]{1,6}(?:,\s*[A-Z0-9]{1,6})*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function parseSecSearchHits(raw: unknown): FilingHit[] {
   const hits =
     (raw as { hits?: { hits?: { _id?: string; _source?: Record<string, unknown> }[] } })?.hits?.hits || [];
@@ -47,7 +55,7 @@ export function parseSecSearchHits(raw: unknown): FilingHit[] {
     ]
       .map((n) => String(n || "").trim())
       .filter(Boolean);
-    const company = names[0];
+    const company = cleanFilingCompany(names[0]);
     if (!company) continue;
     const ticker = Array.isArray(src.tickers) ? String(src.tickers[0] || "") : String(src.tickers || "");
     const filed = String(src.file_date || src.period_ending || "");

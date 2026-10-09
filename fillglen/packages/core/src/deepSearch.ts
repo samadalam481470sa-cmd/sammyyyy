@@ -14,11 +14,13 @@ import { jobsFromPublicRecords } from "./publicRecords.js";
 export async function fetchDeepSearchJobs(
   limit = 80
 ): Promise<{ jobs: ApplyQueueItem[]; employers: EmployerRecord[]; gov: number; records: number }> {
-  const gov = await fetchAllGovernmentJobs().catch(() => [] as ApplyQueueItem[]);
-  const records = await jobsFromPublicRecords(Math.max(20, Math.floor(limit / 2))).catch(() => ({
-    jobs: [] as ApplyQueueItem[],
-    employers: [] as EmployerRecord[],
-  }));
+  const [gov, records] = await Promise.all([
+    fetchAllGovernmentJobs().catch(() => [] as ApplyQueueItem[]),
+    jobsFromPublicRecords(Math.max(20, Math.floor(limit / 2))).catch(() => ({
+      jobs: [] as ApplyQueueItem[],
+      employers: [] as EmployerRecord[],
+    })),
+  ]);
   const merged = uniqueSolidJobs([...gov, ...records.jobs], limit);
   return {
     jobs: merged,
@@ -47,7 +49,7 @@ export function uniqueSolidJobs(list: ApplyQueueItem[], limit: number): ApplyQue
 }
 
 function solidWhy(j: ApplyQueueItem): string {
-  if (j.source === "governmentjobs" || j.source === "usajobs") {
+  if (j.source === "governmentjobs" || j.source === "usajobs" || j.source === "workday") {
     return "Posted on a public government career board, not a third-party listing mill.";
   }
   if (j.source === "greenhouse" || j.source === "lever" || j.source === "ashby") {

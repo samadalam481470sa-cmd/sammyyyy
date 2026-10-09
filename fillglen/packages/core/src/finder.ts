@@ -147,7 +147,12 @@ export function detectBoardFromCareersUrl(url: string): { board: BoardKind; slug
     if (host.endsWith("smartrecruiters.com") && parts[0]) return { board: "smartrecruiters", slug: parts[0] };
     if (host.endsWith("taleo.net")) return { board: "taleo", slug: parts[0] || host.split(".")[0] };
     if (host.includes("successfactors") || host.includes("sapsf.")) return { board: "successfactors", slug: host.split(".")[0] };
-    if (host.includes("myworkdayjobs") || host.includes("myworkdaysite") || host.includes("workday")) {
+    if (host.includes("myworkdayjobs") || host.includes("myworkdaysite")) {
+      const tenant = host.split(".")[0];
+      const site = parts.find((p) => p && !/^en-?us$/i.test(p)) || "";
+      return { board: "workday", slug: site ? `${tenant}/${site}` : tenant };
+    }
+    if (host.includes("workday")) {
       return { board: "workday", slug: host.split(".")[0] };
     }
     if (host.endsWith("icims.com")) return { board: "icims", slug: host.split(".")[0] };
