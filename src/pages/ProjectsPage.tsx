@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useData } from '@/data/DataContext'
-import { OpportunityEditor } from '@/components/shared/OpportunityEditor'
+import {
+  OpportunityEditor,
+  type OpportunityEditorHandle,
+} from '@/components/shared/OpportunityEditor'
 import { formatCurrency } from '@/utils/dashboard'
 import { FolderKanban } from 'lucide-react'
 
@@ -11,6 +14,7 @@ import { FolderKanban } from 'lucide-react'
 export function ProjectsPage() {
   const { opportunities, loading, saveOpportunity } = useData()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const editorRef = useRef<OpportunityEditorHandle>(null)
 
   const projects = useMemo(
     () =>
@@ -23,13 +27,16 @@ export function ProjectsPage() {
   const selected =
     projects.find((o) => o.id === selectedId) ?? projects[0] ?? null
 
-  const rightTabs = [
-    { id: 'overview', label: 'Snapshot' },
-    { id: 'status', label: 'Status' },
-    { id: 'entity', label: 'Entity' },
-    { id: 'diligence', label: 'Diligence' },
-    { id: 'actions', label: 'Outstanding' },
-  ]
+  const rightTabs = useMemo(
+    () => [
+      { id: 'overview', label: 'Snapshot' },
+      { id: 'status', label: 'Status' },
+      { id: 'entity', label: 'Entity' },
+      { id: 'diligence', label: 'Diligence' },
+      { id: 'actions', label: 'Outstanding' },
+    ],
+    [],
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -51,7 +58,14 @@ export function ProjectsPage() {
                 <li key={project.id}>
                   <button
                     type="button"
-                    onClick={() => setSelectedId(project.id)}
+                    onClick={() => {
+                      if (selectedId === project.id) return
+                      if (editorRef.current) {
+                        editorRef.current.requestLeave(() => setSelectedId(project.id))
+                      } else {
+                        setSelectedId(project.id)
+                      }
+                    }}
                     className={`mb-1.5 flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
                       active
                         ? 'border-accent bg-accent-soft'
@@ -80,6 +94,7 @@ export function ProjectsPage() {
         <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-8rem)]">
           {selected ? (
             <OpportunityEditor
+              ref={editorRef}
               opportunity={selected}
               tabs={rightTabs}
               onSave={(patch) => saveOpportunity(selected.id, patch).then(() => undefined)}

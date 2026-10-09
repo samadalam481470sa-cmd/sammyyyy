@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useData } from '@/data/DataContext'
-import { OpportunityEditor } from '@/components/shared/OpportunityEditor'
+import {
+  OpportunityEditor,
+  type OpportunityEditorHandle,
+} from '@/components/shared/OpportunityEditor'
 import { OPPORTUNITY_STATUSES } from '@/data/constants'
 import { formatCurrency } from '@/utils/dashboard'
 import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
@@ -10,14 +13,61 @@ export function OpportunitiesPage() {
   const { opportunities, loading, saveOpportunity } = useData()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | OpportunityStatus>('All')
+  const editorRef = useRef<OpportunityEditorHandle>(null)
 
   const filtered = useMemo(() => {
     if (statusFilter === 'All') return opportunities
     return opportunities.filter((o) => o.status === statusFilter)
   }, [opportunities, statusFilter])
 
-  const selected =
-    opportunities.find((o) => o.id === selectedId) ?? filtered[0] ?? null
+  const selected = selectedId
+    ? (opportunities.find((o) => o.id === selectedId) ?? null)
+    : null
+
+  const closeEditor = () => setSelectedId(null)
+
+  useEffect(() => {
+    if (!selectedId) return
+    if (!opportunities.some((o) => o.id === selectedId)) {
+      setSelectedId(null)
+      return
+    }
+    if (!filtered.some((o) => o.id === selectedId) && !editorRef.current?.isDirty()) {
+      setSelectedId(null)
+    }
+  }, [filtered, opportunities, selectedId])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (editorRef.current) editorRef.current.requestLeave(closeEditor)
+      else closeEditor()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedId])
+
+  const onRowActivate = (id: string) => {
+    if (selectedId === id) {
+      if (editorRef.current) editorRef.current.requestLeave(closeEditor)
+      else closeEditor()
+      return
+    }
+    if (!selectedId) {
+      setSelectedId(id)
+      return
+    }
+    if (editorRef.current) editorRef.current.requestLeave(() => setSelectedId(id))
+    else setSelectedId(id)
+  }
+
+  const onRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, id: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onRowActivate(id)
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -60,8 +110,10 @@ export function OpportunitiesPage() {
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_420px]">
-        <div className="custom-scroll overflow-auto border-r border-border">
+      <div
+        className={`flex min-h-0 flex-1 ${selected ? 'lg:grid lg:grid-cols-[1fr_420px]' : ''}`}
+      >
+        <div className={`custom-scroll min-w-0 overflow-auto ${selected ? 'border-r border-border' : ''}`}>
           {loading && (
             <p className="px-6 py-8 text-sm text-ink-muted">Loading from database…</p>
           )}
@@ -82,7 +134,10 @@ export function OpportunitiesPage() {
                 return (
                   <tr
                     key={opp.id}
-                    onClick={() => setSelectedId(opp.id)}
+                    tabIndex={0}
+                    aria-selected={active}
+                    onClick={() => onRowActivate(opp.id)}
+                    onKeyDown={(event) => onRowKeyDown(event, opp.id)}
                     className={`cursor-pointer border-b border-border/70 ${
                       active ? 'bg-accent-soft/60' : 'hover:bg-accent-soft/30'
                     }`}
@@ -108,16 +163,16 @@ export function OpportunitiesPage() {
           </table>
         </div>
 
-        <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
-          {selected ? (
+        {selected && (
+          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
             <OpportunityEditor
+              ref={editorRef}
               opportunity={selected}
+              onClose={closeEditor}
               onSave={(patch) => saveOpportunity(selected.id, patch).then(() => undefined)}
             />
-          ) : (
-            <p className="p-6 text-sm text-ink-muted">Select an opportunity to edit.</p>
-          )}
-        </aside>
+          </aside>
+        )}
       </div>
     </div>
   )

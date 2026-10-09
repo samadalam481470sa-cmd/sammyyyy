@@ -38,6 +38,7 @@ import {
   saveLocalNavOrder,
 } from '@/lib/navOrder'
 import { sessionOwnerKey } from '@/lib/ownerKey'
+import { useEditorGuard } from '@/components/shared/EditorGuardContext'
 import type { LucideIcon } from 'lucide-react'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -74,6 +75,7 @@ function visibleNavItems(isManager: boolean | undefined): NavItem[] {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut, user } = useAuth()
   const navigate = useNavigate()
+  const editorGuard = useEditorGuard()
   const owner = sessionOwnerKey(user)
   const [orderIds, setOrderIds] = useState<string[]>(() =>
     visibleNavItems(user?.isManager).map((item) => item.id),
@@ -220,7 +222,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     if (didDragRef.current) {
                       e.preventDefault()
                       didDragRef.current = false
+                      return
                     }
+                    editorGuard?.guardClick(e, item.path)
                   }}
                   className={({ isActive }) =>
                     `group flex items-center gap-2 rounded-lg px-2 py-2.5 text-[13px] transition-colors ${
@@ -258,6 +262,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <NavLink
           to="/settings"
           title={collapsed ? 'Settings' : undefined}
+          onClick={(e) => editorGuard?.guardClick(e, '/settings')}
           className={({ isActive }) =>
             `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] transition-colors ${
               collapsed ? 'justify-center px-2' : ''
@@ -274,7 +279,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           type="button"
           onClick={() => {
-            void signOut().then(() => navigate('/login'))
+            const leave = () => {
+              void signOut().then(() => navigate('/login'))
+            }
+            if (editorGuard) editorGuard.guardAction(leave)
+            else leave()
           }}
           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/5 hover:text-white ${
             collapsed ? 'justify-center px-2' : ''
