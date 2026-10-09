@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DbQueryResult, DbRecord, DbStats } from "@fillglen/core";
-import { EMPTY_DB_STATS } from "@fillglen/core";
+import { EMPTY_DB_STATS, isDbKind, queryLocalStore } from "@fillglen/core";
 
 const KINDS = ["", "job", "employer", "application", "harvest", "answer"] as const;
 
@@ -10,6 +10,10 @@ type ChromeLite = {
       get: (keys: string[], cb: (r: Record<string, unknown>) => void) => void;
       set: (items: Record<string, unknown>) => void;
     };
+    onChanged?: {
+      addListener: (fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void) => void;
+      removeListener: (fn: (changes: Record<string, { newValue?: unknown }>, area: string) => void) => void;
+    };
   };
   runtime?: { sendMessage: (msg: unknown) => Promise<unknown> };
 };
@@ -17,11 +21,6 @@ type ChromeLite = {
 function chromeApi(): ChromeLite | undefined {
   return (globalThis as { chrome?: ChromeLite }).chrome;
 }
-
-const API_BASE =
-  (globalThis as { FILLGLEN_API?: string }).FILLGLEN_API ||
-  (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE) ||
-  "http://127.0.0.1:8787";
 
 export function DatabaseView({
   onBack,
@@ -37,6 +36,7 @@ export function DatabaseView({
   const [result, setResult] = useState<DbQueryResult | null>(null);
   const [stats, setStats] = useState<DbStats>(EMPTY_DB_STATS);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("Stored in this extension. Fetch stays in this window.");
 
   useEffect(() => {
     const chromeLocal = chromeApi()?.storage?.local;
@@ -48,59 +48,53 @@ export function DatabaseView({
         setKind(nextKind);
         const cache = r.dbCache as DbStats | undefined;
         if (cache?.total != null) setStats((s) => ({ ...s, ...cache }));
-        fetchRows(nextQ, nextKind).catch(() => {});
+        fetchRows(nextQ, nextKind, false).catch(() => {});
       });
-      return;
+    } else {
+      fetchRows("", "", false).catch(() => {});
     }
-    try {
-      const nextQ = localStorage.getItem("fillglen:ui:" + qKey) || "";
-      const nextKind = localStorage.getItem("fillglen:ui:" + kindKey) || "";
-      setQ(nextQ);
-      setKind(nextKind);
-      fetchRows(nextQ, nextKind).catch(() => {});
-    } catch {
-      fetchRows("", "").catch(() => {});
-    }
+    const onChanged = chromeApi()?.storage?.onChanged;
+    if (!onChanged) return;
+    const onChange = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+      if (area !== "local") return;
+      const cache = changes.dbCache?.newValue as DbStats | undefined;
+      if (cache?.total != null) setStats((s) => ({ ...s, ...cache }));
+    };
+    onChanged.addListener(onChange);
+    return () => onChanged.removeListener(onChange);
   }, [qKey, kindKey]);
 
   function persist(nextQ: string, nextKind: string) {
-    const chromeLocal = chromeApi()?.storage?.local;
-    if (chromeLocal) {
-      chromeLocal.set({ [qKey]: nextQ, [kindKey]: nextKind });
-      return;
-    }
-    try {
-      localStorage.setItem("fillglen:ui:" + qKey, nextQ);
-      localStorage.setItem("fillglen:ui:" + kindKey, nextKind);
-    } catch {
-      /* quota */
-    }
+    chromeApi()?.storage?.local?.set({ [qKey]: nextQ, [kindKey]: nextKind });
   }
 
-  async function fetchRows(nextQ: string, nextKind: string) {
-    const query = { q: nextQ, kind: nextKind || undefined, limit: 40 };
+  async function fetchRows(nextQ: string, nextKind: string, harvest: boolean) {
+    const query = { q: nextQ, kind: isDbKind(nextKind) ? nextKind : undefined, limit: 80 };
     const runtime = chromeApi()?.runtime;
     if (runtime?.sendMessage) {
-      const body = (await runtime.sendMessage({ type: "db-query", query })) as DbQueryResult;
+      const type = harvest ? "db-refresh" : "db-query";
+      const body = (await runtime.sendMessage({ type, query })) as DbQueryResult & { ok?: boolean };
       if (body?.rows) setResult(body);
       if (body?.stats) setStats(body.stats);
+      const n = body?.stats?.total ?? body?.total ?? 0;
+      setNote(
+        harvest
+          ? `Looked just now. ${n} stored in this extension.`
+          : `${n} stored in this extension. Fetch stays in this window.`
+      );
       return;
     }
-    const params = new URLSearchParams();
-    if (nextQ) params.set("q", nextQ);
-    if (nextKind) params.set("kind", nextKind);
-    params.set("limit", "40");
-    const res = await fetch(`${API_BASE}/v1/database/search?${params}`);
-    const body = (await res.json()) as DbQueryResult;
-    if (body?.rows) setResult(body);
-    if (body?.stats) setStats(body.stats);
+    const body = await queryLocalStore(query);
+    setResult(body);
+    setStats(body.stats);
+    setNote(`${body.stats.total} stored in this window.`);
   }
 
-  async function search(nextQ = q, nextKind = kind) {
+  async function search(nextQ = q, nextKind = kind, harvest = false) {
     setBusy(true);
     persist(nextQ, nextKind);
     try {
-      await fetchRows(nextQ, nextKind);
+      await fetchRows(nextQ, nextKind, harvest);
     } finally {
       setBusy(false);
     }
@@ -113,22 +107,23 @@ export function DatabaseView({
     <section className="fg-card">
       <div className="toolbar fg-actions">
         <button onClick={onBack}>Back</button>
-        <button className="primary" onClick={() => search()}>
+        <button className="primary" onClick={() => search(q, kind, false)}>
           Database
         </button>
-        <button disabled={busy} onClick={() => search()}>
-          Fetch
+        <button disabled={busy} onClick={() => search(q, kind, true)}>
+          {busy ? "Looking…" : "Fetch"}
         </button>
       </div>
       <div className="fg-card-head">
         <strong>Database</strong>
-        <span>{stats.total} stored · {total} match</span>
+        <span>{stats.total} in this extension · {total} match</span>
       </div>
       <p className="meta">
-        Jobs, employers, applications, and harvest ticks stay inside this widget. Search is local — type a title,
-        company, city, or ATS. The background harvest keeps writing while Chrome is open.
+        This database runs inside the extension. You do not open another site. Type a title, company, city, or ATS,
+        then Fetch. Harvest keeps writing here while Chrome is open.
         {stats.lastHarvestAt ? ` Last write ${new Date(stats.lastHarvestAt).toLocaleTimeString()}.` : ""}
       </p>
+      <p className="meta">{note}</p>
       <div className="fg-stats fg-stats-4">
         <div>
           <em>{stats.byKind.job || 0}</em>
@@ -150,13 +145,13 @@ export function DatabaseView({
       <div className="fg-search">
         <input
           value={q}
-          placeholder="Fetch: title, company, Texas, greenhouse…"
+          placeholder="Fetch in this extension: title, company, Texas…"
           onChange={(e) => {
             setQ(e.target.value);
             persist(e.target.value, kind);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") search();
+            if (e.key === "Enter") search(q, kind, true);
           }}
         />
         <select
@@ -164,7 +159,7 @@ export function DatabaseView({
           onChange={(e) => {
             setKind(e.target.value);
             persist(q, e.target.value);
-            search(q, e.target.value);
+            search(q, e.target.value, false);
           }}
         >
           {KINDS.map((k) => (
@@ -173,7 +168,7 @@ export function DatabaseView({
             </option>
           ))}
         </select>
-        <button className="primary" disabled={busy} onClick={() => search()}>
+        <button className="primary" disabled={busy} onClick={() => search(q, kind, true)}>
           Fetch
         </button>
       </div>
@@ -182,7 +177,9 @@ export function DatabaseView({
           <DbRow key={row.id} row={row} />
         ))}
       </ol>
-      {!rows.length ? <p className="meta">Nothing stored for this fetch yet. Keep Chrome open — harvest fills this list.</p> : null}
+      {!rows.length ? (
+        <p className="meta">Nothing stored for this fetch yet. Hit Fetch — it looks inside this extension, not a website.</p>
+      ) : null}
     </section>
   );
 }
@@ -190,9 +187,19 @@ export function DatabaseView({
 function DbRow({ row }: { row: DbRecord }) {
   return (
     <li className="qrow">
-      <a href={row.url || undefined} target="_blank" rel="noreferrer">
-        {row.title}
-      </a>
+      {row.url ? (
+        <button
+          className="qlabel"
+          onClick={() => {
+            const runtime = chromeApi()?.runtime;
+            if (runtime?.sendMessage) runtime.sendMessage({ type: "open-live-job", url: row.url });
+          }}
+        >
+          {row.title}
+        </button>
+      ) : (
+        <strong>{row.title}</strong>
+      )}
       <div className="meta">
         {row.kind}
         {row.company ? ` · ${row.company}` : ""}
@@ -206,13 +213,9 @@ function DbRow({ row }: { row: DbRecord }) {
         <div className="toolbar">
           <button
             className="primary"
-            onClick={() => {
-              const runtime = chromeApi()?.runtime;
-              if (runtime?.sendMessage) runtime.sendMessage({ type: "open-live-job", url: row.url });
-              else window.open(row.url, "_blank", "noopener");
-            }}
+            onClick={() => chromeApi()?.runtime?.sendMessage({ type: "open-live-job", url: row.url })}
           >
-            Open
+            Open job
           </button>
         </div>
       ) : null}

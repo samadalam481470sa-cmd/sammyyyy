@@ -18,6 +18,7 @@ import {
   queryRecords,
   recordId,
   resetMemoryStore,
+  seedEmployerRecords,
   trimRecords,
   upsertRecords,
 } from "../src/index.js";
@@ -144,6 +145,14 @@ describe("local database", () => {
     assert.ok(stats.lastHarvestAt);
     assert.equal(compactDbCache(stats).total, 4);
     assert.equal(mergeRecord(listing, { ...listing, score: 55 }).score, 55);
+  });
+
+  it("loads the built-in employer seed into records without a website", () => {
+    const rows = seedEmployerRecords();
+    assert.ok(rows.length >= 50);
+    assert.ok(rows.every((r) => r.kind === "employer" && r.company));
+    const found = queryRecords(rows, { q: "greenhouse", kind: "employer", limit: 10 });
+    assert.ok(found.total >= 1);
   });
 
   it("memory IndexedDB fallback upserts and queries", async () => {

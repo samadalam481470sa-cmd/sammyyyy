@@ -156,7 +156,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
-          <button onClick={() => setTabPersist("database")}>Database</button>
+          <button className="primary" onClick={() => setTabPersist("database")}>
+            Database
+          </button>
         </div>
         <LiveJobList
           jobs={liveJobs}
@@ -176,7 +178,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
-          <button onClick={() => setTabPersist("database")}>Database</button>
+          <button className="primary" onClick={() => setTabPersist("database")}>
+            Database
+          </button>
         </div>
         <Empty
           title="LinkedIn Easy Apply is off-limits"
@@ -193,7 +197,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
-          <button onClick={() => setTabPersist("database")}>Database</button>
+          <button className="primary" onClick={() => setTabPersist("database")}>
+            Database
+          </button>
         </div>
         <Empty
           title="No form on this page"
@@ -211,7 +217,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
-          <button onClick={() => setTabPersist("database")}>Database</button>
+          <button className="primary" onClick={() => setTabPersist("database")}>
+            Database
+          </button>
         </div>
         <Empty title="Scanning…" body="Looking for fields, including shadow DOM and this frame." />
       </Shell>
@@ -256,7 +264,9 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button className="primary" onClick={() => setTabPersist("live")}>
           Live jobs
         </button>
-        <button onClick={() => setTabPersist("database")}>Database</button>
+        <button className="primary" onClick={() => setTabPersist("database")}>
+          Database
+        </button>
       </div>
       <div className="tabs">
         {(["all", "needs-you", "filled"] as const).map((t) => (

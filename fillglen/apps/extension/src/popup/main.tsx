@@ -140,7 +140,9 @@ function Popup() {
           <button disabled={busy} onClick={() => refreshQueue()}>
             Refresh
           </button>
-          <button onClick={() => persistUi({ view: "database" })}>Database</button>
+          <button className="primary" onClick={() => persistUi({ view: "database" })}>
+            Database
+          </button>
         </div>
         <section className="fg-card">
           <div className="fg-card-head">
@@ -190,9 +192,15 @@ function Popup() {
         <button className="primary" onClick={() => persistUi({ view: "live" })}>
           Live jobs
         </button>
-        <button onClick={() => persistUi({ view: "database" })}>Database</button>
-        <span className="meta">{liveJobs.length} saved · {dbTotal} in database</span>
+        <button className="primary" onClick={() => persistUi({ view: "database" })}>
+          Database
+        </button>
+        <span className="meta">{liveJobs.length} saved · {dbTotal} in this extension</span>
       </div>
+      <button className="primary fg-db-go" onClick={() => persistUi({ view: "database" })}>
+        <strong>Go to Database</strong>
+        <span>{dbTotal} stored in this extension — fetch here, not a website</span>
+      </button>
 
       <section className="fg-card fg-discover">
         <div className="fg-card-head">
@@ -350,9 +358,9 @@ function Popup() {
       </section>
 
       <p className="meta fg-foot-note">
-        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. The database
-        keeps every harvest in this widget so you can fetch a title or company later. Unknown form questions use the
-        resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
+        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. Database is a
+        button in this same window — it does not open another site. Unknown form questions use the resume; if the
+        resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
       </p>
       <CopyrightNotice />
     </div>

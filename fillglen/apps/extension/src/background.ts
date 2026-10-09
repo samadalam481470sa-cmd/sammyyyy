@@ -375,6 +375,18 @@ chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendRespo
       .catch(() => sendResponse({ ok: false, rows: [], total: 0, stats: { total: 0 } }));
     return true;
   }
+  if (msg?.type === "db-refresh") {
+    const query = ((msg as { query?: Record<string, unknown> }).query || {}) as Record<string, unknown>;
+    harvestLiveJobs()
+      .then(() => runDbQuery(query))
+      .then((body) => sendResponse({ ok: true, ...body }))
+      .catch(() =>
+        runDbQuery(query)
+          .then((body) => sendResponse({ ok: true, ...body }))
+          .catch(() => sendResponse({ ok: false, rows: [], total: 0, stats: { total: 0 } }))
+      );
+    return true;
+  }
   if (msg?.type === "db-stats") {
     runDbStats()
       .then((stats) => sendResponse({ ok: true, stats }))

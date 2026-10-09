@@ -2,9 +2,9 @@ import {
   answerRecord,
   applicationRecord,
   compactDbCache,
-  employerRecord,
   harvestRecord,
   jobRecord,
+  seedEmployerRecords,
   localDbStats,
   parseDbQuery,
   putLocalRecords,
@@ -37,7 +37,9 @@ export async function ingestFromStorage(extra: DbRecord[] = []): Promise<DbStats
   const records: DbRecord[] = [...extra];
   for (const job of asJobs(stored.liveJobs)) records.push(jobRecord(job));
   for (const job of asJobs(stored.applyQueue)) records.push(jobRecord(job));
-  for (const emp of (stored.discoveredEmployers as EmployerRecord[]) || []) records.push(employerRecord(emp));
+  for (const emp of seedEmployerRecords((stored.discoveredEmployers as EmployerRecord[]) || [])) {
+    records.push(emp);
+  }
   const jobs = (stored.jobs as { id?: string; title?: string; company?: string; url?: string; board?: string }[]) || [];
   const jobById = new Map(jobs.map((j) => [j.id, j]));
   for (const app of (stored.applications as { id?: string; jobId?: string; status?: string; createdAt?: string; appliedAt?: string | null }[]) || []) {
@@ -88,7 +90,7 @@ export async function runDbQuery(raw: Record<string, unknown> = {}): Promise<DbQ
     const fallback: DbRecord[] = [
       ...asJobs(liveJobs).map(jobRecord),
       ...asJobs(applyQueue).map(jobRecord),
-      ...((discoveredEmployers as EmployerRecord[]) || []).map(employerRecord),
+      ...seedEmployerRecords((discoveredEmployers as EmployerRecord[]) || []),
     ];
     return queryRecords(fallback, query);
   }

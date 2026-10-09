@@ -48,6 +48,7 @@ export type FromPanel =
 
 export type DbMessage =
   | { type: "db-query"; query?: DbQuery | Record<string, unknown> }
+  | { type: "db-refresh"; query?: DbQuery | Record<string, unknown> }
   | { type: "db-stats" }
   | { type: "db-get"; id: string }
   | { type: "db-ingest" };

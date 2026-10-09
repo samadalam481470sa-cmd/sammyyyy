@@ -34,6 +34,18 @@ button, textarea, input { font: inherit; }
 .fg-stats.fg-stats-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
 .fg-search { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin: 12px 0; align-items: center; }
 .fg-search input, .fg-search select { margin: 0; }
+.fg-db-go {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  text-align: left;
+}
+.fg-db-go strong { font-size: 16px; }
+.fg-db-go span { font-size: 12px; opacity: 0.9; font-weight: 400; }
 .fg-stats div { background: var(--cream); border-radius: 12px; padding: 12px 10px; text-align: center; }
 .fg-stats em { display: block; font-style: normal; font-size: 20px; font-weight: 700; }
 .fg-stats span { font-size: 11px; color: var(--mute); }

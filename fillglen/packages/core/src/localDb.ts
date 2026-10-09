@@ -1,5 +1,5 @@
 import { canonicalJobUrl, type ApplyQueueItem } from "./applyLoop.js";
-import type { CanonicalListing, EmployerRecord } from "./finder.js";
+import { seedEmployers, type CanonicalListing, type EmployerRecord } from "./finder.js";
 
 /** Kinds stored in the in-app database. Chrome.storage still holds the compact live list. */
 export type DbKind = "job" | "employer" | "application" | "harvest" | "event" | "answer";
@@ -174,6 +174,11 @@ export function employerRecord(emp: EmployerRecord): DbRecord {
     text: blob([emp.company, emp.metro, emp.board, emp.slug, emp.careersUrl, emp.sourceKind]),
     meta: { ...emp },
   };
+}
+
+/** Built-in employer seed so the extension database is full without a website. */
+export function seedEmployerRecords(extra: EmployerRecord[] = []): DbRecord[] {
+  return seedEmployers(extra).map(employerRecord);
 }
 
 export function harvestRecord(tick: {
