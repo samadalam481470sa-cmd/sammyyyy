@@ -1,5 +1,5 @@
 import type { ActivityItem, AttentionAlert, PriorityTask } from '@/types'
-import { anonymousProjectName } from '@/lib/demoAliases'
+import { anonymousProjectName } from '../lib/demoAliases'
 
 /**
  * Mock supporting dashboard data.

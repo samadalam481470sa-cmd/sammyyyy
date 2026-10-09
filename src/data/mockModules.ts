@@ -4,7 +4,7 @@
  * Names, firms, and figures are synthetic sample data for illustration only.
  */
 
-import { anonymousEntityName, anonymousProjectName } from '@/lib/demoAliases'
+import { anonymousEntityName, anonymousProjectName } from '../lib/demoAliases'
 
 export interface ContactRecord {
   id: string

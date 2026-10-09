@@ -1,5 +1,5 @@
 import type { MeetingRecord } from '@/types/meetings'
-import { anonymousEntityName, anonymousProjectName } from '@/lib/demoAliases'
+import { anonymousEntityName, anonymousProjectName } from '../lib/demoAliases'
 
 export const mockMeetings: MeetingRecord[] = [
   {

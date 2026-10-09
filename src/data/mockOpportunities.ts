@@ -3,7 +3,7 @@ import {
   anonymousEntityName,
   anonymousProjectName,
   demoProjectNumber,
-} from '@/lib/demoAliases'
+} from '../lib/demoAliases'
 
 /**
  * Public demo opportunities.
