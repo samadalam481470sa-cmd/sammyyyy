@@ -17,6 +17,7 @@ import { db, decryptField, encryptField, hashToken, id, loadDb, saveDb } from ".
 import { fetchPublicJobs } from "./jobs.js";
 import { mountFinder } from "./finder/routes.js";
 import { cycle as finderCycle } from "./finder/worker.js";
+import { archiveListings, mountDatabase } from "./database.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const SECRET = process.env.FILLGLEN_SECRET || "dev-only-change-me";
@@ -29,7 +30,13 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: [CORS, "http://127.0.0.1:5173", "http://localhost:5173"],
+    origin: [
+      CORS,
+      "http://127.0.0.1:5173",
+      "http://localhost:5173",
+      "http://127.0.0.1:5174",
+      "http://localhost:5174",
+    ],
     credentials: true,
   })
 );
@@ -50,7 +57,7 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   next();
 }
 
-app.get("/health", (_req, res) => res.json({ ok: true, product: "fillglen" }));
+app.get("/health", (_req, res) => res.json({ ok: true, product: "fillglen", database: "local" }));
 
 app.post("/v1/auth/magic", (req, res) => {
   const parsed = z.object({ email: z.string().email() }).safeParse(req.body);
@@ -210,6 +217,7 @@ app.post("/v1/ai/draft", auth, async (req, res) => {
 });
 
 mountFinder(app, auth);
+mountDatabase(app, auth);
 
 app.get("/v1/jobs/public", auth, async (req, res) => {
   const q = String(req.query.q || "");
@@ -233,6 +241,8 @@ app.get("/v1/export", auth, (req, res) => {
     answers: db.filter("answers", (a) => a.userId === userId),
     jobs: db.filter("jobs", (j) => j.userId === userId),
     applications: db.filter("applications", (a) => a.userId === userId),
+    database: db.filter("localRecords", () => true).length,
+    harvestLog: db.filter("harvestLog", () => true).length,
   });
 });
 
@@ -263,6 +273,13 @@ if (isDirect) {
       finderCycle().catch((err) => console.error("finder start", err));
     }
     setInterval(() => finderCycle().catch((err) => console.error("finder", err)), ms);
+    setInterval(() => {
+      try {
+        archiveListings();
+      } catch (err) {
+        console.error("database archive", err);
+      }
+    }, 5 * 60 * 1000);
   }
 }
 

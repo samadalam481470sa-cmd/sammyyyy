@@ -100,6 +100,41 @@ describe("Fillglen API", () => {
     assert.equal(mapped.body.board, "lever");
     assert.equal(mapped.body.slug, "acme");
   });
+  it("in-app database ingest and search", async () => {
+    const ingest = await json(`${base}/v1/database/ingest`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        records: [
+          {
+            id: "job:https://boards.greenhouse.io/ntm/jobs/55",
+            kind: "job",
+            title: "IT Systems Analyst",
+            company: "North Texas Mutual",
+            url: "https://boards.greenhouse.io/ntm/jobs/55",
+            location: "Carrollton, TX",
+            source: "greenhouse",
+            score: 88,
+            why: "Texas IT",
+            status: "open",
+            firstSeenAt: "2026-10-01T00:00:00.000Z",
+            lastSeenAt: "2026-10-08T00:00:00.000Z",
+            text: "it systems analyst north texas mutual carrollton",
+            meta: {},
+          },
+        ],
+      }),
+    });
+    assert.equal(ingest.body.ok, true);
+    assert.ok(ingest.body.total >= 1);
+    const search = await json(`${base}/v1/database/search?q=analyst&kind=job`);
+    assert.ok(search.body.total >= 1);
+    assert.equal(search.body.rows[0].company, "North Texas Mutual");
+    const stats = await json(`${base}/v1/database/stats`);
+    assert.ok(stats.body.total >= 1);
+    const one = await json(`${base}/v1/database/record/${encodeURIComponent("job:https://boards.greenhouse.io/ntm/jobs/55")}`);
+    assert.equal(one.body.title, "IT Systems Analyst");
+  });
   it("export and delete account", async () => {
     const exp = await json(`${base}/v1/export`, { headers: { authorization: `Bearer ${token}` } });
     assert.equal(exp.body.user.email, "sam@fillglen.test");

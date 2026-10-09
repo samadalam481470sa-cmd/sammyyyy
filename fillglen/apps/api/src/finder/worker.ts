@@ -3,6 +3,7 @@
  * Chrome MV3 workers cannot keep this alive.
  */
 import { loadDb } from "../db.js";
+import { archiveFinderCycle } from "../database.js";
 import { runFetch, recheckOpen } from "./pipeline.js";
 import { runMapDiscovery } from "./maps.js";
 
@@ -17,6 +18,14 @@ async function cycle() {
   console.log(
     `Fillglen finder: fetched=${fetch.fetched} stored=${fetch.stored} closed=${recheck.closed} maps=${maps?.companiesSeen ?? 0}`
   );
+  archiveFinderCycle({
+    fetched: fetch.fetched,
+    stored: fetch.stored,
+    closed: recheck.closed,
+    maps: maps?.companiesSeen ?? 0,
+    via: "api",
+    note: `fetched=${fetch.fetched} stored=${fetch.stored} closed=${recheck.closed} maps=${maps?.companiesSeen ?? 0}`,
+  });
 }
 
 if (process.argv[1]?.includes("worker")) {

@@ -10,10 +10,11 @@ import {
   type Profile,
 } from "@fillglen/core";
 import { CopyrightNotice, Wordmark } from "../brand";
+import { DatabaseView } from "../shared/DatabaseView";
 import "../panel/styles.css";
 
 type Match = ApplyQueueItem;
-type View = "home" | "live";
+type View = "home" | "live" | "database";
 
 function Popup() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
@@ -26,6 +27,7 @@ function Popup() {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<View>("home");
   const [harvestedAt, setHarvestedAt] = useState("");
+  const [dbTotal, setDbTotal] = useState(0);
 
   useEffect(() => {
     chrome.storage.local.get(
@@ -41,6 +43,7 @@ function Popup() {
         "popupStatus",
         "popupView",
         "liveJobsHarvestedAt",
+        "dbCache",
       ],
       (r) => {
         if (r.profile) setProfile(hydrateProfile(r.profile));
@@ -49,8 +52,9 @@ function Popup() {
         if (Array.isArray(r.liveJobs)) setLiveJobs(r.liveJobs);
         if (typeof r.popupPaste === "string") setPaste(r.popupPaste);
         if (typeof r.popupStatus === "string") setStatus(r.popupStatus);
-        if (r.popupView === "live" || r.popupView === "home") setView(r.popupView);
+        if (r.popupView === "live" || r.popupView === "home" || r.popupView === "database") setView(r.popupView);
         if (typeof r.liveJobsHarvestedAt === "string") setHarvestedAt(r.liveJobsHarvestedAt);
+        if (r.dbCache?.total != null) setDbTotal(Number(r.dbCache.total) || 0);
         setKeepApplying(Boolean(r.keepApplying));
         const base = r.apiBase || "http://127.0.0.1:8787";
         if (r.sessionToken) {
@@ -76,6 +80,7 @@ function Popup() {
       if (changes.keepApplying) setKeepApplying(Boolean(changes.keepApplying.newValue));
       if (changes.liveJobs?.newValue) setLiveJobs(changes.liveJobs.newValue);
       if (typeof changes.liveJobsHarvestedAt?.newValue === "string") setHarvestedAt(changes.liveJobsHarvestedAt.newValue);
+      if (changes.dbCache?.newValue?.total != null) setDbTotal(Number(changes.dbCache.newValue.total) || 0);
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
@@ -113,6 +118,16 @@ function Popup() {
     await chrome.runtime.sendMessage({ type: "open-live-job", url });
   }
 
+  if (view === "database") {
+    return (
+      <div className="fg-root fg-popup">
+        <Wordmark />
+        <DatabaseView onBack={() => persistUi({ view: "home" })} persistKey="popup" />
+        <CopyrightNotice />
+      </div>
+    );
+  }
+
   if (view === "live") {
     return (
       <div className="fg-root fg-popup">
@@ -125,6 +140,7 @@ function Popup() {
           <button disabled={busy} onClick={() => refreshQueue()}>
             Refresh
           </button>
+          <button onClick={() => persistUi({ view: "database" })}>Database</button>
         </div>
         <section className="fg-card">
           <div className="fg-card-head">
@@ -174,7 +190,8 @@ function Popup() {
         <button className="primary" onClick={() => persistUi({ view: "live" })}>
           Live jobs
         </button>
-        <span className="meta">{liveJobs.length} saved</span>
+        <button onClick={() => persistUi({ view: "database" })}>Database</button>
+        <span className="meta">{liveJobs.length} saved · {dbTotal} in database</span>
       </div>
 
       <section className="fg-card fg-discover">
@@ -183,7 +200,7 @@ function Popup() {
           <span>{keepApplying ? "Running while this widget is on" : "Scanning in the background"}</span>
         </div>
         <p className="meta">{discover.note || EMPTY_DISCOVER.note}</p>
-        <div className="fg-stats">
+        <div className="fg-stats fg-stats-4">
           <div>
             <em>{discover.companiesSeen}</em>
             <span>Companies seen</span>
@@ -195,6 +212,10 @@ function Popup() {
           <div>
             <em>{liveJobs.length}</em>
             <span>Live jobs</span>
+          </div>
+          <div>
+            <em>{dbTotal}</em>
+            <span>Database</span>
           </div>
         </div>
       </section>
@@ -329,8 +350,9 @@ function Popup() {
       </section>
 
       <p className="meta fg-foot-note">
-        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. Unknown form
-        questions use the resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
+        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. The database
+        keeps every harvest in this widget so you can fetch a title or company later. Unknown form questions use the
+        resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
       </p>
       <CopyrightNotice />
     </div>

@@ -21,6 +21,8 @@ interface Store {
   scoreCache: Row[];
   feedback: Row[];
   alerts: Row[];
+  harvestLog: Row[];
+  localRecords: Row[];
 }
 
 const DATA = process.env.FILLGLEN_DATA || path.join(process.cwd(), ".data", "fillglen.json");
@@ -43,6 +45,8 @@ function empty(): Store {
     scoreCache: [],
     feedback: [],
     alerts: [],
+    harvestLog: [],
+    localRecords: [],
   };
 }
 
@@ -111,6 +115,11 @@ export const db = {
   remove<K extends keyof Store>(table: K, pred: (r: Row) => boolean): void {
     mem[table] = mem[table].filter((r) => !pred(r)) as Store[K];
     saveDb();
+  },
+  replace<K extends keyof Store>(table: K, rows: Store[K]): Store[K] {
+    mem[table] = rows;
+    saveDb();
+    return mem[table];
   },
 };
 

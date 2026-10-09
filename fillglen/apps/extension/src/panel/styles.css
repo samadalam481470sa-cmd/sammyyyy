@@ -31,6 +31,9 @@ button, textarea, input { font: inherit; }
 .fg-card-head span { color: var(--mute); font-size: 12px; }
 .fg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; margin-top: 16px; }
 .fg-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 14px; }
+.fg-stats.fg-stats-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.fg-search { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin: 12px 0; align-items: center; }
+.fg-search input, .fg-search select { margin: 0; }
 .fg-stats div { background: var(--cream); border-radius: 12px; padding: 12px 10px; text-align: center; }
 .fg-stats em { display: block; font-style: normal; font-size: 20px; font-weight: 700; }
 .fg-stats span { font-size: 11px; color: var(--mute); }

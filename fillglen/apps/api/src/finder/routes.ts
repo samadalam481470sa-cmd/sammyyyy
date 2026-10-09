@@ -2,6 +2,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { DEFAULT_SEARCH, type SearchSettings } from "@fillglen/core";
 import { db, id } from "../db.js";
+import { archiveFinderCycle } from "../database.js";
 import { addEmployerFromUrl, getCoverage, runFetch, scoreForSearch, searchSettingsForUser, verifyThenAlert } from "./pipeline.js";
 import { loadDiscoverStatus, runMapDiscovery } from "./maps.js";
 import { createAiProvider } from "./provider.js";
@@ -60,11 +61,19 @@ export function mountFinder(app: Express, auth: Auth) {
   app.post("/v1/finder/run", auth, async (_req, res) => {
     const maps = await runMapDiscovery({ maxTiles: 1, maxSites: 8 }).catch(() => null);
     const result = await runFetch({ includeUsa: true, includeAdzuna: true });
+    const database = archiveFinderCycle({
+      fetched: result.fetched,
+      stored: result.stored,
+      maps: maps?.companiesSeen ?? 0,
+      via: "api-run",
+      note: "manual finder run",
+    });
     res.json({
       ...result,
       maps,
       coverage: getCoverage("texas"),
       provider: createAiProvider().name,
+      database,
       note: "Search runs on the server 24/7. Map discovery uses OpenStreetMap (and Google Places if a key is set). Google Maps is not scraped.",
     });
   });

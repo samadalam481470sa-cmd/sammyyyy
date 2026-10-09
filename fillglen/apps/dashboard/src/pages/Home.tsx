@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { applicationStats } from "@fillglen/core";
@@ -7,7 +7,11 @@ import { api, token } from "../api";
 export default function Home() {
   const [data, setData] = useState<{ applications: { status: string; createdAt: string }[] }>({ applications: [] });
   const [localCount, setLocalCount] = useState<number | null>(null);
+  const [dbTotal, setDbTotal] = useState<number | null>(null);
   useEffect(() => {
+    api("/v1/database/stats")
+      .then((r) => setDbTotal(r.total ?? 0))
+      .catch(() => setDbTotal(0));
     if (!token()) return;
     api("/v1/applications").then(setData).catch(() => {});
     api("/v1/finder/matches")
@@ -37,6 +41,14 @@ export default function Home() {
         <Card label="Marked applied" value={applied} />
         <Card label="Response rate" value={stats.responseRate} />
         <Card label="New local matches" value={localCount == null ? "…" : localCount} />
+        <Card
+          label="Database"
+          value={
+            <Link className="underline" to="/database">
+              {dbTotal == null ? "Fetch stored jobs" : `${dbTotal} stored`}
+            </Link>
+          }
+        />
       </div>
       <div className="h-56 bg-[#fffbf5] border border-[#d9d0c4] rounded-xl p-3">
         <ResponsiveContainer width="100%" height="100%">
@@ -52,7 +64,7 @@ export default function Home() {
   );
 }
 
-function Card({ label, value }: { label: string; value: string | number }) {
+function Card({ label, value }: { label: string; value: string | number | ReactNode }) {
   return (
     <div className="bg-[#fffbf5] border border-[#d9d0c4] rounded-2xl p-6">
       <div className="text-sm text-[#5c6b64]">{label}</div>

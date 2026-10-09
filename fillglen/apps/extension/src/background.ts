@@ -18,6 +18,8 @@ import {
 } from "@fillglen/core";
 import type { FromPanel, KeepStatus, ToBackground, ToContent, ToPanel } from "./shared/messages";
 import { loadDiscover, runDiscoverTick } from "./backgroundDiscover";
+import { getLocalRecord } from "@fillglen/core";
+import { ingestFromStorage, recordHarvestTick, runDbQuery, runDbStats } from "./ingestDb";
 
 const contentPorts = new Map<number, Set<chrome.runtime.Port>>();
 const panelPorts = new Set<chrome.runtime.Port>();
@@ -249,6 +251,7 @@ async function maybeTrack(snap: ScanSnapshot) {
     appliedAt: null,
   });
   await chrome.storage.local.set({ jobs, applications });
+  ingestFromStorage().catch(() => {});
 }
 
 function looksApply(url?: string) {
@@ -318,15 +321,21 @@ function startLiveAlarm() {
   chrome.alarms.create("fillglen-live", { periodInMinutes: 1 });
 }
 
+function startDbAlarm() {
+  chrome.alarms.create("fillglen-db", { periodInMinutes: 1 });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(["profile"], (r) => {
     if (!r.profile) chrome.storage.local.set({ profile: EMPTY_PROFILE });
   });
   startLiveAlarm();
+  startDbAlarm();
   harvestLiveJobs().catch(() => {});
 });
 chrome.runtime.onStartup?.addListener(() => {
   startLiveAlarm();
+  startDbAlarm();
   harvestLiveJobs().catch(() => {});
 });
 
@@ -360,12 +369,40 @@ chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendRespo
     openLiveJob(url).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg?.type === "db-query") {
+    runDbQuery(((msg as { query?: Record<string, unknown> }).query || msg) as Record<string, unknown>)
+      .then((body) => sendResponse({ ok: true, ...body }))
+      .catch(() => sendResponse({ ok: false, rows: [], total: 0, stats: { total: 0 } }));
+    return true;
+  }
+  if (msg?.type === "db-stats") {
+    runDbStats()
+      .then((stats) => sendResponse({ ok: true, stats }))
+      .catch(() => sendResponse({ ok: false, stats: { total: 0 } }));
+    return true;
+  }
+  if (msg?.type === "db-get" && typeof (msg as { id?: string }).id === "string") {
+    getLocalRecord((msg as { id: string }).id)
+      .then((row) => sendResponse({ ok: Boolean(row), row }))
+      .catch(() => sendResponse({ ok: false, row: null }));
+    return true;
+  }
+  if (msg?.type === "db-ingest") {
+    ingestFromStorage()
+      .then((stats) => sendResponse({ ok: true, stats }))
+      .catch(() => sendResponse({ ok: false, stats: { total: 0 } }));
+    return true;
+  }
   return undefined;
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "fillglen-live") {
     harvestLiveJobs().catch(() => {});
+    return;
+  }
+  if (alarm.name === "fillglen-db") {
+    ingestFromStorage().catch(() => {});
     return;
   }
   if (alarm.name !== "fillglen-keep") return;
@@ -429,6 +466,7 @@ async function harvestLiveJobs(): Promise<ApplyQueueItem[]> {
   const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
   const merged = mergeLiveJobs((liveJobs as ApplyQueueItem[]) || [], queue, 200);
   await chrome.storage.local.set({ liveJobs: merged, liveJobsHarvestedAt: new Date().toISOString() });
+  recordHarvestTick(queue.length, merged.length).catch(() => {});
   return queue;
 }
 
@@ -437,6 +475,7 @@ async function openLiveJob(url: string) {
   await chrome.storage.local.set({
     liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], url, { openedAt: new Date().toISOString() }),
   });
+  ingestFromStorage().catch(() => {});
   await chrome.tabs.create({ url });
 }
 
@@ -558,6 +597,7 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
 }
 
 startLiveAlarm();
+startDbAlarm();
 
 async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
   const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
@@ -588,6 +628,7 @@ async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: stri
         applyQueue: marked,
         liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], currentUrl, { appliedAt: now }),
       });
+      ingestFromStorage().catch(() => {});
     }
     goToNextJob(tabId, currentUrl || "", status).catch(() => {});
   }

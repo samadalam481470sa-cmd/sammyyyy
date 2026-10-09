@@ -155,3 +155,40 @@ CREATE TABLE finder_alerts (
   at TIMESTAMPTZ NOT NULL DEFAULT now(),
   timing TEXT NOT NULL
 );
+
+-- In-app database archive. The hourly finder writes here 24/7; the extension
+-- dual-writes the same shape into IndexedDB while Chrome is open.
+CREATE TABLE harvest_log (
+  id TEXT PRIMARY KEY,
+  at TIMESTAMPTZ NOT NULL,
+  fetched INT NOT NULL DEFAULT 0,
+  stored INT NOT NULL DEFAULT 0,
+  closed INT NOT NULL DEFAULT 0,
+  maps INT NOT NULL DEFAULT 0,
+  via TEXT NOT NULL DEFAULT 'finder',
+  note TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE local_records (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '',
+  location TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT '',
+  score INT,
+  why TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  first_seen_at TIMESTAMPTZ NOT NULL,
+  last_seen_at TIMESTAMPTZ NOT NULL,
+  opened_at TIMESTAMPTZ,
+  applied_at TIMESTAMPTZ,
+  text TEXT NOT NULL DEFAULT '',
+  meta JSONB NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX local_records_kind_idx ON local_records (kind);
+CREATE INDEX local_records_last_seen_idx ON local_records (last_seen_at DESC);
+CREATE INDEX local_records_company_idx ON local_records (company);
+CREATE INDEX local_records_text_idx ON local_records USING gin (to_tsvector('simple', text));

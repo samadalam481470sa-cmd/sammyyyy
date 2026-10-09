@@ -13,7 +13,7 @@ It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes L
 - `packages/core` — types, classify/resolve pipeline, adapters, match score, tailor, AI gates
 - `apps/extension` — TypeScript + React + Vite + `@crxjs/vite-plugin` (side panel, pop-out, popup, content scripts)
 - `apps/api` — Express + Zod + Helmet + rate limit + audit log (PostgreSQL schema in `src/schema.sql`; local JSON store when `DATABASE_URL` is unset). The **24/7 local finder** lives here: hourly fetch of public Greenhouse/Lever/Ashby/SmartRecruiters/Workable feeds, USAJOBS and Adzuna when keys exist, rule filters, optional Claude/OpenAI scoring, alerts. Chrome does not search.
-- `apps/dashboard` — React 19, Vite, Tailwind, Recharts. **Local jobs** map/list and **Saved searches**.
+- `apps/dashboard` — React 19, Vite, Tailwind, Recharts. **Local jobs** map/list, **Database**, and **Saved searches**.
 
 ## Download and deploy
 
@@ -35,10 +35,12 @@ cd sammyyyy/fillglen
 npm install
 npm test
 npm run dev:api        # http://127.0.0.1:8787  (hourly finder on by default)
-npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /searches, /live
+npm run dev:dashboard  # http://127.0.0.1:5173  → /local, /database, /searches, /live
 ```
 
 Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROVIDER=claude` or `openai`, plus `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. There is no Chrome Web Store listing yet.
+
+**Database:** the widget **Database** button and dashboard `/database` search an in-app store (IndexedDB in Chrome, JSON archive in the API). Harvest writes into it every minute while Chrome is open; the API finder keeps writing 24/7. Fetch by title, company, city, or ATS — existing Live jobs / chrome.storage lists stay as they are.
 
 **Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then switches to the **already-warmed next listing** (a background tab, so the handoff is immediate; Submit’s tab stays a moment so the POST can finish). **Live jobs** on the popup (and in the live window) keeps the list as Fillglen looks in the background. Open a job right after you finish an application, or leave it there. Applied rows stay on the list. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
 

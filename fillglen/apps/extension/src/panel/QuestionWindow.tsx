@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { ApplyQueueItem, Profile, Question, ScanSnapshot } from "@fillglen/core";
 import { scoreMatch } from "@fillglen/core";
 import { CopyrightNotice, Logo } from "../brand";
+import { DatabaseView } from "../shared/DatabaseView";
 
-export type FilterTab = "all" | "needs-you" | "filled" | "live";
+export type FilterTab = "all" | "needs-you" | "filled" | "live" | "database";
 
 export interface DraftState {
   questionId: string;
@@ -107,7 +108,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
   const [storedLive, setStoredLive] = useState<ApplyQueueItem[]>([]);
   useEffect(() => {
     readLocal<FilterTab>("panelTab", "all", (v) => {
-      if (v === "all" || v === "needs-you" || v === "filled" || v === "live") setTab(v);
+      if (v === "all" || v === "needs-you" || v === "filled" || v === "live" || v === "database") setTab(v);
     });
     readLocal<ApplyQueueItem[]>("liveJobs", [], (v) => {
       if (Array.isArray(v)) setStoredLive(v);
@@ -139,6 +140,14 @@ export function QuestionWindow(props: QuestionWindowProps) {
     return scoreMatch(props.snapshot.job.description || props.snapshot.job.title, props.profile);
   }, [props.snapshot, props.profile]);
 
+  if (tab === "database") {
+    return (
+      <Shell>
+        <DatabaseView onBack={() => setTabPersist("all")} persistKey="panel" />
+      </Shell>
+    );
+  }
+
   if (tab === "live") {
     return (
       <Shell>
@@ -147,6 +156,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
+          <button onClick={() => setTabPersist("database")}>Database</button>
         </div>
         <LiveJobList
           jobs={liveJobs}
@@ -166,6 +176,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
+          <button onClick={() => setTabPersist("database")}>Database</button>
         </div>
         <Empty
           title="LinkedIn Easy Apply is off-limits"
@@ -182,6 +193,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
+          <button onClick={() => setTabPersist("database")}>Database</button>
         </div>
         <Empty
           title="No form on this page"
@@ -199,6 +211,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
           </button>
+          <button onClick={() => setTabPersist("database")}>Database</button>
         </div>
         <Empty title="Scanning…" body="Looking for fields, including shadow DOM and this frame." />
       </Shell>
@@ -243,6 +256,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
         <button className="primary" onClick={() => setTabPersist("live")}>
           Live jobs
         </button>
+        <button onClick={() => setTabPersist("database")}>Database</button>
       </div>
       <div className="tabs">
         {(["all", "needs-you", "filled"] as const).map((t) => (

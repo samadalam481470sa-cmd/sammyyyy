@@ -1,4 +1,4 @@
-import type { FillPlan, Profile, Question, ScanSnapshot } from "@fillglen/core";
+import type { DbQuery, FillPlan, Profile, Question, ScanSnapshot } from "@fillglen/core";
 
 export type KeepStatus =
   | "fill"
@@ -45,3 +45,9 @@ export type FromPanel =
   | { type: "edit-value"; questionId: string; value: string }
   | { type: "start-keep-applying" }
   | { type: "stop-keep-applying" };
+
+export type DbMessage =
+  | { type: "db-query"; query?: DbQuery | Record<string, unknown> }
+  | { type: "db-stats" }
+  | { type: "db-get"; id: string }
+  | { type: "db-ingest" };

@@ -17,4 +17,6 @@ export * from "./answers.js";
 export * from "./feeds.js";
 export * from "./mapsDiscover.js";
 export * from "./resumeMatch.js";
+export * from "./localDb.js";
+export * from "./idbStore.js";
 export { planPage, planFill, valueForType } from "./resolve.js";

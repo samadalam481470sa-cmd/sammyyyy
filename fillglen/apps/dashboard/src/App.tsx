@@ -12,11 +12,13 @@ import LiveDemo from "./pages/LiveDemo";
 import SignIn from "./pages/SignIn";
 import LocalJobs from "./pages/LocalJobs";
 import SavedSearches from "./pages/SavedSearches";
+import DatabasePage from "./pages/Database";
 import { CopyrightNotice, Logo } from "./Brand";
 
 const links = [
   ["/", "Home"],
   ["/local", "Local jobs"],
+  ["/database", "Database"],
   ["/searches", "Saved searches"],
   ["/tracker", "Tracker"],
   ["/resumes", "Resumes"],
@@ -48,6 +50,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/local" element={<LocalJobs />} />
+          <Route path="/database" element={<DatabasePage />} />
           <Route path="/searches" element={<SavedSearches />} />
           <Route path="/tracker" element={<Tracker />} />
           <Route path="/tracker/:id" element={<JobDetail />} />
