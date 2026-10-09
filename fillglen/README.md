@@ -2,7 +2,7 @@
 
 Fillglen is a job-application platform with a **live question window** that sits beside the form, a Chrome extension that fills from your profile, a dashboard for tracking, and a small API for accounts and AI drafts.
 
-It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes LinkedIn or Indeed. Final Submit is only clicked in **Autofill & keep applying** after you turn that on. CAPTCHAs wait for you — they are never solved automatically.
+It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes LinkedIn or Indeed. After **Autofill & keep applying**, Fillglen keeps running 24/7 while Chrome is open: it fills, creates accounts or uses last resume, saves logins to Chrome Password Manager, submits, and opens the next listing. CAPTCHAs wait for you — they are never solved automatically.
 
 ## Name
 
@@ -19,18 +19,18 @@ It never invents facts. It never runs on LinkedIn Easy Apply. It never scrapes L
 
 **Chrome extension (Load unpacked)** — use this raw zip link (saving the GitHub file *page* gives HTML, not a zip):
 
-**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip**
+**https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/autonomous-apply-0208/fillglen-assistant.zip**
 
 Unzip it. You get one folder named `fillglen-assistant/` with `manifest.json` inside. Then `chrome://extensions` → Developer mode on → **Load unpacked** → select that folder.
 
 **Whole platform (API + dashboard + 24/7 finder)** — source zip:
 
-**https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/keep-applying-autofill-0208.zip**
+**https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/autonomous-apply-0208.zip**
 
 Or clone the branch:
 
 ```bash
-git clone -b cursor/keep-applying-autofill-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git
+git clone -b cursor/autonomous-apply-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git
 cd sammyyyy/fillglen
 npm install
 npm test
@@ -42,11 +42,11 @@ Leave the API running to keep the 24/7 search going. Optional: `FILLGLEN_AI_PROV
 
 **Database:** the widget **Database** button and dashboard `/database` search an in-app store (IndexedDB in Chrome, JSON archive in the API). Harvest writes into it every minute while Chrome is open; the API finder keeps writing 24/7. Fetch by title, company, city, or ATS — existing Live jobs / chrome.storage lists stay as they are.
 
-**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. While Chrome stays open it fills fields, opens dropdowns, clicks Apply/Next to enter the form, Submit when required fields are filled, then switches to the **already-warmed next listing** (a background tab, so the handoff is immediate; Submit’s tab stays a moment so the POST can finish). **Live jobs** on the popup (and in the live window) keeps the list as Fillglen looks in the background. Open a job right after you finish an application, or leave it there. Applied rows stay on the list. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
+**Autofill & keep applying:** paste a resume in the popup, then hit **Autofill & keep applying**. That Start button is the only gate. After it is on, Fillglen keeps applying 24/7 while Chrome (and the widget) stay open — including in background tabs. You do not need the 24/7 API — the extension pulls the built-in researched employer feeds into a queue. It fills fields, opens dropdowns, clicks Apply/Next, **creates an account** on a new board (profile email + a per-site password stored in Chrome Password Manager), or **Use last application / last resume** when you have applied on that Workday (or other) board before, then **submits** when required fields are filled, and switches to the **already-warmed next listing**. **Live jobs** on the popup (and in the live window) keeps the list as Fillglen looks in the background. Applied rows stay on the list. If a CAPTCHA **challenge** appears, Fillglen **waits on that tab**. Solve it yourself; it then continues. Hidden recaptcha checkboxes do not freeze the loop. It never solves CAPTCHAs and never invents a name or email. Stop, close Chrome, or sleep to halt. LinkedIn stays blocked.
 
 **Unknown questions:** Fillglen uses the resume first. If the resume does not contain the answer, it fills **No**. Name, email, address, EEO, and consent are never filled with No. That setting is on by default (Settings). Popup, panel, and dashboard fields are saved as you type so switching windows does not lose them.
 
-Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/keep-applying-autofill-0208
+Branch on GitHub: https://github.com/samadalam481470sa-cmd/sammyyyy/tree/cursor/autonomous-apply-0208
 
 ## Run
 

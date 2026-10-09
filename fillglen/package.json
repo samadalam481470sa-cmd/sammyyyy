@@ -2,7 +2,7 @@
   "name": "fillglen",
   "version": "0.1.0",
   "private": true,
-  "description": "Fillglen — live question window and autofill platform for job applications. Never submits. Never invents facts. Never runs on LinkedIn Easy Apply.",
+  "description": "Fillglen — live question window and autofill platform for job applications. After Start, keep applying submits 24/7 while Chrome is open. Never invents facts. Never runs on LinkedIn Easy Apply.",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "test": "npm test --workspaces --if-present",

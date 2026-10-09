@@ -4,7 +4,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "Fillglen",
   version: "0.1.0",
-  description: "Live question window for job applications. Fills from your profile. Keep applying submits only after you turn it on. Never LinkedIn Easy Apply. Never solves CAPTCHAs.",
+  description: "Live question window for job applications. After Start, keep applying fills, signs up, uses last resume, submits, and continues 24/7 while Chrome is open. Never LinkedIn Easy Apply. Never solves CAPTCHAs.",
   icons: {
     "16": "public/icon16.png",
     "32": "public/icon32.png",
@@ -26,7 +26,7 @@ export default defineManifest({
     service_worker: "src/background.ts",
     type: "module",
   },
-  permissions: ["storage", "unlimitedStorage", "sidePanel", "scripting", "tabs", "windows", "webNavigation", "alarms", "notifications"],
+  permissions: ["storage", "unlimitedStorage", "sidePanel", "scripting", "tabs", "windows", "webNavigation", "alarms", "notifications", "offscreen"],
   host_permissions: ["http://127.0.0.1:8787/*", "http://localhost:8787/*", "https://*/*"],
   content_scripts: [
     {

@@ -292,10 +292,10 @@ export function QuestionWindow(props: QuestionWindowProps) {
       </div>
       {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
       {done && !props.keepApplying ? (
-        <p className="banner done">Every required question has an answer. You still click Submit yourself unless Keep applying is on.</p>
+        <p className="banner done">Every required question has an answer. Turn on Keep applying to submit and continue 24/7.</p>
       ) : null}
       {props.keepApplying ? (
-        <p className="banner done">Keep applying is on. The next listing loads in the background so the switch is immediate. Dropdowns, Next, Submit, then the warmed tab. A CAPTCHA waits for you — Fillglen will not solve it. After you finish, open Live jobs or leave the list saved.</p>
+        <p className="banner done">Keep applying is on 24/7 while Chrome is open. It uses last resume when you have applied on this board before, otherwise it signs up, saves the login to Chrome, fills, submits, then opens the next listing. A CAPTCHA waits for you — Fillglen will not solve it.</p>
       ) : null}
       <ul className="qlist">
         {filtered.map((q) => (
@@ -319,7 +319,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
           if (first) props.onFocus(first.id);
         }}
       >
-        Final check — {requiredEmpty.length} required still empty. You submit the form.
+        Final check — {requiredEmpty.length} required still empty. Keep applying submits when this hits zero.
       </button>
     </Shell>
   );

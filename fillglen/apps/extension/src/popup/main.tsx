@@ -220,7 +220,7 @@ function Popup() {
       <section className="fg-card fg-discover">
         <div className="fg-card-head">
           <strong>Texas map + government research</strong>
-          <span>{keepApplying ? "Running while this widget is on" : "Scanning in the background"}</span>
+          <span>{keepApplying ? "Running 24/7 while Chrome is open" : "Scanning in the background"}</span>
         </div>
         <p className="meta">{discover.note || EMPTY_DISCOVER.note}</p>
         <div className="fg-stats fg-stats-4">
@@ -316,7 +316,7 @@ function Popup() {
             setBusy(false);
             persistUi({
               status:
-                "Keep applying is on. The next listing is warmed in the background so switching is instant. After each application you can open a Live job, or leave the list. Unknown questions use the resume, or No.",
+                "Keep applying is on 24/7 while Chrome is open. It fills, signs up or uses last resume, saves logins to Chrome, submits, then opens the next listing. Unknown questions use the resume, or No.",
             });
           }}
         >
@@ -373,7 +373,10 @@ function Popup() {
       </section>
 
       <p className="meta fg-foot-note">
-        {keepApplying ? "Widget on." : "Keep applying is off."} Switching tabs saves listings, typed answers, keep
+        {keepApplying
+          ? "Keep applying is on 24/7 while Chrome is open — hidden tabs keep filling."
+          : "Keep applying is off."}{" "}
+        Switching tabs saves listings, typed answers, keep
         applying, and this window.
         {savedAt ? ` Last saved ${new Date(savedAt).toLocaleTimeString()}.` : " Nothing saved yet this session."}
         {lastJob ? ` Last job ${lastJob}.` : ""} Database is a button in this same window — it does not open another

@@ -17,37 +17,42 @@ fraud or platform-abuse territory. It:
   work here?" or a cover-letter box), **drafts a short suggestion** built only
   from your real resume content (summary/skills/experience). Drafts are
   highlighted in blue and clearly marked "review & personalize before
-  submitting" — they're a starting point, not a final answer, and nothing is
-  ever submitted automatically.
+  submitting" — they're a starting point, not a final answer.
 - Highlights anything it still can't confidently handle — like legally
   sensitive checkboxes/radios you haven't pre-answered — in yellow, so **you**
   answer them yourself.
 - Shows a **job-fit score**: keyword overlap between your resume and the
   posting's description, plus which keywords are matched vs. missing.
-- Never auto-submits an application and never simulates mouse movement or any
-  other bot-detection evasion.
+- This older helper still fills from the popup/widget. **Autonomous apply**
+  lives in Fillglen (`fillglen/apps/extension`): after **Autofill & keep
+  applying**, it runs 24/7 while Chrome is open, signs up or uses last resume,
+  saves logins to Chrome Password Manager, and submits.
 - Includes a small **floating helper bubble** ("RF") that appears in the
   corner of every page (draggable, and can be turned off from the popup).
   Click it for one-click actions: Fill Name, Fill Email, Fill Phone, and Full
   Autofill + Job Score — all using the engine described above.
 
-## What this deliberately does NOT do
+## Autonomous apply (Fillglen)
 
-This project intentionally does **not** implement:
+The line that used to live here — *this does not submit applications, create
+accounts, or log into job boards* — is the **opposite** of what Fillglen does
+after you hit **Autofill & keep applying**.
 
-- Autonomous/continuous submission of applications without a human reviewing
-  each one.
-- Fabricating answers to questions it doesn't know (work authorization,
-  salary expectations, cover letters, etc.) — these are always left blank and
-  flagged for you.
-- Any mouse-movement simulation or other technique aimed at evading a site's
-  bot/anti-fraud detection.
+Load **fillglen-assistant.zip** (not this older `resume-fit-assistant` helper)
+and leave Chrome open. After Start, Fillglen:
 
-Most job boards and ATS platforms (LinkedIn, Indeed, Greenhouse, Lever,
-Workday, etc.) prohibit automated/scripted account activity in their Terms of
-Service, and providing false information on an application can constitute
-fraud. This tool is designed to stay on the right side of both: it's a
-review-and-autofill assistant, not an autonomous applicant.
+- Keeps running 24/7 while Chrome and the widget stay open, including in
+  background tabs.
+- Clicks **Use last application / last resume** when you have already applied
+  on that Workday (or other) board.
+- Hits **Sign up / Create account** on a new board, using your saved profile
+  name and email (never an invented identity) and a per-site password.
+- Saves that login into **Chrome / Google Password Manager**.
+- Fills the form, clicks Next, **submits**, and opens the next listing.
+
+What it still will not do: LinkedIn Easy Apply, inventing facts that are not
+on your resume/profile, or solving CAPTCHAs (it waits on that tab). Hit Stop
+to halt. See [`fillglen/apps/extension/README.md`](../fillglen/apps/extension/README.md).
 
 ## Download & install on macOS
 
@@ -158,9 +163,8 @@ it). Clicking it opens a panel with:
 - **Full Autofill + Job Score** — runs the same engine as the popup's
   "Analyze & Fill This Page" button.
 
-The widget only fills fields when you click a button — it never runs
-automatically in the background, never submits anything, and never moves
-your mouse or clicks other page elements.
+This older RF widget fills when you click a button. For 24/7 autonomous apply
+(sign up, last resume, submit, next job), use the Fillglen widget.
 
 ## Notes & limitations
 

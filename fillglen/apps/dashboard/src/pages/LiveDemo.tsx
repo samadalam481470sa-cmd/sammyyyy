@@ -93,9 +93,9 @@ export default function LiveDemo() {
     <div className="space-y-3">
       <h1 className="text-2xl">Live question window</h1>
       <p className="text-sm text-[#5c6b64]">
-        This is the same panel the Chrome side panel uses. Fill this step never clicks Submit. Autofill & keep applying
-        (in the extension) fills dropdowns, clicks Next/Submit, and continues while Chrome is open. LinkedIn Easy Apply
-        stays blocked.
+        This is the same panel the Chrome side panel uses. Fill this step does not click Submit. Autofill & keep applying
+        (in the extension) fills dropdowns, signs up or uses last resume, clicks Next/Submit, and continues 24/7 while
+        Chrome is open. LinkedIn Easy Apply stays blocked.
       </p>
       <div className="grid lg:grid-cols-2 gap-4 items-start">
         <form

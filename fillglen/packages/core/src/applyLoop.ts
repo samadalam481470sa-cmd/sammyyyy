@@ -136,6 +136,7 @@ export function nextQueueItem(queue: ApplyQueueItem[], currentUrl: string): Appl
 
 export const KEEP_FILL_GAP_MS = 16;
 export const KEEP_INTERVAL_MS = 180;
+export const KEEP_HEARTBEAT_MS = 400;
 export const KEEP_STUCK_TICKS = 8;
 export const KEEP_SCAN_BURST_MS = [40, 160, 400, 800];
 export const KEEP_MUTATION_DEBOUNCE_MS = 50;

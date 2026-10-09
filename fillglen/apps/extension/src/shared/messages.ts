@@ -28,7 +28,8 @@ export type ToBackground =
   | { type: "create-application"; snapshot: ScanSnapshot }
   | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string }
   | { type: "page-keep"; keep: PageKeepPayload }
-  | { type: "persist-now"; snapshot?: ScanSnapshot; questions?: Question[] };
+  | { type: "persist-now"; snapshot?: ScanSnapshot; questions?: Question[] }
+  | { type: "store-board-password"; email: string; password: string; url?: string };
 
 export type ToContent =
   | { type: "fill-one"; questionId: string; value: string }

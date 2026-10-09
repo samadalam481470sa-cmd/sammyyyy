@@ -63,6 +63,7 @@ export type QuestionType =
   | "disability"
   | "citizenship"
   | "consent"
+  | "password"
   | "motivation"
   | "behavioral"
   | "factual"

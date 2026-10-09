@@ -51,6 +51,8 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
       return pickCitizenAnswer(options);
     case "consent":
       return pickDemographicOption("consent", "Yes", options);
+    case "password":
+      return "";
     case "salary":
       if (profile.preferences.salaryMin && profile.preferences.salaryMax) {
         return `${profile.preferences.salaryMin}-${profile.preferences.salaryMax}`;
@@ -92,6 +94,16 @@ export function valueForType(type: QuestionType, profile: Profile, options?: str
 }
 
 export function planFill(question: Question, profile: Profile): FillPlan {
+  if (question.type === "password") {
+    return {
+      questionId: question.id,
+      value: "",
+      source: "none",
+      status: "needs-you",
+      confidence: "high",
+      type: "password",
+    };
+  }
   const saved = bestSavedMatch(question.label, profile.answers);
   if (saved) {
     return {

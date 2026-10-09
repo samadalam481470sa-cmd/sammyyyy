@@ -2,7 +2,7 @@
   "version": 1,
   "notes": "Remote-updatable DATA, not executable code. Fillglen ships a bundled copy.",
   "selfIdTypes": ["gender", "race", "veteran", "disability"],
-  "neverAiTypes": ["gender", "race", "veteran", "disability", "workAuthorization", "visaSponsorship"],
+  "neverAiTypes": ["gender", "race", "veteran", "disability", "workAuthorization", "visaSponsorship", "password"],
   "finalSubmitPatterns": [
     "submit application",
     "submit your application",
@@ -30,6 +30,7 @@
   },
   "fields": [
     { "type": "email", "patterns": ["email", "e-mail", "email address"] },
+    { "type": "password", "patterns": ["password", "passcode", "confirm password", "re-enter password", "verify password", "create password"] },
     { "type": "phone", "patterns": ["phone", "mobile", "cell", "telephone"] },
     { "type": "firstName", "patterns": ["first name", "given name", "legal first"] },
     { "type": "lastName", "patterns": ["last name", "surname", "family name"] },

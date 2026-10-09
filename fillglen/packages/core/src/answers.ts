@@ -198,6 +198,7 @@ const IDENTITY_TYPES = new Set<QuestionType>([
   "disability",
   "citizenship",
   "consent",
+  "password",
 ]);
 
 export function isIdentityQuestion(type: QuestionType): boolean {

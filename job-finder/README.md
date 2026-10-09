@@ -20,21 +20,15 @@ run it:
      from your real resume content, with `[BRACKETED]` prompts you must fill in.
 5. Optionally posts a summary to a Slack/Discord webhook.
 
-## What it does not do
+## What this script does not do
 
-It stops at discovery and preparation. It does not submit applications, create
-accounts, log into job boards, or drive a browser. Two reasons:
+This CI job-finder **discovers and prepares**. The Fillglen Chrome extension
+(`../fillglen/apps/extension`) is what applies: after **Autofill & keep applying**
+it signs up or uses last resume, submits, and continues 24/7 while Chrome is open.
 
-- Automated/scripted application submission violates the Terms of Service of
-  effectively every job board and ATS, and is a good way to get your accounts
-  banned mid-search.
-- Auto-submitting means submitting answers nobody verified. Every generated
-  artifact here is a *draft for you to review* precisely so nothing inaccurate
-  goes out under your name.
-
-You open the links it produces and apply yourself. The Chrome extension in
-`../chrome-extension/` makes each of those applications take seconds instead of
-minutes.
+This script still does not invent skills, scrape LinkedIn, or drive a browser
+from GitLab CI. You can open the links it produces yourself, or leave Fillglen
+to apply them in Chrome.
 
 ## Setup
 

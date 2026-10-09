@@ -1,14 +1,14 @@
 # Job search toolkit
 
-**Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, dashboard, and 24/7 local job finder. It never invents facts and never runs on LinkedIn Easy Apply. Final Submit is only clicked after you turn on **Autofill & keep applying**. CAPTCHAs wait for you. See [`fillglen/README.md`](fillglen/README.md).
+**Fillglen** (`fillglen/`) is the full platform: TypeScript/React/Vite Chrome extension with a live side-panel question window, Express API, dashboard, and 24/7 local job finder. It never invents facts and never runs on LinkedIn Easy Apply. After **Autofill & keep applying**, it fills, signs up or uses last resume, submits, and continues 24/7 while Chrome is open. CAPTCHAs wait for you. See [`fillglen/README.md`](fillglen/README.md).
 
 **Download the Chrome extension:**
-[**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/keep-applying-autofill-0208/fillglen-assistant.zip)
+[**fillglen-assistant.zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/raw/cursor/autonomous-apply-0208/fillglen-assistant.zip)
 (use the `raw/` URL). Unzip, then `chrome://extensions` → Developer mode → Load unpacked → select the `fillglen-assistant/` folder. Paste a resume, open **Live jobs** or **Database**, and hit **Autofill & keep applying**. Unknown questions use the resume, or No. Fetch stored jobs from the Database view inside the widget.
 
 **Download / deploy the whole platform:**
-[**source zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/keep-applying-autofill-0208.zip)
-or `git clone -b cursor/keep-applying-autofill-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git` then `cd fillglen && npm install && npm run dev:api && npm run dev:dashboard`.
+[**source zip**](https://github.com/samadalam481470sa-cmd/sammyyyy/archive/refs/heads/cursor/autonomous-apply-0208.zip)
+or `git clone -b cursor/autonomous-apply-0208 https://github.com/samadalam481470sa-cmd/sammyyyy.git` then `cd fillglen && npm install && npm run dev:api && npm run dev:dashboard`.
 
 
 Two components that work together to make applying to jobs fast, without

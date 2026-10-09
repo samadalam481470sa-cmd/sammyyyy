@@ -2,8 +2,10 @@ import {
   adapterFor,
   diffQuestions,
   EMPTY_PROFILE,
+  ensureVaultSecret,
   feedMetaForUrl,
   fieldLooksFilled,
+  hostHasPriorApply,
   hydrateProfile,
   hydrateSession,
   KEEP_FILL_GAP_MS,
@@ -11,23 +13,35 @@ import {
   KEEP_MUTATION_DEBOUNCE_MS,
   KEEP_SCAN_BURST_MS,
   KEEP_STUCK_TICKS,
+  loginForFill,
+  loginHost,
   looksLikeApplicationPage,
+  looksLikeAppliedBeforePrompt,
+  looksLikeAuthWall,
   mayAdvance,
   overlaySavedValues,
   pageKeepForUrl,
   planPage,
+  priorLogin,
   shouldBlockPage,
+  shouldSkipWarmupFill,
   snapshotForUrl,
+  upsertBoardLogin,
+  type BoardLogin,
   type Profile,
   type Question,
   type ScanSnapshot,
 } from "@fillglen/core";
 import {
   clickAdvance,
+  clickAppliedBefore,
+  clickAuthGate,
   clickGoogleSignIn,
   clickMatchingDropdown,
   clickVisibleGoogleAccount,
+  collectAuthButtons,
   detectCaptcha,
+  fillBoardLogin,
   findAdvanceControl,
   flashAndScroll,
   readWorkdayStep,
@@ -86,7 +100,7 @@ function boot() {
       }
       if (msg.type === "focus") flashAndScroll(msg.questionId);
       if (msg.type === "undo") undo(msg.questionId);
-      if (msg.type === "keep-tick") keepCycle().catch(() => {});
+      if (msg.type === "keep-tick") keepCycle({ allowHidden: true }).catch(() => {});
     });
     port.onDisconnect.addListener(() => {
       port = null;
@@ -261,19 +275,31 @@ function boot() {
     persistPage("typed");
   }
 
-  async function keepCycle() {
-    if (window !== window.top || keepBusy || !isVisibleTab()) return;
+  async function keepCycle(_opts?: { allowHidden?: boolean }) {
+    if (window !== window.top || keepBusy) return;
     keepBusy = true;
     try {
-      const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins", "sessionMemory"]);
+      const stored = await chrome.storage.local.get([
+        "keepApplying",
+        "profile",
+        "pausedOrigins",
+        "sessionMemory",
+        "warmupUrl",
+        "boardLogins",
+        "boardVaultSecret",
+        "liveJobs",
+        "applyQueue",
+      ]);
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
-      if (
-        !looksLikeApplicationPage(location.href, document.body?.innerText?.slice(0, 2500) || "") &&
-        !/accounts\.google\.com/i.test(location.host)
-      ) {
-        return;
-      }
+      if (shouldSkipWarmupFill(location.href, stored.warmupUrl as string | undefined)) return;
+      const pageBlob = document.body?.innerText?.slice(0, 2500) || "";
+      const applyPage =
+        looksLikeApplicationPage(location.href, pageBlob) ||
+        looksLikeAuthWall(pageBlob) ||
+        Boolean(document.querySelector("input[type=password]")) ||
+        collectAuthButtons(document).length > 0;
+      if (!applyPage && !/accounts\.google\.com/i.test(location.host)) return;
       if (clickVisibleGoogleAccount(document)) {
         stuckTicks = 0;
         return;
@@ -290,6 +316,53 @@ function boot() {
         post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
       }
       const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
+      const logins = (Array.isArray(stored.boardLogins) ? stored.boardLogins : []) as BoardLogin[];
+      const liveJobs = [...((stored.liveJobs as { url: string; appliedAt?: string }[]) || []), ...((stored.applyQueue as { url: string; appliedAt?: string }[]) || [])];
+      const host = loginHost(location.href);
+      const returning = hostHasPriorApply(host, logins, liveJobs, location.href);
+      const canSignIn = Boolean(priorLogin(logins, host) && profile.contact.email);
+      if (looksLikeAppliedBeforePrompt(pageBlob) && clickAppliedBefore(document, returning)) {
+        stuckTicks = 0;
+        post({ type: "keep-status", status: "fill", url, detail: returning ? "applied before" : "first application" });
+        return;
+      }
+      const email = profile.contact.email;
+      if (email && document.querySelector("input[type=password]")) {
+        const secret = ensureVaultSecret(stored.boardVaultSecret as string | undefined);
+        if (secret !== stored.boardVaultSecret) await chrome.storage.local.set({ boardVaultSecret: secret });
+        const made = loginForFill(logins, location.href, email, secret);
+        const filled = fillBoardLogin(document, email, made.login.password);
+        if (filled.filledPassword || filled.filledEmail) {
+          await chrome.storage.local.set({ boardLogins: made.logins, boardVaultSecret: secret });
+          post({
+            type: "store-board-password",
+            email,
+            password: made.login.password,
+            url: location.href,
+          });
+          stuckTicks = 0;
+          post({ type: "keep-status", status: "fill", url, detail: made.created ? "created board login" : "used board login" });
+        }
+      }
+      const authButtons = collectAuthButtons(document);
+      const hasPassword = Boolean(document.querySelector("input[type=password]"));
+      const visibleFields = [...document.querySelectorAll("input, textarea, select")].filter((n) => {
+        const el = n as HTMLInputElement;
+        if (el.type === "hidden" || el.disabled) return false;
+        const s = window.getComputedStyle(el);
+        return s.display !== "none" && s.visibility !== "hidden";
+      }).length;
+      const authChoiceScreen =
+        visibleFields <= 8 &&
+        authButtons.some((b) => b.action === "last-application" || b.action === "create-account" || b.action === "guest");
+      if (hasPassword || looksLikeAppliedBeforePrompt(pageBlob) || authChoiceScreen) {
+        const gate = clickAuthGate(document, returning, canSignIn);
+        if (gate) {
+          stuckTicks = 0;
+          post({ type: "keep-status", status: "fill", url, detail: gate.action });
+          return;
+        }
+      }
       const saved = snapshotForUrl(hydrateSession(stored.sessionMemory), location.href);
       const questions = overlaySavedValues(scanDocument(document, frameId, profile), [
         ...(saved?.questions || []),
@@ -319,7 +392,7 @@ function boot() {
       }
       await new Promise((r) => setTimeout(r, hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
       const after = scanDocument(document, frameId, profile);
-      const stillEmpty = after.filter((q) => q.required && !fieldLooksFilled(q.kind, q.value));
+      const stillEmpty = after.filter((q) => q.required && q.type !== "password" && !fieldLooksFilled(q.kind, q.value));
       const found = findAdvanceControl(document, "keep-applying");
       if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
         stuckTicks += 1;
@@ -337,6 +410,10 @@ function boot() {
       }
       if (clicked?.kind === "submit") {
         stuckTicks = 0;
+        const existing = priorLogin(logins, host);
+        if (existing) {
+          await chrome.storage.local.set({ boardLogins: upsertBoardLogin(logins, { ...existing, applied: true }) });
+        }
         post({ type: "keep-status", status: "submitted", url });
         return;
       }
@@ -433,9 +510,16 @@ function boot() {
   window.addEventListener("pageshow", () => {
     keepRestored = false;
     persistPage("scan");
-    if (!isVisibleTab()) return;
-    scan("full").catch(() => {});
-    keepCycle().catch(() => {});
+    chrome.storage.local.get(["keepApplying"], (r) => {
+      if (r.keepApplying) {
+        watchPage();
+        startKeepLoop();
+        keepCycle({ allowHidden: true }).catch(() => {});
+        return;
+      }
+      if (!isVisibleTab()) return;
+      scan("full").catch(() => {});
+    });
   });
   window.addEventListener("pagehide", () => persistPage("hide"));
   window.addEventListener("beforeunload", () => persistPage("hide"));

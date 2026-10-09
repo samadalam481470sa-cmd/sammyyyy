@@ -13,6 +13,7 @@ export * from "./ats.js";
 export * from "./parseResume.js";
 export * from "./finder.js";
 export * from "./applyLoop.js";
+export * from "./authGate.js";
 export * from "./answers.js";
 export * from "./feeds.js";
 export * from "./mapsDiscover.js";

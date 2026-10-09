@@ -15,8 +15,8 @@ export function isStepAdvanceLabel(label: string): boolean {
 }
 
 /**
- * Next/Continue is allowed during fill. Final Submit is only allowed in keep-applying
- * mode after the user hits Autofill (screen-on loop). LinkedIn is still blocked elsewhere.
+ * Next/Continue is allowed during fill. Final Submit runs in keep-applying after Start
+ * (24/7 while Chrome is open). LinkedIn Easy Apply is still blocked elsewhere.
  */
 export function mayAutoClick(label: string, mode: "fill-only" | "keep-applying" = "fill-only"): boolean {
   if (isFinalSubmitLabel(label)) return mode === "keep-applying";

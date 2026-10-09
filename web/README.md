@@ -16,16 +16,12 @@ No npm dependencies — it uses only the Node standard library and reuses the
 scoring/tailoring engine from [`../job-finder`](../job-finder) (the same logic
 the Chrome extension uses in the browser).
 
-## What it does NOT do
+## What this web service does not do
 
-It discovers and prepares; it does not apply. It never submits applications,
-creates accounts, logs into job boards, or drives a browser for anyone, and it
-makes **no attempt to hide automated activity** from any site — it reads from
-documented public job APIs and leaves the applying to each human. Automated
-submission and bot-detection evasion breach job-board terms and put real user
-accounts at risk; that's a line this project deliberately doesn't cross.
-Resume tailoring only re-orders a user's existing content and reports gaps as
-gaps — it never invents skills or experience.
+It discovers and prepares. Applying — sign up, last resume, submit, 24/7 while
+Chrome is open — is Fillglen (`../fillglen/apps/extension`) after you hit
+**Autofill & keep applying**. This process never invents skills or experience
+and does not scrape LinkedIn.
 
 ## Run it
 

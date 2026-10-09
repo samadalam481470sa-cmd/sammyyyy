@@ -1,4 +1,10 @@
 import { firstEmailInText, isConsentLabel, isGoogleSignInLabel } from "./answers.js";
+import {
+  classifyAppliedBeforeChoice,
+  classifyAuthGate,
+  pickAuthGate,
+  type AuthGateAction,
+} from "./authGate.js";
 import { classifyQuestion } from "./classify.js";
 import { classifyAdvanceLabel, isCaptchaChallengeFrame, matchOption, pageLooksLikeCaptcha } from "./applyLoop.js";
 import { isFinalSubmitLabel, mayAutoClick } from "./submitGuard.js";
@@ -353,4 +359,104 @@ export function readWorkdayStep(): { label: string; index?: number; total?: numb
   const text = (progress?.textContent || heading?.textContent || "").replace(/\s+/g, " ").trim();
   const m = /(?:step\s*)?(\d+)\s*(?:of|\/)\s*(\d+)/i.exec(text);
   return { label: text.slice(0, 80), index: m ? Number(m[1]) : undefined, total: m ? Number(m[2]) : undefined };
+}
+
+function clickableControls(doc: Document): HTMLElement[] {
+  return [
+    ...doc.querySelectorAll("button, a, input[type=button], input[type=submit], [role='button'], [role='link'], label"),
+  ] as HTMLElement[];
+}
+
+function controlLabel(el: HTMLElement): string {
+  return tidy(el.getAttribute("value") || el.getAttribute("aria-label") || el.getAttribute("data-automation-id") || el.textContent || "");
+}
+
+function automationAction(el: HTMLElement): AuthGateAction | null {
+  const id = normalize(el.getAttribute("data-automation-id") || "");
+  if (!id) return null;
+  if (/lastapplication|previousapplication|useinforfromlast|autofillwithlast/.test(id)) return "last-application";
+  if (/createaccount|signup|register/.test(id)) return "create-account";
+  if (/signin|loginlink|signInLink/i.test(el.getAttribute("data-automation-id") || "") || /signin|loginlink/.test(id)) {
+    return "sign-in";
+  }
+  if (/guestapply|continueasguest/.test(id)) return "guest";
+  return classifyAuthGate(id.replace(/[_-]+/g, " "));
+}
+
+export function collectAuthButtons(doc: Document): { el: HTMLElement; label: string; action: AuthGateAction }[] {
+  const out: { el: HTMLElement; label: string; action: AuthGateAction }[] = [];
+  const seen = new Set<HTMLElement>();
+  for (const el of clickableControls(doc)) {
+    if (!visible(el) || seen.has(el)) continue;
+    const label = controlLabel(el);
+    const action = classifyAuthGate(label) || automationAction(el);
+    if (!action) continue;
+    seen.add(el);
+    out.push({ el, label: label || action, action });
+  }
+  return out;
+}
+
+export function clickAuthGate(
+  doc: Document,
+  returning: boolean,
+  canSignIn = true
+): { action: AuthGateAction; label: string } | null {
+  const buttons = collectAuthButtons(doc);
+  const picked = pickAuthGate(
+    buttons.map((b) => ({ label: b.label })),
+    returning,
+    canSignIn
+  );
+  if (!picked) return null;
+  const node = buttons.find((b) => b.action === picked.action && normalize(b.label) === normalize(picked.label)) || buttons.find((b) => b.action === picked.action);
+  if (!node) return null;
+  node.el.scrollIntoView({ block: "nearest" });
+  node.el.click();
+  return { action: picked.action, label: node.label };
+}
+
+export function clickAppliedBefore(doc: Document, returning: boolean): "yes" | "no" | null {
+  const want = returning ? "yes" : "no";
+  const radios = [...doc.querySelectorAll("input[type=radio], input[type=checkbox]")] as HTMLInputElement[];
+  for (const el of radios) {
+    if (!visible(el)) continue;
+    const choice = classifyAppliedBeforeChoice(optionText(el) || labelFor(el) || el.value);
+    if (choice !== want) continue;
+    if (!el.checked) el.click();
+    return choice;
+  }
+  for (const el of clickableControls(doc)) {
+    if (!visible(el)) continue;
+    const choice = classifyAppliedBeforeChoice(controlLabel(el));
+    if (choice !== want) continue;
+    el.click();
+    return choice;
+  }
+  return null;
+}
+
+export function fillBoardLogin(doc: Document, email: string, password: string): { filledEmail: boolean; filledPassword: boolean } {
+  const inputs = [...doc.querySelectorAll("input")] as HTMLInputElement[];
+  let filledEmail = false;
+  let filledPassword = false;
+  for (const el of inputs) {
+    if (!visible(el)) continue;
+    const t = (el.type || "text").toLowerCase();
+    const auto = (el.getAttribute("autocomplete") || "").toLowerCase();
+    const blob = normalize(`${labelFor(el)} ${el.name || ""} ${el.id || ""} ${auto} ${el.placeholder || ""}`);
+    if (t === "password" || auto.includes("password") || /password|passcode/.test(blob)) {
+      el.setAttribute("autocomplete", /current|sign.?in|log.?in/.test(blob) ? "current-password" : "new-password");
+      nativeSet(el, password);
+      filledPassword = true;
+      continue;
+    }
+    if (!email) continue;
+    if (t === "email" || auto.includes("username") || auto.includes("email") || /e-?mail|username|user name|sign in id|login id/.test(blob)) {
+      el.setAttribute("autocomplete", "username");
+      nativeSet(el, email);
+      filledEmail = true;
+    }
+  }
+  return { filledEmail, filledPassword };
 }

@@ -5,6 +5,7 @@ import {
   discoverNote,
   fetchBuiltInJobQueue,
   hydrateProfile,
+  loginHost,
   markLiveJob,
   mergeLiveJobs,
   isSupportedApplyUrl,
@@ -78,6 +79,8 @@ async function restoreRuntime() {
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
     chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
     startLiveAlarm();
+    await ensureKeepOffscreen();
+    pingKeepTabs();
   }
 }
 
@@ -158,6 +161,9 @@ chrome.runtime.onConnect.addListener((port) => {
       }
       if (msg.type === "keep-status") {
         await onKeepStatus(tabId, msg.status, msg.url, msg.detail);
+      }
+      if (msg.type === "store-board-password") {
+        await storePasswordInChrome(tabId, msg.email, msg.password, msg.url || port.sender?.tab?.url || "");
       }
       if (msg.type === "typed") {
         const prev = snapshots.get(tabId) || (await snapFor(tabId, port.sender?.tab?.url));
@@ -373,6 +379,72 @@ function looksKeepTab(url?: string) {
   return looksApply(url) || /accounts\.google\.com/i.test(url || "");
 }
 
+function pingKeepTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    for (const t of tabs) {
+      if (!t.id || t.id === warmupTabId) continue;
+      if (looksKeepTab(t.url)) sendToTab(t.id, { type: "keep-tick" });
+    }
+  });
+}
+
+async function ensureKeepOffscreen() {
+  if (!chrome.offscreen) return;
+  try {
+    const has = await chrome.offscreen.hasDocument?.();
+    if (has) return;
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: [chrome.offscreen.Reason.WORKERS],
+      justification: "Keep applying and searching while Chrome stays open.",
+    });
+  } catch {
+    try {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: [chrome.offscreen.Reason.BLOBS],
+        justification: "Keep applying and searching while Chrome stays open.",
+      });
+    } catch {
+      /* alarms still tick once a minute */
+    }
+  }
+}
+
+async function closeKeepOffscreen() {
+  try {
+    await chrome.offscreen?.closeDocument();
+  } catch {
+    /* already closed */
+  }
+}
+
+async function storePasswordInChrome(tabId: number, email: string, password: string, url: string) {
+  if (!email || !password) return;
+  const host = loginHost(url);
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (id: string, pwd: string, name: string) => {
+        const Ctor = (
+          window as unknown as {
+            PasswordCredential?: new (data: { id: string; password: string; name?: string }) => Credential;
+          }
+        ).PasswordCredential;
+        if (!Ctor || !navigator.credentials?.store) return false;
+        return navigator.credentials
+          .store(new Ctor({ id, password: pwd, name }))
+          .then(() => true)
+          .catch(() => false);
+      },
+      args: [email, password, host || "job board"],
+    });
+  } catch {
+    /* page CSP or missing Credential Management API */
+  }
+}
+
 async function ping(tabId: number, url: string) {
   if (!looksApply(url)) return;
   if (adapterFor(url) || isSupportedApplyUrl(url)) {
@@ -475,6 +547,21 @@ chrome.runtime.onStartup?.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendResponse) => {
+  if (msg?.type === "keep-heartbeat") {
+    pingKeepTabs();
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (msg?.type === "store-board-password") {
+    const tabId = _sender.tab?.id;
+    const payload = msg as { email?: string; password?: string; url?: string };
+    if (tabId != null && payload.email && payload.password) {
+      storePasswordInChrome(tabId, payload.email, payload.password, payload.url || _sender.tab?.url || "")
+        .then(() => sendResponse({ ok: true }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+  }
   if (msg?.type === "start-keep-applying") {
     setKeepApplying(true).then(() => sendResponse({ ok: true }));
     return true;
@@ -597,11 +684,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== "fillglen-keep") return;
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying) return;
-    chrome.tabs.query({}, (tabs) => {
-      for (const t of tabs) {
-        if (t.id && looksKeepTab(t.url)) sendToTab(t.id, { type: "keep-tick" });
-      }
-    });
+    pingKeepTabs();
+    ensureKeepOffscreen().catch(() => {});
     runDiscoverTick()
       .then(() => harvestLiveJobs())
       .catch(() => {});
@@ -792,11 +876,13 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
     startLiveAlarm();
+    await ensureKeepOffscreen();
     const ready = await cachedQueue();
     const [tab] = tabId
       ? [await chrome.tabs.get(tabId).catch(() => null)]
       : await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     const id = tab?.id;
+    pingKeepTabs();
     if (id) sendToTab(id, { type: "keep-tick" });
     const url = tab?.url || "";
     const first = ready.find((j) => !j.appliedAt);
@@ -809,6 +895,7 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
   } else {
     await chrome.alarms.clear("fillglen-keep");
     chrome.action.setBadgeText({ text: "" });
+    await closeKeepOffscreen();
     await closeWarmup();
     const { status } = await loadDiscover();
     await chrome.storage.local.set({

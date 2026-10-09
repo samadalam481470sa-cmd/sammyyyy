@@ -234,6 +234,13 @@ describe("linkedin and submit guards", () => {
     assert.equal(mayAutoClick("Submit Application", "keep-applying"), true);
     assert.equal(mayAutoClick("Next", "keep-applying"), true);
   });
+  it("never fills password fields from the resume or with No", () => {
+    const classified = classifyQuestion({ label: "Create password", inputType: "password" });
+    assert.equal(classified.type, "password");
+    const plan = planFill(q({ label: "Password", type: "password", required: true }), profile());
+    assert.equal(plan.value, "");
+    assert.equal(neverSendToAi("password"), true);
+  });
 });
 
 describe("dropdown and keep-applying loop", () => {

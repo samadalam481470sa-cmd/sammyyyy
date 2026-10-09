@@ -37,6 +37,9 @@ function hasPhrase(text: string, phrase: string): boolean {
 export function classifyQuestion(input: ClassifyInput, saved: SavedAnswer[] = []): ClassifyResult {
   const t = (input.inputType || "").toLowerCase();
   if (t === "email") return { type: "email", via: "input-type" };
+  if (t === "password" || /^(current-password|new-password)$/i.test(input.autocomplete || "")) {
+    return { type: "password", via: "input-type" };
+  }
   if (t === "tel") return { type: "phone", via: "input-type" };
   if (t === "url" && /linkedin/i.test(blob(input))) return { type: "linkedin", via: "input-type" };
   if (t === "file") {
@@ -59,7 +62,7 @@ export function classifyQuestion(input: ClassifyInput, saved: SavedAnswer[] = []
 }
 
 export function classifyAiBucket(type: QuestionType): "profile-only" | "draft" | "never" | "needs-you" {
-  if (neverSendToAi(type) || type === "citizenship" || type === "consent") return "never";
+  if (neverSendToAi(type) || type === "citizenship" || type === "consent" || type === "password") return "never";
   if (type === "motivation" || type === "behavioral" || type === "coverLetter") return "draft";
   if (type === "unknown") return "needs-you";
   return "profile-only";
