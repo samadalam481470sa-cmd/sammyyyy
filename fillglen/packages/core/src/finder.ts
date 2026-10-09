@@ -434,20 +434,24 @@ export function coverage(
   };
 }
 
-export function seedEmployers(): EmployerRecord[] {
-  const rows = [
-    ...(employersSeed.employers as EmployerRecord[]),
-    ...(usItEmployers.employers as EmployerRecord[]),
-  ];
+export function mergeEmployers(base: EmployerRecord[], extra: EmployerRecord[] = []): EmployerRecord[] {
+  const rows = [...base, ...extra];
   const seen = new Set<string>();
   const unique: EmployerRecord[] = [];
   for (const row of rows) {
-    const key = `${normalize(row.company)}|${row.board}|${row.slug}`;
+    const key = `${normalize(row.company)}|${row.board}|${row.slug || row.careersUrl}`;
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(row);
   }
   return unique;
+}
+
+export function seedEmployers(extra: EmployerRecord[] = []): EmployerRecord[] {
+  return mergeEmployers(
+    [...(employersSeed.employers as EmployerRecord[]), ...(usItEmployers.employers as EmployerRecord[])],
+    extra
+  );
 }
 
 export function aiScorePrompt(listing: CanonicalListing, settings: SearchSettings): { system: string; user: string } {

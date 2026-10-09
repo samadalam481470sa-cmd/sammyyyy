@@ -12,6 +12,7 @@ import LiveDemo from "./pages/LiveDemo";
 import SignIn from "./pages/SignIn";
 import LocalJobs from "./pages/LocalJobs";
 import SavedSearches from "./pages/SavedSearches";
+import { CopyrightNotice, Logo } from "./Brand";
 
 const links = [
   ["/", "Home"],
@@ -31,8 +32,8 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="flex items-center gap-6 px-6 py-4 border-b border-[#d9d0c4] bg-[#fffbf5]">
-        <NavLink to="/" className="flex items-center gap-2 font-semibold">
-          <img src="/favicon.svg" width={28} height={28} alt="" />
+        <NavLink to="/" className="flex items-center gap-3 font-semibold">
+          <Logo size={32} />
           Fillglen
         </NavLink>
         <nav className="flex flex-wrap gap-4 text-sm text-[#5c6b64]">
@@ -43,7 +44,7 @@ export default function App() {
           ))}
         </nav>
       </header>
-      <main className="px-6 py-6 max-w-6xl mx-auto">
+      <main className="px-8 py-8 max-w-6xl mx-auto">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/local" element={<LocalJobs />} />
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/live" element={<LiveDemo />} />
           <Route path="/signin" element={<SignIn />} />
         </Routes>
+        <CopyrightNotice />
       </main>
     </div>
   );

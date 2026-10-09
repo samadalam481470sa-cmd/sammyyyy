@@ -64,7 +64,9 @@ This feature finds jobs that match the user's city, field, and niche, and it kee
 
 ### Where the 24/7 part runs
 
-The always-on work runs on the Fillglen API (`apps/api`), not in Chrome. Manifest V3 shuts down idle extension workers, and search stops when the computer is off. `FINDER_SCHEDULE` (default on) starts an hourly cycle; `npm run finder` runs one cycle; a cloud scheduler can hit the same worker. `FILLGLEN_AI_PROVIDER=claude|openai|none` is one provider layer so you can switch models with a setting. The dashboard and popup only show results and alerts.
+The always-on work runs on the Fillglen API (`apps/api`), not in Chrome. Manifest V3 shuts down idle extension workers, and search stops when the computer is off. `FINDER_SCHEDULE` (default on) starts an hourly cycle (feeds plus Texas map discovery); `npm run finder` runs one cycle; a cloud scheduler can hit the same worker. While **Autofill & keep applying** is on, the extension also walks Texas map tiles in the background and checks public career pages. `FILLGLEN_AI_PROVIDER=claude|openai|none` is one provider layer so you can switch models with a setting. The dashboard and popup only show results and alerts.
+
+Map discovery uses **OpenStreetMap Overpass** (open map data) and, when `GOOGLE_PLACES_API_KEY` is set, the **official Google Places API**. Fillglen does not scrape the Google Maps website. That would violate Google’s terms and still would not be every company in Texas.
 
 ### The rule that keeps it accurate
 

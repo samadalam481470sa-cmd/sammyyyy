@@ -10,10 +10,12 @@ import {
   planPage,
   shouldBlockPage,
   type ApplyQueueItem,
+  type EmployerRecord,
   type Profile,
   type ScanSnapshot,
 } from "@fillglen/core";
 import type { FromPanel, KeepStatus, ToBackground, ToContent, ToPanel } from "./shared/messages";
+import { loadDiscover, runDiscoverTick } from "./backgroundDiscover";
 
 const contentPorts = new Map<number, Set<chrome.runtime.Port>>();
 const panelPorts = new Set<chrome.runtime.Port>();
@@ -276,9 +278,31 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-chrome.runtime.onMessage.addListener((msg: { type?: string }) => {
-  if (msg?.type === "start-keep-applying") setKeepApplying(true);
-  if (msg?.type === "stop-keep-applying") setKeepApplying(false);
+chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendResponse) => {
+  if (msg?.type === "start-keep-applying") {
+    setKeepApplying(true).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "stop-keep-applying") {
+    setKeepApplying(false).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg?.type === "refresh-queue") {
+    rebuildQueue()
+      .then(async (queue) => {
+        const { discoverStatus } = await chrome.storage.local.get(["discoverStatus"]);
+        sendResponse({
+          ok: true,
+          count: queue.length,
+          top: queue.slice(0, 8),
+          lookup: queue,
+          discover: discoverStatus,
+        });
+      })
+      .catch(() => sendResponse({ ok: false, count: 0, top: [], lookup: [] }));
+    return true;
+  }
+  return undefined;
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -290,8 +314,53 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         if (t.id && looksKeepTab(t.url)) sendToTab(t.id, { type: "keep-tick" });
       }
     });
+    runDiscoverTick()
+      .then(() => rebuildQueue())
+      .catch(() => {});
   });
 });
+
+async function rebuildQueue(): Promise<ApplyQueueItem[]> {
+  const { finderMatches, discoveredEmployers, profile } = await chrome.storage.local.get([
+    "finderMatches",
+    "discoveredEmployers",
+    "profile",
+  ]);
+  const lookup = (finderMatches?.lookup || finderMatches?.top || []) as ApplyQueueItem[];
+  let builtIn: ApplyQueueItem[] = [];
+  try {
+    builtIn = await fetchBuiltInJobQueue(100, {
+      profile: hydrateProfile((profile as Profile) || EMPTY_PROFILE),
+      extraEmployers: (discoveredEmployers as EmployerRecord[]) || [],
+    });
+  } catch {
+    builtIn = [];
+  }
+  const seen = new Set<string>();
+  const queue: ApplyQueueItem[] = [];
+  for (const j of [...builtIn, ...lookup]) {
+    if (!j?.url || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url)) continue;
+    const key = canonicalJobUrl(j.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    queue.push({
+      url: j.url,
+      title: j.title || "Job",
+      company: j.company || "",
+      source: j.source,
+      location: j.location,
+      score: j.score,
+      why: j.why,
+    });
+  }
+  const compact = {
+    count: queue.length,
+    top: queue.slice(0, 8),
+    lookup: queue,
+  };
+  await chrome.storage.local.set({ applyQueue: queue, finderMatches: compact });
+  return queue;
+}
 
 async function setKeepApplying(on: boolean, tabId?: number | null) {
   await chrome.storage.local.set({ keepApplying: on });
@@ -299,24 +368,8 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
     chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
-    const { finderMatches } = await chrome.storage.local.get(["finderMatches"]);
-    const lookup = (finderMatches?.lookup || finderMatches?.top || []) as ApplyQueueItem[];
-    let builtIn: ApplyQueueItem[] = [];
-    try {
-      builtIn = await fetchBuiltInJobQueue(100);
-    } catch {
-      builtIn = [];
-    }
-    const seen = new Set<string>();
-    const queue: ApplyQueueItem[] = [];
-    for (const j of [...lookup, ...builtIn]) {
-      if (!j?.url || /linkedin\.com|indeed\.com|glassdoor\.com/i.test(j.url)) continue;
-      const key = canonicalJobUrl(j.url);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      queue.push({ url: j.url, title: j.title || "Job", company: j.company || "", source: j.source });
-    }
-    await chrome.storage.local.set({ applyQueue: queue });
+    const queue = await rebuildQueue();
+    runDiscoverTick().then(() => rebuildQueue()).catch(() => {});
     const [tab] = tabId
       ? [await chrome.tabs.get(tabId).catch(() => null)]
       : await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -327,6 +380,10 @@ async function setKeepApplying(on: boolean, tabId?: number | null) {
   } else {
     await chrome.alarms.clear("fillglen-keep");
     chrome.action.setBadgeText({ text: "" });
+    const { status } = await loadDiscover();
+    await chrome.storage.local.set({
+      discoverStatus: { ...status, running: false, note: "Discovery paused. Turn keep applying back on to continue the Texas map scan." },
+    });
   }
 }
 

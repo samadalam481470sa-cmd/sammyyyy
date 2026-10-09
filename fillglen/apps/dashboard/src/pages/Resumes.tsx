@@ -24,11 +24,11 @@ export default function Resumes() {
     ["TypeScript", "React", "COBOL"]
   );
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <h1 className="text-2xl">Resumes</h1>
       <p>Master resume stays structured. Tailoring reorders and rephrases only skills you have. Missing skills are suggestions, never edits.</p>
       <textarea className="w-full border rounded-lg p-2" rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} />
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-8">
         <div>
           <h2>Master</h2>
           {result.bullets.map((b) => (

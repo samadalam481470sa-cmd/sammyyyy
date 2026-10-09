@@ -4,13 +4,17 @@ import {
   assertRealListing,
   coverage,
   dedupeListings,
+  hydrateProfile,
   parseAiScore,
   ruleFilter,
   ruleScore,
   scoreCacheKey,
+  DEFAULT_SEARCH,
   seedEmployers,
+  settingsFromResume,
   type CanonicalListing,
   type EmployerRecord,
+  type Profile,
   type ScoreCard,
   type SearchSettings,
 } from "@fillglen/core";
@@ -178,6 +182,12 @@ export async function verifyThenAlert(
     if (await verifyLink(m.listing.url)) keep.push(m);
   }
   return keep;
+}
+
+export function searchSettingsForUser(userId: string, stored?: SearchSettings): SearchSettings {
+  const profileRow = db.find("profiles", (p) => p.userId === userId);
+  const profile = hydrateProfile((profileRow?.profile as Profile) || null);
+  return settingsFromResume(profile, stored || DEFAULT_SEARCH);
 }
 
 export function addEmployerFromUrl(company: string, careersUrl: string, metro = "dfw"): EmployerRecord {

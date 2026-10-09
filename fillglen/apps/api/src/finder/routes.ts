@@ -2,7 +2,8 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import { DEFAULT_SEARCH, type SearchSettings } from "@fillglen/core";
 import { db, id } from "../db.js";
-import { addEmployerFromUrl, getCoverage, runFetch, scoreForSearch, verifyThenAlert } from "./pipeline.js";
+import { addEmployerFromUrl, getCoverage, runFetch, scoreForSearch, searchSettingsForUser, verifyThenAlert } from "./pipeline.js";
+import { loadDiscoverStatus, runMapDiscovery } from "./maps.js";
 import { createAiProvider } from "./provider.js";
 import { MCP_TOOLS, searchLocalJobs } from "../mcp.js";
 
@@ -11,7 +12,7 @@ type Auth = (req: Request, res: Response, next: NextFunction) => void;
 
 function settingsFor(userId: string): SearchSettings {
   const row = db.find("searches", (s) => s.userId === userId && s.kind === "finder");
-  return { ...DEFAULT_SEARCH, ...((row?.query as SearchSettings) || {}) };
+  return searchSettingsForUser(userId, { ...DEFAULT_SEARCH, ...((row?.query as SearchSettings) || {}) });
 }
 
 const settingsSchema = z.object({
@@ -57,13 +58,24 @@ export function mountFinder(app: Express, auth: Auth) {
   });
 
   app.post("/v1/finder/run", auth, async (_req, res) => {
+    const maps = await runMapDiscovery({ maxTiles: 1, maxSites: 8 }).catch(() => null);
     const result = await runFetch({ includeUsa: true, includeAdzuna: true });
     res.json({
       ...result,
-      coverage: getCoverage("dfw"),
+      maps,
+      coverage: getCoverage("texas"),
       provider: createAiProvider().name,
-      note: "Search runs on the server, not in Chrome.",
+      note: "Search runs on the server 24/7. Map discovery uses OpenStreetMap (and Google Places if a key is set). Google Maps is not scraped.",
     });
+  });
+
+  app.get("/v1/finder/discover", auth, (_req, res) => {
+    res.json(loadDiscoverStatus());
+  });
+
+  app.post("/v1/finder/discover", auth, async (_req, res) => {
+    const status = await runMapDiscovery({ maxTiles: 1, maxSites: 8 });
+    res.json({ ...status, coverage: getCoverage("texas") });
   });
 
   app.get("/v1/finder/jobs", auth, async (req, res) => {

@@ -73,6 +73,8 @@ export interface ApplyQueueItem {
   company: string;
   source?: string;
   location?: string;
+  score?: number;
+  why?: string;
 }
 
 export function canonicalJobUrl(url: string): string {

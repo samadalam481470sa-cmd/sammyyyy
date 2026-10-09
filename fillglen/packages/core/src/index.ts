@@ -15,4 +15,6 @@ export * from "./finder.js";
 export * from "./applyLoop.js";
 export * from "./answers.js";
 export * from "./feeds.js";
+export * from "./mapsDiscover.js";
+export * from "./resumeMatch.js";
 export { planPage, planFill, valueForType } from "./resolve.js";

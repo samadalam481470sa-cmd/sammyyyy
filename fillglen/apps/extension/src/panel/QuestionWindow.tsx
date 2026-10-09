@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Profile, Question, ScanSnapshot } from "@fillglen/core";
 import { scoreMatch } from "@fillglen/core";
+import { CopyrightNotice, Logo } from "../brand";
 
 export type FilterTab = "all" | "needs-you" | "filled";
 
@@ -170,13 +171,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="fg-root">
       <header className="fg-brand">
-        <Logo />
+        <Logo size={40} />
         <div>
           <strong>Fillglen</strong>
           <span>Live question window</span>
         </div>
       </header>
       {children}
+      <CopyrightNotice />
     </div>
   );
 }
@@ -256,13 +258,4 @@ function QuestionRow({
   );
 }
 
-export function Logo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#1b3a2f" />
-      <path d="M6 22c4-8 6-12 10-12s6 4 10 12" fill="none" stroke="#e8c9a8" strokeWidth="2" />
-      <path d="M8 22h16" stroke="#d9763a" strokeWidth="2" />
-      <circle cx="16" cy="12" r="2" fill="#f6f1e8" />
-    </svg>
-  );
-}
+export { Logo } from "../brand";

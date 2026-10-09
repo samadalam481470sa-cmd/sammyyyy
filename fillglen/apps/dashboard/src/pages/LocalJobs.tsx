@@ -104,7 +104,8 @@ export default function LocalJobs() {
         <div>
           <h1 className="text-2xl">Local jobs</h1>
           <p className="text-sm text-[#5c6b64]">
-            Search prefers Texas IT hiring, then other United States roles, from public ATS feeds. LinkedIn, Indeed, and
+            Search prefers Texas IT hiring, then other United States roles, ranked to your saved resume. Map discovery
+            uses OpenStreetMap (and Google Places if a key is set). Google Maps is not scraped. LinkedIn, Indeed, and
             Glassdoor are not scraped. This is not every company in Texas — only mapped public boards we can pull.
           </p>
         </div>

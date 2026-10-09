@@ -32,7 +32,7 @@ export default function Home() {
           to sync. The extension still works offline.
         </p>
       ) : null}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
         <Card label="Applications this week" value={week} />
         <Card label="Marked applied" value={applied} />
         <Card label="Response rate" value={stats.responseRate} />
@@ -54,7 +54,7 @@ export default function Home() {
 
 function Card({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-[#fffbf5] border border-[#d9d0c4] rounded-xl p-4">
+    <div className="bg-[#fffbf5] border border-[#d9d0c4] rounded-2xl p-6">
       <div className="text-sm text-[#5c6b64]">{label}</div>
       <div className="text-2xl mt-1">{value}</div>
     </div>
