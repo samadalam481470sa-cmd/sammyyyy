@@ -5,6 +5,7 @@ import {
   feedMetaForUrl,
   fieldLooksFilled,
   hydrateProfile,
+  hydrateSession,
   KEEP_FILL_GAP_MS,
   KEEP_INTERVAL_MS,
   KEEP_MUTATION_DEBOUNCE_MS,
@@ -12,8 +13,11 @@ import {
   KEEP_STUCK_TICKS,
   looksLikeApplicationPage,
   mayAdvance,
+  overlaySavedValues,
+  pageKeepForUrl,
   planPage,
   shouldBlockPage,
+  snapshotForUrl,
   type Profile,
   type Question,
   type ScanSnapshot,
@@ -66,6 +70,8 @@ function boot() {
   let waitingOnCaptcha = false;
   let keepBusy = false;
   let googleClicked = false;
+  let overlayApplied = false;
+  let persistTimer: number | undefined;
 
   function connect() {
     port = chrome.runtime.connect({ name: "fillglen-content" });
@@ -101,12 +107,13 @@ function boot() {
     questions: Question[],
     finderMatches?: { lookup?: { url: string; score: number; why?: string; source?: string }[]; top?: { url: string; score: number; why?: string; source?: string }[] }
   ): ScanSnapshot {
-    const adapter = adapterFor(url);
+    const pageUrl = location.href;
+    const adapter = adapterFor(pageUrl);
     const step = adapter?.id === "workday" ? readWorkdayStep() : undefined;
     const heading = document.querySelector("h1, h2")?.textContent?.trim() || document.title;
     const job = adapter
       ? adapter.readJobMeta({
-          url,
+          url: pageUrl,
           title: document.title,
           heading,
           bodyText: document.body?.innerText?.slice(0, 8000),
@@ -115,7 +122,7 @@ function boot() {
           company: location.hostname,
           title: heading,
           board: "unknown",
-          url,
+          url: pageUrl,
           description: document.body?.innerText?.slice(0, 8000) || "",
         };
     if (step) {
@@ -124,9 +131,68 @@ function boot() {
       job.stepTotal = step.total;
     }
     const lookup = [...(finderMatches?.lookup || []), ...(finderMatches?.top || [])];
-    const feed = feedMetaForUrl(url, lookup);
+    const feed = feedMetaForUrl(pageUrl, lookup);
     if (feed) Object.assign(job, feed);
     return { job, questions, blockedReason: blocked || undefined };
+  }
+
+  async function savedSession() {
+    const stored = await chrome.storage.local.get(["sessionMemory"]);
+    return hydrateSession(stored.sessionMemory);
+  }
+
+  async function restoreSaved(questions: Question[]): Promise<Question[]> {
+    const mem = await savedSession();
+    const saved = snapshotForUrl(mem, location.href);
+    const merged = overlaySavedValues(questions, saved?.questions || []);
+    if (overlayApplied) return merged;
+    overlayApplied = true;
+    const keep = pageKeepForUrl(mem, location.href);
+    if (keep) {
+      stuckTicks = keep.stuckTicks;
+      googleClicked = keep.googleClicked;
+      waitingOnCaptcha = keep.waitingOnCaptcha;
+      if (keep.undoStack?.length) {
+        undoStack.splice(0, undoStack.length, ...keep.undoStack);
+      }
+    }
+    for (const q of merged) {
+      const live = questions.find((x) => x.id === q.id);
+      if (!q.value || fieldLooksFilled(q.kind, live?.value || "")) continue;
+      setFieldById(q.id, q.value);
+    }
+    return merged;
+  }
+
+  function persistPage(reason: "hide" | "typed" | "scan" = "hide") {
+    if (window !== window.top) return;
+    const snap = last.length ? snapshot(last) : undefined;
+    post({ type: "persist-now", snapshot: snap, questions: last });
+    const pageUrl = location.href;
+    post({
+      type: "page-keep",
+      keep: {
+        url: pageUrl,
+        stuckTicks,
+        googleClicked,
+        waitingOnCaptcha,
+        undoStack: undoStack.slice(-80),
+      },
+    });
+    if (reason === "hide" || !port) {
+      chrome.runtime.sendMessage({ type: "persist-now", snapshot: snap, questions: last }).catch(() => {});
+      chrome.runtime
+        .sendMessage({
+          type: "page-keep",
+          keep: { url: pageUrl, stuckTicks, googleClicked, waitingOnCaptcha, undoStack: undoStack.slice(-80) },
+        })
+        .catch(() => {});
+    }
+  }
+
+  function schedulePersist() {
+    if (persistTimer) window.clearTimeout(persistTimer);
+    persistTimer = window.setTimeout(() => persistPage("typed"), 120);
   }
 
   async function scan(reason: "full" | "delta") {
@@ -134,17 +200,25 @@ function boot() {
       if (window === window.top) post({ type: "scan", snapshot: snapshot([]) });
       return;
     }
-    const stored = await chrome.storage.local.get(["profile", "pausedOrigins", "finderMatches"]);
+    const stored = await chrome.storage.local.get(["profile", "pausedOrigins", "finderMatches", "sessionMemory"]);
     const origin = location.origin;
     paused = ((stored.pausedOrigins as string[]) || []).includes(origin);
     if (paused) return;
     const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
-    const questions = scanDocument(document, frameId, profile);
+    let questions = scanDocument(document, frameId, profile);
     if (reason === "full" || last.length === 0) {
+      questions = await restoreSaved(questions);
       last = questions;
       post({ type: "scan", snapshot: snapshot(questions, stored.finderMatches as Parameters<typeof snapshot>[1]) });
+      persistPage("scan");
       if (window === window.top && isVisibleTab() && questions.length > 0) {
-        const plans = planPage(questions, profile).filter((p) => p.value);
+        const plans = planPage(questions, profile).filter((p) => {
+          if (!p.value) return false;
+          const q = questions.find((x) => x.id === p.questionId);
+          if (q?.source === "user" && q.value) return false;
+          if (fieldLooksFilled(q?.kind || "text", q?.value || "")) return false;
+          return true;
+        });
         for (const plan of plans) applyOne(plan.questionId, plan.value);
       }
       return;
@@ -153,6 +227,7 @@ function boot() {
     last = questions;
     if (diff.added.length || diff.removed.length || diff.changed.length) {
       post({ type: "delta", questions });
+      schedulePersist();
     }
   }
 
@@ -169,19 +244,27 @@ function boot() {
       q.source = "profile";
     }
     post({ type: "delta", questions: last });
+    schedulePersist();
   }
 
   function undo(id?: string) {
     const item = id ? [...undoStack].reverse().find((u) => u.id === id) : undoStack.pop();
     if (!item) return;
     setFieldById(item.id, item.prev);
+    const q = last.find((x) => x.id === item.id);
+    if (q) {
+      q.value = item.prev;
+      q.status = item.prev ? "filled" : "needs-you";
+    }
+    post({ type: "delta", questions: last });
+    persistPage("typed");
   }
 
   async function keepCycle() {
     if (window !== window.top || keepBusy || !isVisibleTab()) return;
     keepBusy = true;
     try {
-      const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins"]);
+      const stored = await chrome.storage.local.get(["keepApplying", "profile", "pausedOrigins", "sessionMemory"]);
       const originPaused = ((stored.pausedOrigins as string[]) || []).includes(location.origin);
       if (!stored.keepApplying || paused || originPaused || blocked) return;
       if (
@@ -206,7 +289,11 @@ function boot() {
         post({ type: "keep-status", status: "fill", url, detail: "captcha cleared by you" });
       }
       const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
-      const questions = scanDocument(document, frameId, profile);
+      const saved = snapshotForUrl(hydrateSession(stored.sessionMemory), location.href);
+      const questions = overlaySavedValues(scanDocument(document, frameId, profile), [
+        ...(saved?.questions || []),
+        ...last,
+      ]);
       last = questions;
       const filledCount = questions.filter((q) => fieldLooksFilled(q.kind, q.value)).length;
       const signupWall = /sign up|create (an )?account|continue with google|sign in with google/i.test(
@@ -261,6 +348,7 @@ function boot() {
       }
     } finally {
       keepBusy = false;
+      schedulePersist();
     }
   }
 
@@ -326,20 +414,30 @@ function boot() {
     }
   });
   document.addEventListener("visibilitychange", () => {
-    if (!isVisibleTab()) return;
-    chrome.storage.local.get(["keepApplying"], (r) => {
-      if (!r.keepApplying) return;
-      whenReady(() => {
-        watchPage();
+    if (!isVisibleTab()) {
+      persistPage("hide");
+      return;
+    }
+    overlayApplied = false;
+    whenReady(() => {
+      watchPage();
+      scan("full").catch(() => {});
+      chrome.storage.local.get(["keepApplying"], (r) => {
+        if (!r.keepApplying) return;
         startKeepLoop();
         keepCycle().catch(() => {});
       });
     });
   });
   window.addEventListener("pageshow", () => {
+    overlayApplied = false;
+    persistPage("scan");
     if (!isVisibleTab()) return;
+    scan("full").catch(() => {});
     keepCycle().catch(() => {});
   });
+  window.addEventListener("pagehide", () => persistPage("hide"));
+  window.addEventListener("beforeunload", () => persistPage("hide"));
 
   document.addEventListener(
     "input",
@@ -348,7 +446,14 @@ function boot() {
       const id = t?.getAttribute("data-fillglen-id");
       if (!id) return;
       const value = (t as HTMLInputElement).value;
+      const q = last.find((x) => x.id === id);
+      if (q) {
+        q.value = value;
+        q.source = "user";
+        q.status = value ? "filled" : "needs-you";
+      }
       post({ type: "typed", questionId: id, value });
+      schedulePersist();
     },
     true
   );

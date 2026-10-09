@@ -28,6 +28,8 @@ function Popup() {
   const [view, setView] = useState<View>("home");
   const [harvestedAt, setHarvestedAt] = useState("");
   const [dbTotal, setDbTotal] = useState(0);
+  const [savedAt, setSavedAt] = useState("");
+  const [lastJob, setLastJob] = useState("");
 
   useEffect(() => {
     chrome.storage.local.get(
@@ -44,6 +46,9 @@ function Popup() {
         "popupView",
         "liveJobsHarvestedAt",
         "dbCache",
+        "sessionSavedAt",
+        "lastJobUrl",
+        "lastKeepStatus",
       ],
       (r) => {
         if (r.profile) setProfile(hydrateProfile(r.profile));
@@ -55,6 +60,8 @@ function Popup() {
         if (r.popupView === "live" || r.popupView === "home" || r.popupView === "database") setView(r.popupView);
         if (typeof r.liveJobsHarvestedAt === "string") setHarvestedAt(r.liveJobsHarvestedAt);
         if (r.dbCache?.total != null) setDbTotal(Number(r.dbCache.total) || 0);
+        if (typeof r.sessionSavedAt === "string") setSavedAt(r.sessionSavedAt);
+        if (typeof r.lastJobUrl === "string") setLastJob(r.lastJobUrl);
         setKeepApplying(Boolean(r.keepApplying));
         const base = r.apiBase || "http://127.0.0.1:8787";
         if (r.sessionToken) {
@@ -81,6 +88,13 @@ function Popup() {
       if (changes.liveJobs?.newValue) setLiveJobs(changes.liveJobs.newValue);
       if (typeof changes.liveJobsHarvestedAt?.newValue === "string") setHarvestedAt(changes.liveJobsHarvestedAt.newValue);
       if (changes.dbCache?.newValue?.total != null) setDbTotal(Number(changes.dbCache.newValue.total) || 0);
+      if (typeof changes.sessionSavedAt?.newValue === "string") setSavedAt(changes.sessionSavedAt.newValue);
+      if (typeof changes.lastJobUrl?.newValue === "string") setLastJob(changes.lastJobUrl.newValue);
+      if (typeof changes.popupPaste?.newValue === "string") setPaste(changes.popupPaste.newValue);
+      if (typeof changes.popupStatus?.newValue === "string") setStatus(changes.popupStatus.newValue);
+      if (changes.popupView?.newValue === "live" || changes.popupView?.newValue === "home" || changes.popupView?.newValue === "database") {
+        setView(changes.popupView.newValue);
+      }
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
@@ -151,8 +165,9 @@ function Popup() {
           </div>
           <p className="meta">
             Fillglen keeps looking in the background while Chrome is open. Open a job now, or leave it here after you
-            finish an application. This list is saved.
+            finish an application. This list is saved. Switching tabs keeps every row.
             {harvestedAt ? ` Last look ${new Date(harvestedAt).toLocaleTimeString()}.` : ""}
+            {savedAt ? ` Last saved ${new Date(savedAt).toLocaleTimeString()}.` : ""}
           </p>
           <ol className="qlist">
             {liveJobs.map((m) => (
@@ -358,9 +373,12 @@ function Popup() {
       </section>
 
       <p className="meta fg-foot-note">
-        {keepApplying ? "Widget on." : "Keep applying is off."} Live jobs stay if you close this popup. Database is a
-        button in this same window — it does not open another site. Unknown form questions use the resume; if the
-        resume does not have it, Fillglen answers No. LinkedIn Easy Apply is blocked.
+        {keepApplying ? "Widget on." : "Keep applying is off."} Switching tabs saves listings, typed answers, keep
+        applying, and this window.
+        {savedAt ? ` Last saved ${new Date(savedAt).toLocaleTimeString()}.` : " Nothing saved yet this session."}
+        {lastJob ? ` Last job ${lastJob}.` : ""} Database is a button in this same window — it does not open another
+        site. Unknown form questions use the resume; if the resume does not have it, Fillglen answers No. LinkedIn Easy
+        Apply is blocked.
       </p>
       <CopyrightNotice />
     </div>

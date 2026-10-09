@@ -3,7 +3,15 @@ import { clickVisibleGoogleAccount } from "../../../../packages/core/src/dom";
 function tick() {
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying) return;
-    clickVisibleGoogleAccount(document);
+    if (clickVisibleGoogleAccount(document)) {
+      chrome.storage.local.set({
+        lastGoogleAccountAt: new Date().toISOString(),
+        lastGoogleAccountUrl: location.href,
+      });
+      chrome.runtime
+        .sendMessage({ type: "keep-status", status: "fill", url: location.href, detail: "google account" })
+        .catch(() => {});
+    }
   });
 }
 

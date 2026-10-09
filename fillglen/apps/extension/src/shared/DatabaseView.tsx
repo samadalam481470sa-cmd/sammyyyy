@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { DbQueryResult, DbRecord, DbStats } from "@fillglen/core";
 import { EMPTY_DB_STATS, isDbKind, queryLocalStore } from "@fillglen/core";
 
-const KINDS = ["", "job", "employer", "application", "harvest", "answer"] as const;
+const KINDS = ["", "job", "employer", "application", "harvest", "event", "answer"] as const;
 
 type ChromeLite = {
   storage?: {

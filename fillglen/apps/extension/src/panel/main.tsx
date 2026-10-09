@@ -16,18 +16,23 @@ function PanelApp() {
 
   useEffect(() => {
     if (typeof chrome === "undefined" || !chrome.runtime?.connect) return;
-    chrome.storage.local.get(["panelDrafts"], (r) => {
+    chrome.storage.local.get(["panelDrafts", "lastSnapshot", "keepApplying", "pausedOrigins"], (r) => {
       if (r.panelDrafts && typeof r.panelDrafts === "object") setDrafts(r.panelDrafts);
+      if (r.lastSnapshot && typeof r.lastSnapshot === "object") setSnapshot(r.lastSnapshot as ScanSnapshot);
+      if (typeof r.keepApplying === "boolean") setKeepApplying(r.keepApplying);
     });
     const p = chrome.runtime.connect({ name: "fillglen-panel" });
     setPort(p);
-    p.postMessage({ type: "subscribe" } satisfies FromPanel);
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      p.postMessage({ type: "subscribe", tabId: tabs[0]?.id } satisfies FromPanel);
+    });
     p.onMessage.addListener((msg: ToPanel) => {
       if (msg.type === "state") {
         setSnapshot(msg.snapshot);
         setProfile(msg.profile);
         setPaused(msg.paused);
         setKeepApplying(Boolean(msg.keepApplying));
+        if (msg.snapshot) chrome.storage.local.set({ lastSnapshot: msg.snapshot, lastSnapshotTabId: msg.tabId });
       }
       if (msg.type === "draft") {
         setDrafts((d) => {
@@ -37,7 +42,18 @@ function PanelApp() {
         });
       }
     });
-    return () => p.disconnect();
+    const onChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
+      if (area !== "local") return;
+      if (changes.keepApplying) setKeepApplying(Boolean(changes.keepApplying.newValue));
+      if (changes.panelDrafts?.newValue && typeof changes.panelDrafts.newValue === "object") {
+        setDrafts(changes.panelDrafts.newValue as Record<string, DraftState>);
+      }
+    };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => {
+      p.disconnect();
+      chrome.storage.onChanged.removeListener(onChange);
+    };
   }, []);
 
   const send = (msg: FromPanel) => port?.postMessage(msg);

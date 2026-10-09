@@ -20,6 +20,18 @@ import type { FromPanel, KeepStatus, ToBackground, ToContent, ToPanel } from "./
 import { loadDiscover, runDiscoverTick } from "./backgroundDiscover";
 import { getLocalRecord } from "@fillglen/core";
 import { ingestFromStorage, recordHarvestTick, runDbQuery, runDbStats } from "./ingestDb";
+import {
+  forgetOpenTab,
+  hydrateRuntime,
+  saveAction,
+  saveHandoff,
+  saveKeep,
+  savePageKeep,
+  saveSnapshot,
+  saveTabSnapshot,
+  saveWarmup,
+  snapshotForOpenTab,
+} from "./persistSession";
 
 const contentPorts = new Map<number, Set<chrome.runtime.Port>>();
 const panelPorts = new Set<chrome.runtime.Port>();
@@ -28,6 +40,47 @@ let warmupTabId: number | null = null;
 let warmupUrl: string | null = null;
 let handoffLock = false;
 const handedOffTabs = new Set<number>();
+
+async function snapFor(tabId: number, url?: string): Promise<ScanSnapshot | undefined> {
+  const live = snapshots.get(tabId);
+  if (live) return live;
+  const saved = await snapshotForOpenTab(tabId, url);
+  if (saved) snapshots.set(tabId, saved);
+  return saved;
+}
+
+async function persistSnap(tabId: number, snap: ScanSnapshot) {
+  snapshots.set(tabId, snap);
+  await saveTabSnapshot(tabId, snap).catch(() => {});
+}
+
+async function journal(type: string, detail: string, snap?: ScanSnapshot | null, url?: string) {
+  await saveAction({
+    at: new Date().toISOString(),
+    type,
+    url: snap?.job.url || url || "",
+    title: snap?.job.title || "",
+    company: snap?.job.company || "",
+    detail,
+  }).catch(() => {});
+}
+
+async function restoreRuntime() {
+  const hydrated = await hydrateRuntime();
+  for (const row of hydrated.snapshots) snapshots.set(row.tabId, row.snap);
+  if (hydrated.warmupTabId != null) warmupTabId = hydrated.warmupTabId;
+  if (hydrated.warmupUrl) warmupUrl = hydrated.warmupUrl;
+  for (const id of hydrated.handedOffTabIds) handedOffTabs.add(id);
+  const { keepApplying } = await chrome.storage.local.get(["keepApplying"]);
+  if (keepApplying) {
+    chrome.action.setBadgeText({ text: "ON" });
+    chrome.action.setBadgeBackgroundColor({ color: "#d9763a" });
+    chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
+    startLiveAlarm();
+  }
+}
+
+restoreRuntime().catch(() => {});
 
 async function loadProfile(): Promise<Profile> {
   const stored = await chrome.storage.local.get(["profile"]);
@@ -51,7 +104,11 @@ function broadcastPanel(msg: ToPanel) {
 
 async function pushState(tabId: number | null) {
   const profile = await loadProfile();
-  const snapshot = tabId != null ? snapshots.get(tabId) || null : null;
+  let snapshot = tabId != null ? snapshots.get(tabId) || null : null;
+  if (tabId != null && !snapshot) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    snapshot = (await snapFor(tabId, tab?.url)) || null;
+  }
   let paused = false;
   if (snapshot?.job.url) {
     try {
@@ -86,22 +143,41 @@ chrome.runtime.onConnect.addListener((port) => {
     contentPorts.get(tabId)!.add(port);
     port.onMessage.addListener(async (msg: ToBackground) => {
       if (msg.type === "scan" || msg.type === "delta") {
-        const snap = msg.type === "scan" ? msg.snapshot : { ...(snapshots.get(tabId) as ScanSnapshot), questions: msg.questions };
-        snapshots.set(tabId, snap);
-        if (msg.type === "scan" && !snap.blockedReason) {
+        const prev = snapshots.get(tabId) || (await snapFor(tabId, port.sender?.tab?.url));
+        const snap =
+          msg.type === "scan"
+            ? msg.snapshot
+            : { ...(prev as ScanSnapshot), questions: msg.questions };
+        if (snap?.job) await persistSnap(tabId, snap);
+        if (msg.type === "scan" && snap && !snap.blockedReason) {
           await maybeTrack(snap);
+          await journal("scan", `${snap.questions?.length || 0} fields`, snap);
         }
         await pushState(tabId);
       }
       if (msg.type === "keep-status") {
         await onKeepStatus(tabId, msg.status, msg.url, msg.detail);
       }
-      if (msg.type === "typed" && snapshots.has(tabId)) {
-        const snap = snapshots.get(tabId)!;
-        snap.questions = snap.questions.map((q) =>
-          q.id === msg.questionId ? { ...q, value: msg.value, source: "user", status: msg.value ? "filled" : "needs-you" } : q
-        );
-        await pushState(tabId);
+      if (msg.type === "typed") {
+        const prev = snapshots.get(tabId) || (await snapFor(tabId, port.sender?.tab?.url));
+        if (prev) {
+          const snap = {
+            ...prev,
+            questions: prev.questions.map((q) =>
+              q.id === msg.questionId ? { ...q, value: msg.value, source: "user" as const, status: msg.value ? "filled" as const : "needs-you" as const } : q
+            ),
+          };
+          await persistSnap(tabId, snap);
+          await pushState(tabId);
+        }
+      }
+      if (msg.type === "page-keep") {
+        await savePageKeep(msg.keep).catch(() => {});
+      }
+      if (msg.type === "persist-now") {
+        const prev = snapshots.get(tabId) || (await snapFor(tabId, port.sender?.tab?.url));
+        const snap = msg.snapshot || (prev && msg.questions ? { ...prev, questions: msg.questions } : prev);
+        if (snap) await persistSnap(tabId, snap);
       }
       if (msg.type === "open-panel" || msg.type === "open-panel-database") {
         if (msg.type === "open-panel-database") {
@@ -127,18 +203,43 @@ chrome.runtime.onConnect.addListener((port) => {
       if (tabId == null) return;
       if (msg.type === "fill-page") {
         const profile = await loadProfile();
-        const snap = snapshots.get(tabId);
+        const snap = await snapFor(tabId, tab?.url);
         if (!snap) return;
+        await journal("fill-page", `${snap.questions.length} fields`, snap);
         sendToTab(tabId, { type: "fill-plans", plans: planPage(snap.questions, profile) });
       }
       if (msg.type === "fill-one" || msg.type === "edit-value") {
+        const prev = await snapFor(tabId, tab?.url);
+        if (prev) {
+          const snap = {
+            ...prev,
+            questions: prev.questions.map((q) =>
+              q.id === msg.questionId ? { ...q, value: msg.value, source: "user" as const, status: msg.value ? "filled" as const : "needs-you" as const } : q
+            ),
+          };
+          await persistSnap(tabId, snap);
+        }
         sendToTab(tabId, { type: "fill-one", questionId: msg.questionId, value: msg.value });
       }
       if (msg.type === "insert-draft") {
+        const prev = await snapFor(tabId, tab?.url);
+        if (prev) {
+          const snap = {
+            ...prev,
+            questions: prev.questions.map((q) =>
+              q.id === msg.questionId ? { ...q, value: msg.text, source: "ai-draft" as const, status: "filled" as const } : q
+            ),
+          };
+          await persistSnap(tabId, snap);
+          await journal("insert-draft", msg.questionId, snap);
+        }
         sendToTab(tabId, { type: "fill-one", questionId: msg.questionId, value: msg.text });
       }
       if (msg.type === "focus") sendToTab(tabId, { type: "focus", questionId: msg.questionId });
-      if (msg.type === "undo") sendToTab(tabId, { type: "undo", questionId: msg.questionId });
+      if (msg.type === "undo") {
+        await journal("undo", msg.questionId || "page", await snapFor(tabId, tab?.url));
+        sendToTab(tabId, { type: "undo", questionId: msg.questionId });
+      }
       if (msg.type === "pause") {
         const origin = msg.origin || (tab?.url ? new URL(tab.url).origin : "");
         const { pausedOrigins = [] } = await chrome.storage.local.get(["pausedOrigins"]);
@@ -146,6 +247,8 @@ chrome.runtime.onConnect.addListener((port) => {
         if (next.has(origin)) next.delete(origin);
         else next.add(origin);
         await chrome.storage.local.set({ pausedOrigins: [...next] });
+        const snap = await snapFor(tabId, tab?.url);
+        await journal("pause", origin, snap, origin);
         await pushState(tabId);
       }
       if (msg.type === "start-keep-applying") await setKeepApplying(true, tabId);
@@ -157,6 +260,8 @@ chrome.runtime.onConnect.addListener((port) => {
           ...profile.answers.filter((a) => a.pattern !== msg.pattern),
         ];
         await chrome.storage.local.set({ profile });
+        const snap = await snapFor(tabId, tab?.url);
+        await journal("save-answer", msg.pattern, snap);
         await pushState(tabId);
       }
       if (msg.type === "draft-ai") {
@@ -176,7 +281,8 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 async function requestDraft(tabId: number, questionId: string) {
-  const snap = snapshots.get(tabId);
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const snap = await snapFor(tabId, tab?.url);
   const q = snap?.questions.find((x) => x.id === questionId);
   const profile = await loadProfile();
   if (!q) return;
@@ -255,6 +361,7 @@ async function maybeTrack(snap: ScanSnapshot) {
   });
   await chrome.storage.local.set({ jobs, applications });
   ingestFromStorage().catch(() => {});
+  await journal("listing", `${snap.job.title} · ${snap.job.company}`, snap);
 }
 
 function looksApply(url?: string) {
@@ -275,12 +382,16 @@ async function ping(tabId: number, url: string) {
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   const url = info.url || tab.url;
   if (url) ping(tabId, url);
+  if (info.discarded && snapshots.has(tabId)) {
+    saveTabSnapshot(tabId, snapshots.get(tabId)!).catch(() => {});
+  }
   if (info.status === "complete") {
     chrome.storage.local.get(["keepApplying"], (r) => {
       if (!r.keepApplying) return;
       if (tabId === warmupTabId) return;
       if (tab.id && looksKeepTab(tab.url || url)) sendToTab(tab.id, { type: "keep-tick" });
     });
+    snapFor(tabId, url).then(() => pushState(tabId)).catch(() => {});
   }
 });
 
@@ -308,12 +419,30 @@ chrome.webNavigation?.onHistoryStateUpdated.addListener((d) => {
 });
 chrome.tabs.onRemoved.addListener((tabId) => {
   handedOffTabs.delete(tabId);
+  const snap = snapshots.get(tabId);
+  if (snap) saveTabSnapshot(tabId, snap).catch(() => {});
+  snapshots.delete(tabId);
+  forgetOpenTab(tabId).catch(() => {});
   if (tabId === warmupTabId) {
     warmupTabId = null;
     warmupUrl = null;
+    saveWarmup(null, null).catch(() => {});
   }
 });
 chrome.tabs.onActivated.addListener((info) => {
+  chrome.tabs.get(info.tabId, (tab) => {
+    if (chrome.runtime.lastError) {
+      pushState(info.tabId).catch(() => {});
+      return;
+    }
+    const url = tab?.url;
+    snapFor(info.tabId, url)
+      .then(async (snap) => {
+        await journal("tab-activate", url || "", snap, url);
+        await pushState(info.tabId);
+      })
+      .catch(() => pushState(info.tabId));
+  });
   chrome.storage.local.get(["keepApplying"], (r) => {
     if (!r.keepApplying || info.tabId === warmupTabId) return;
     sendToTab(info.tabId, { type: "keep-tick" });
@@ -334,11 +463,13 @@ chrome.runtime.onInstalled.addListener(() => {
   });
   startLiveAlarm();
   startDbAlarm();
+  restoreRuntime().catch(() => {});
   harvestLiveJobs().catch(() => {});
 });
 chrome.runtime.onStartup?.addListener(() => {
   startLiveAlarm();
   startDbAlarm();
+  restoreRuntime().catch(() => {});
   harvestLiveJobs().catch(() => {});
 });
 
@@ -407,6 +538,48 @@ chrome.runtime.onMessage.addListener((msg: { type?: string }, _sender, sendRespo
       .then((stats) => sendResponse({ ok: true, stats }))
       .catch(() => sendResponse({ ok: false, stats: { total: 0 } }));
     return true;
+  }
+  if (msg?.type === "persist-now") {
+    const tabId = _sender.tab?.id;
+    const payload = msg as { snapshot?: ScanSnapshot; questions?: ScanSnapshot["questions"] };
+    const prev = tabId != null ? snapshots.get(tabId) : undefined;
+    const snap = payload.snapshot || (prev && payload.questions ? { ...prev, questions: payload.questions } : prev);
+    if (snap && tabId != null) {
+      persistSnap(tabId, snap).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    if (snap) {
+      saveSnapshot(snap, tabId).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+    sendResponse({ ok: false });
+    return true;
+  }
+  if (msg?.type === "page-keep" && (msg as { keep?: { url: string } }).keep) {
+    savePageKeep((msg as { keep: { url: string; stuckTicks: number; googleClicked: boolean; waitingOnCaptcha: boolean; undoStack: { id: string; prev: string }[] } }).keep)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.type === "keep-status") {
+    const tabId = _sender.tab?.id;
+    const payload = msg as { status?: KeepStatus; url?: string; detail?: string };
+    if (tabId != null && payload.status) {
+      onKeepStatus(tabId, payload.status, payload.url, payload.detail)
+        .then(() => sendResponse({ ok: true }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
+    }
+  }
+  if (msg?.type === "session-restore") {
+    const tabId = _sender.tab?.id ?? (msg as { tabId?: number }).tabId;
+    const url = _sender.tab?.url || (msg as { url?: string }).url;
+    if (tabId != null) {
+      snapFor(tabId, url)
+        .then((snap) => sendResponse({ ok: Boolean(snap), snapshot: snap || null }))
+        .catch(() => sendResponse({ ok: false, snapshot: null }));
+      return true;
+    }
   }
   return undefined;
 });
@@ -487,10 +660,11 @@ async function harvestLiveJobs(): Promise<ApplyQueueItem[]> {
 
 async function openLiveJob(url: string) {
   const { liveJobs = [] } = await chrome.storage.local.get(["liveJobs"]);
-  await chrome.storage.local.set({
-    liveJobs: markLiveJob(liveJobs as ApplyQueueItem[], url, { openedAt: new Date().toISOString() }),
-  });
+  const marked = markLiveJob(liveJobs as ApplyQueueItem[], url, { openedAt: new Date().toISOString() });
+  await chrome.storage.local.set({ liveJobs: marked });
   ingestFromStorage().catch(() => {});
+  const hit = marked.find((j) => canonicalJobUrl(j.url) === canonicalJobUrl(url));
+  await journal("open-job", hit?.title || url, undefined, url);
   await chrome.tabs.create({ url });
 }
 
@@ -522,9 +696,11 @@ async function warmup(url: string) {
     if (tab.id == null) return;
     warmupTabId = tab.id;
     warmupUrl = url;
+    await saveWarmup(tab.id, url).catch(() => {});
   } catch {
     warmupTabId = null;
     warmupUrl = null;
+    await saveWarmup(null, null).catch(() => {});
   }
 }
 
@@ -540,6 +716,7 @@ async function closeWarmup() {
   const id = warmupTabId;
   warmupTabId = null;
   warmupUrl = null;
+  await saveWarmup(null, null).catch(() => {});
   if (id != null) chrome.tabs.remove(id).catch(() => {});
 }
 
@@ -558,13 +735,17 @@ async function goToNextJob(fromTabId: number, currentUrl: string, reason: "submi
     });
     if (!plan.next?.url) {
       chrome.action.setBadgeText({ text: "DONE" });
+      await journal("handoff-done", reason, snapshots.get(fromTabId), currentUrl);
       return;
     }
     const nextUrl = plan.next.url;
+    await saveHandoff(fromTabId, nextUrl).catch(() => {});
+    await journal("handoff", `${reason} → ${plan.next.title || nextUrl}`, snapshots.get(fromTabId), currentUrl);
     if (plan.useWarmup && warmupTabId != null) {
       const warmed = warmupTabId;
       warmupTabId = null;
       warmupUrl = null;
+      await saveWarmup(null, null).catch(() => {});
       await chrome.tabs.update(warmed, { active: true }).catch(() => chrome.tabs.update(fromTabId, { url: nextUrl }));
       sendToTab(warmed, { type: "keep-tick" });
       setTimeout(() => chrome.tabs.remove(fromTabId).catch(() => {}), plan.closeCurrentAfterMs);
@@ -581,6 +762,8 @@ async function goToNextJob(fromTabId: number, currentUrl: string, reason: "submi
 
 async function setKeepApplying(on: boolean, tabId?: number | null) {
   await chrome.storage.local.set({ keepApplying: on });
+  await saveKeep(on ? "fill" : "idle", "", on ? "keep applying on" : "keep applying off", tabId ?? undefined).catch(() => {});
+  await journal(on ? "keep-on" : "keep-off", on ? "started" : "stopped");
   if (on) {
     chrome.alarms.create("fillglen-keep", { periodInMinutes: 1 });
     chrome.action.setBadgeText({ text: "ON" });
@@ -615,6 +798,8 @@ startLiveAlarm();
 startDbAlarm();
 
 async function onKeepStatus(tabId: number, status: KeepStatus, currentUrl?: string, _detail?: string) {
+  const snap = snapshots.get(tabId) || (currentUrl ? await snapFor(tabId, currentUrl) : undefined);
+  await saveKeep(status, currentUrl || snap?.job.url || "", _detail, tabId).catch(() => {});
   const { keepApplying, applyQueue = [] } = await chrome.storage.local.get(["keepApplying", "applyQueue"]);
   if (!keepApplying) return;
   if (status === "advanced") return;

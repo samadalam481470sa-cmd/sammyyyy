@@ -19,4 +19,5 @@ export * from "./mapsDiscover.js";
 export * from "./resumeMatch.js";
 export * from "./localDb.js";
 export * from "./idbStore.js";
+export * from "./sessionMemory.js";
 export { planPage, planFill, valueForType } from "./resolve.js";

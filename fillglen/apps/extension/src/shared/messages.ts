@@ -10,6 +10,14 @@ export type KeepStatus =
   | "done-job"
   | "idle";
 
+export type PageKeepPayload = {
+  url: string;
+  stuckTicks: number;
+  googleClicked: boolean;
+  waitingOnCaptcha: boolean;
+  undoStack: { id: string; prev: string }[];
+};
+
 export type ToBackground =
   | { type: "hello"; frameId: string }
   | { type: "scan"; snapshot: ScanSnapshot }
@@ -18,7 +26,9 @@ export type ToBackground =
   | { type: "open-panel" }
   | { type: "open-panel-database" }
   | { type: "create-application"; snapshot: ScanSnapshot }
-  | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string };
+  | { type: "keep-status"; status: KeepStatus; url?: string; detail?: string }
+  | { type: "page-keep"; keep: PageKeepPayload }
+  | { type: "persist-now"; snapshot?: ScanSnapshot; questions?: Question[] };
 
 export type ToContent =
   | { type: "fill-one"; questionId: string; value: string }

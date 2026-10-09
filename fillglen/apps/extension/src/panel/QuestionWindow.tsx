@@ -106,6 +106,7 @@ function readLocal<T>(key: string, fallback: T, cb: (value: T) => void) {
 export function QuestionWindow(props: QuestionWindowProps) {
   const [tab, setTab] = useState<FilterTab>("all");
   const [storedLive, setStoredLive] = useState<ApplyQueueItem[]>([]);
+  const [savedAt, setSavedAt] = useState("");
   useEffect(() => {
     readLocal<FilterTab>("panelTab", "all", (v) => {
       if (v === "all" || v === "needs-you" || v === "filled" || v === "live" || v === "database") setTab(v);
@@ -113,11 +114,15 @@ export function QuestionWindow(props: QuestionWindowProps) {
     readLocal<ApplyQueueItem[]>("liveJobs", [], (v) => {
       if (Array.isArray(v)) setStoredLive(v);
     });
+    readLocal<string>("sessionSavedAt", "", (v) => {
+      if (typeof v === "string") setSavedAt(v);
+    });
     const onChanged = chromeApi()?.storage?.onChanged;
     if (!onChanged) return;
     const onChange = (changes: Record<string, { newValue?: unknown }>, area: string) => {
       if (area !== "local") return;
       if (Array.isArray(changes.liveJobs?.newValue)) setStoredLive(changes.liveJobs.newValue as ApplyQueueItem[]);
+      if (typeof changes.sessionSavedAt?.newValue === "string") setSavedAt(changes.sessionSavedAt.newValue);
       const nextTab = changes.panelTab?.newValue;
       if (
         nextTab === "all" ||
@@ -152,7 +157,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
 
   if (tab === "database") {
     return (
-      <Shell>
+      <Shell savedAt={savedAt}>
         <DatabaseView onBack={() => setTabPersist("all")} persistKey="panel" />
       </Shell>
     );
@@ -160,7 +165,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
 
   if (tab === "live") {
     return (
-      <Shell>
+      <Shell savedAt={savedAt}>
         <div className="toolbar">
           <button onClick={() => setTabPersist("all")}>Back to form</button>
           <button className="primary" onClick={() => setTabPersist("live")}>
@@ -183,7 +188,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
 
   if (props.snapshot?.blockedReason === "linkedin-easy-apply") {
     return (
-      <Shell>
+      <Shell savedAt={savedAt}>
         <div className="toolbar">
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
@@ -202,7 +207,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
 
   if (!props.snapshot) {
     return (
-      <Shell>
+      <Shell savedAt={savedAt}>
         <div className="toolbar">
           <button className="primary" onClick={() => setTabPersist("live")}>
             Live jobs
@@ -221,7 +226,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
 
   if (questions.length === 0) {
     return (
-      <Shell>
+      <Shell savedAt={savedAt}>
         <JobHeader job={props.snapshot.job} match={match?.score} />
         <div className="toolbar">
           <button className="primary" onClick={() => setTabPersist("live")}>
@@ -239,7 +244,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
   const done = requiredEmpty.length === 0 && questions.length > 0;
 
   return (
-    <Shell>
+    <Shell savedAt={savedAt}>
       <JobHeader job={props.snapshot.job} match={match?.score} />
       <div className="progress">
         <div className="progress-top">
@@ -354,7 +359,7 @@ function LiveJobList({ jobs, onOpen }: { jobs: ApplyQueueItem[]; onOpen: (url: s
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, savedAt }: { children: React.ReactNode; savedAt?: string }) {
   return (
     <div className="fg-root">
       <header className="fg-brand">
@@ -365,6 +370,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       {children}
+      <p className="meta">
+        Switching tabs keeps this listing, typed answers, and keep applying.
+        {savedAt ? ` Last saved ${new Date(savedAt).toLocaleTimeString()}.` : ""}
+      </p>
       <CopyrightNotice />
     </div>
   );
