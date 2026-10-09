@@ -4,7 +4,10 @@ import {
   EMPTY_PROFILE,
   ensureVaultSecret,
   feedMetaForUrl,
+  buildAutofillBatch,
   fieldLooksFilled,
+  fillMatchedIntent,
+  filterRealQuestions,
   hostHasPriorApply,
   isAuthChoiceScreen,
   hydrateProfile,
@@ -22,6 +25,7 @@ import {
   KEEP_STUCK_TICKS,
   looksLikeJobListingCopy,
   SCREEN_CLICK_BUDGET,
+  shouldAutofillPlan,
   trimScreenSkip,
   loginForFill,
   loginHost,
@@ -31,7 +35,6 @@ import {
   mayAdvance,
   overlaySavedValues,
   pageKeepForUrl,
-  planPage,
   priorLogin,
   shouldBlockPage,
   shouldSkipWarmupFill,
@@ -113,7 +116,9 @@ function boot() {
       if (msg.type === "fill-one") applyOne(msg.questionId, msg.value);
       if (msg.type === "fill-plans") {
         for (const plan of msg.plans) {
-          if (plan.value) applyOne(plan.questionId, plan.value);
+          const q = last.find((x) => x.id === plan.questionId);
+          if (!shouldAutofillPlan(plan, q) || (q && fieldLooksFilled(q.kind, q.value))) continue;
+          applyOne(plan.questionId, plan.value);
         }
       }
       if (msg.type === "focus") flashAndScroll(msg.questionId);
@@ -238,21 +243,15 @@ function boot() {
     paused = ((stored.pausedOrigins as string[]) || []).includes(origin);
     if (paused) return;
     const profile = hydrateProfile((stored.profile as Profile) || EMPTY_PROFILE);
-    let questions = scanDocument(document, frameId, profile);
+    let questions = filterRealQuestions(scanDocument(document, frameId, profile));
     if (reason === "full" || last.length === 0) {
-      questions = await restoreSaved(questions);
+      questions = filterRealQuestions(await restoreSaved(questions));
       last = questions;
       post({ type: "scan", snapshot: snapshot(questions, stored.finderMatches as Parameters<typeof snapshot>[1]) });
       persistPage("scan");
       if (window === window.top && isVisibleTab() && questions.length > 0) {
-        const plans = planPage(questions, profile).filter((p) => {
-          if (!p.value) return false;
-          const q = questions.find((x) => x.id === p.questionId);
-          if (q?.source === "user" && q.value) return false;
-          if (fieldLooksFilled(q?.kind || "text", q?.value || "")) return false;
-          return true;
-        });
-        for (const plan of plans) applyOne(plan.questionId, plan.value);
+        const { ready } = buildAutofillBatch(questions, profile, 40);
+        for (const { plan } of ready) applyOne(plan.questionId, plan.value);
       }
       return;
     }
@@ -268,7 +267,11 @@ function boot() {
     applyOnePaced(id, value, "fast").catch(() => {});
   }
 
-  async function applyOnePaced(id: string, value: string, pace: "fast" | "slow") {
+  async function applyOnePaced(
+    id: string,
+    value: string,
+    pace: "fast" | "slow"
+  ): Promise<{ ok: boolean; readBack: string; error?: string }> {
     const el = document.querySelector(`[data-fillglen-id="${CSS.escape(id)}"]`) as HTMLElement | null;
     const prev =
       el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
@@ -291,6 +294,7 @@ function boot() {
     }
     post({ type: "delta", questions: last });
     schedulePersist();
+    return result;
   }
 
   function tidyText(text: string): string {
@@ -439,44 +443,54 @@ function boot() {
       } catch {
         /* File/DataTransfer unavailable */
       }
-      const plans = planPage(questions, profile).filter((plan) => {
-        if (!plan.value) return false;
-        const q = questions.find((x) => x.id === plan.questionId);
-        if (!q) return false;
-        if (fieldLooksFilled(q.kind, q.value)) return false;
-        return true;
-      });
-      const batch = plans.slice(0, KEEP_FIELDS_PER_TICK);
+      const { realQuestions, ready, remainder } = buildAutofillBatch(questions, profile, KEEP_FIELDS_PER_TICK);
+      last = realQuestions;
       let hadCustom = false;
-      for (const plan of batch) {
-        const q = questions.find((x) => x.id === plan.questionId);
-        const useDropdown = q ? fieldShouldUseDropdown(q.kind, q.type) : false;
+      let verified = 0;
+      for (const { plan, question: q } of ready) {
+        const useDropdown = fieldShouldUseDropdown(q.kind, q.type);
+        let readBack = "";
         if (useDropdown) {
           hadCustom = true;
           const ok = await selectDropdownById(plan.questionId, plan.value);
           if (!ok) await clickMatchingDropdown(plan.questionId, plan.value);
-          if (q) {
-            q.value = plan.value;
-            q.status = "filled";
-            q.source = "profile";
-          }
+          readBack = plan.value;
+          q.value = plan.value;
+          q.status = "filled";
+          q.source = "profile";
           await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
         } else {
-          await applyOnePaced(plan.questionId, plan.value, pace);
-          if (q && (q.kind === "radio" || q.kind === "checkbox")) {
+          const result = await applyOnePaced(plan.questionId, plan.value, pace);
+          readBack = result?.readBack || q.value || plan.value;
+          if (q.kind === "radio" || q.kind === "checkbox") {
             await clickMatchingDropdown(plan.questionId, plan.value);
             await new Promise((r) => setTimeout(r, KEEP_DROPDOWN_SETTLE_MS));
+            readBack = plan.value;
           }
+        }
+        if (fillMatchedIntent(plan.value, readBack, q.kind)) {
+          verified += 1;
+          q.status = "filled";
+        } else {
+          q.status = "needs-review";
         }
         await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : KEEP_FILL_GAP_MS));
       }
+      if (ready.length) {
+        post({
+          type: "keep-status",
+          status: "fill",
+          url,
+          detail: `filled ${verified}/${ready.length} real fields`,
+        });
+      }
       // Still have empty fields — yield so the page can paint instead of freezing.
-      if (plans.length > batch.length) {
+      if (remainder > 0) {
         stuckTicks = 0;
         return;
       }
       await new Promise((r) => setTimeout(r, pace === "slow" ? KEEP_SLOW_GAP_MS : hadCustom ? Math.max(40, KEEP_FILL_GAP_MS) : KEEP_FILL_GAP_MS));
-      const after = scanDocument(document, frameId, profile);
+      const after = filterRealQuestions(scanDocument(document, frameId, profile));
       const stillEmpty = after.filter((q) => q.required && q.type !== "password" && !fieldLooksFilled(q.kind, q.value));
       const found = findAdvanceControl(document, "keep-applying");
       if (!mayAdvance(found?.kind ?? null, stillEmpty.length)) {
@@ -631,25 +645,53 @@ function boot() {
   );
 
   function mountFab() {
-    if (document.getElementById("fillglen-fab")) return;
-    const root = document.createElement("div");
-    root.id = "fillglen-fab";
-    root.style.cssText =
-      "all:initial; position:fixed; bottom:20px; right:20px; z-index:2147483647; display:flex; gap:8px; align-items:center;";
-    const db = document.createElement("button");
-    db.textContent = "Database";
-    db.title = "Open Fillglen database in this extension";
-    db.style.cssText =
-      "height:44px;padding:0 14px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
-    db.addEventListener("click", () => post({ type: "open-panel-database" }));
-    const btn = document.createElement("button");
-    btn.textContent = "Fg";
-    btn.title = "Open Fillglen live question window";
-    btn.style.cssText =
-      "width:44px;height:44px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
-    btn.addEventListener("click", () => post({ type: "open-panel" }));
-    root.appendChild(db);
-    root.appendChild(btn);
-    document.documentElement.appendChild(root);
+    const existing = document.getElementById("fillglen-fab");
+    chrome.storage.local.get(["keepApplying"], (r) => {
+      if (r.keepApplying) {
+        // While the auto bot runs, keep the page clean — no question-window FAB.
+        existing?.remove();
+        mountBotChip();
+        return;
+      }
+      document.getElementById("fillglen-bot-chip")?.remove();
+      if (existing) return;
+      const root = document.createElement("div");
+      root.id = "fillglen-fab";
+      root.style.cssText =
+        "all:initial; position:fixed; bottom:20px; right:20px; z-index:2147483647; display:flex; gap:8px; align-items:center;";
+      const db = document.createElement("button");
+      db.textContent = "Database";
+      db.title = "Open Fillglen database in this extension";
+      db.style.cssText =
+        "height:44px;padding:0 14px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
+      db.addEventListener("click", () => post({ type: "open-panel-database" }));
+      const btn = document.createElement("button");
+      btn.textContent = "Fg";
+      btn.title = "Open Fillglen";
+      btn.style.cssText =
+        "width:44px;height:44px;border-radius:14px;border:none;background:#1b3a2f;color:#f6f1e8;font:700 14px/1 ui-serif, Georgia, serif;cursor:pointer;box-shadow:0 8px 20px rgba(20,34,28,.28);";
+      btn.addEventListener("click", () => post({ type: "open-panel" }));
+      root.appendChild(db);
+      root.appendChild(btn);
+      document.documentElement.appendChild(root);
+    });
   }
+
+  function mountBotChip() {
+    if (document.getElementById("fillglen-bot-chip")) return;
+    const chip = document.createElement("button");
+    chip.id = "fillglen-bot-chip";
+    chip.textContent = "Bot ON";
+    chip.title = "Fillglen auto bot is running in the background. Click to open the popup controls.";
+    chip.style.cssText =
+      "all:initial; position:fixed; bottom:16px; right:16px; z-index:2147483647; height:36px; padding:0 12px; border-radius:12px; border:none; background:#c45c2a; color:#fff8f1; font:700 12px/36px ui-sans-serif, system-ui, sans-serif; cursor:pointer; box-shadow:0 6px 16px rgba(20,34,28,.25);";
+    chip.addEventListener("click", () => {
+      chrome.runtime.sendMessage({ type: "open-panel" }).catch(() => {});
+    });
+    document.documentElement.appendChild(chip);
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.keepApplying) mountFab();
+  });
 }

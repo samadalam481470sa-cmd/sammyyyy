@@ -1,6 +1,7 @@
 import { matchOption } from "./applyLoop.js";
 import { bestEffortAnswer, pickCitizenAnswer, pickCountryAnswer, pickDemographicOption } from "./answers.js";
 import { classifyAiBucket, isSelfId } from "./classify.js";
+import { filterRealQuestions, rankFillPlans, shouldAutofillPlan } from "./fieldNoise.js";
 import { bestSavedMatch } from "./fuzzy.js";
 import { splitName, type FillPlan, type Profile, type Question, type QuestionType } from "./types.js";
 
@@ -198,5 +199,10 @@ export function planFill(question: Question, profile: Profile): FillPlan {
 }
 
 export function planPage(questions: Question[], profile: Profile): FillPlan[] {
-  return questions.map((q) => planFill(q, profile));
+  const real = filterRealQuestions(questions);
+  const plans = real.map((q) => planFill(q, profile)).filter((p) => {
+    const q = real.find((x) => x.id === p.questionId);
+    return shouldAutofillPlan(p, q);
+  });
+  return rankFillPlans(plans, real);
 }

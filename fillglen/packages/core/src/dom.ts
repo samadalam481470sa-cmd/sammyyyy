@@ -15,6 +15,11 @@ import {
   pickVisibleOption,
 } from "./dropdown.js";
 import {
+  filterRealQuestions,
+  isNoiseFieldLabel,
+  shouldScanControl,
+} from "./fieldNoise.js";
+import {
   classifyScreenControl,
   controlFingerprint,
   KEEP_SLOW_CHAR_MS,
@@ -34,12 +39,26 @@ function visible(el: HTMLElement): boolean {
 }
 
 function walkShadow(root: Document | ShadowRoot | HTMLElement, out: HTMLElement[]): void {
+  // Tight selector — do not grab every data-automation-id / aria-expanded (progress scrubbers, tab strips).
   const nodes = root.querySelectorAll(
-    "input, textarea, select, [role='combobox'], [role='listbox'], [aria-haspopup='listbox'], [aria-haspopup='menu'], [aria-haspopup='true'], [aria-expanded], [data-automation-id], [contenteditable='true'], [contenteditable='']"
+    "input, textarea, select, [role='combobox'], [role='listbox'], [role='textbox'], [aria-haspopup='listbox'], [aria-haspopup='menu'], [contenteditable='true'], [contenteditable='']"
   );
   nodes.forEach((n) => {
-    if (n instanceof HTMLElement) out.push(n);
-    const sr = (n as HTMLElement).shadowRoot;
+    if (!(n instanceof HTMLElement)) return;
+    if (
+      !shouldScanControl({
+        tag: n.tagName,
+        type: n instanceof HTMLInputElement ? n.type : undefined,
+        role: n.getAttribute("role") || undefined,
+        automationId: n.getAttribute("data-automation-id") || undefined,
+        ariaHaspopup: n.getAttribute("aria-haspopup"),
+        contentEditable: n.isContentEditable,
+      })
+    ) {
+      return;
+    }
+    out.push(n);
+    const sr = n.shadowRoot;
     if (sr) walkShadow(sr, out);
   });
   root.querySelectorAll("*").forEach((n) => {
@@ -160,6 +179,8 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
       : [];
     const label = isRadio ? groupLabel(el) : el instanceof HTMLSelectElement ? groupLabel(el) : labelFor(el);
     if (!label && kindOf(el) === "text" && !(el instanceof HTMLInputElement)) continue;
+    if (isNoiseFieldLabel(label || "", el.getAttribute("name") || el.id || "")) continue;
+    if (el instanceof HTMLInputElement && el.type === "range") continue;
     const classified = classifyQuestion(
       {
         label,
@@ -214,7 +235,7 @@ export function scanDocument(doc: Document, frameId = "top", profile?: Profile):
     for (const node of stamp) node.setAttribute("data-fillglen-id", id);
     position += 1;
   }
-  return questions;
+  return filterRealQuestions(questions);
 }
 
 function nativeSet(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string): void {

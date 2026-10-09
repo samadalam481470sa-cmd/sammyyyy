@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ApplyQueueItem, Profile, Question, ScanSnapshot } from "@fillglen/core";
-import { scoreMatch } from "@fillglen/core";
+import { filterRealQuestions, scoreMatch } from "@fillglen/core";
 import { CopyrightNotice, Logo } from "../brand";
 import { DatabaseView } from "../shared/DatabaseView";
 import { ResumeFiles } from "../shared/ResumeFiles";
@@ -143,7 +143,7 @@ export function QuestionWindow(props: QuestionWindowProps) {
     persistLocal("panelTab", next);
   }
   const liveJobs = props.liveJobs ?? storedLive;
-  const questions = props.snapshot?.questions ?? [];
+  const questions = filterRealQuestions(props.snapshot?.questions ?? []);
   const filtered = questions.filter((q) => {
     if (tab === "needs-you") return q.status === "needs-you" || q.status === "needs-review";
     if (tab === "filled") return q.status === "filled" || q.status === "ai-draft-ready";
@@ -296,45 +296,64 @@ export function QuestionWindow(props: QuestionWindowProps) {
         ))}
       </div>
       {props.paused ? <p className="banner">Live filling paused for this site.</p> : null}
-      {done && !props.keepApplying ? (
-        <p className="banner done">Every required question has an answer. Turn on Keep applying to submit and continue 24/7.</p>
-      ) : null}
       {props.keepApplying ? (
-        <p className="banner done">Keep applying is on 24/7 while Chrome is open. It uses last resume when you have applied on this board before, otherwise it signs up, saves the login to Chrome, fills, submits, then opens the next listing. If a page looks like it detected automation, Fillglen slows down and keeps going. A CAPTCHA waits for you — Fillglen will not solve it.</p>
-      ) : null}
-      {props.profile ? (
-        <ResumeFiles
-          profile={props.profile}
-          paste={props.profile.rawResumeText}
-          onProfile={(next) => persistLocal("profile", next)}
-          onPaste={(text) => persistLocal("popupPaste", text)}
-          onStatus={(text) => persistLocal("popupStatus", text)}
-        />
-      ) : null}
-      <ul className="qlist">
-        {filtered.map((q) => (
-          <QuestionRow
-            key={q.id}
-            q={q}
-            draft={props.drafts?.[q.id]}
-            onFocus={() => props.onFocus(q.id)}
-            onEdit={(v) => props.onEdit(q.id, v)}
-            onSave={() => props.onSaveAnswer(q.label, q.value)}
-            onUndo={() => props.onUndo(q.id)}
-            onDraft={() => props.onDraft(q.id)}
-            onInsert={() => props.drafts?.[q.id]?.text && props.onInsertDraft(q.id, props.drafts[q.id].text)}
-          />
-        ))}
-      </ul>
-      <button
-        className="final-check"
-        onClick={() => {
-          const first = requiredEmpty[0];
-          if (first) props.onFocus(first.id);
-        }}
-      >
-        Final check — {requiredEmpty.length} required still empty. Keep applying submits when this hits zero.
-      </button>
+        <>
+          <p className="banner done">
+            Auto bot is running in the background. Unlabeled junk fields (progress scrubbers, tab strips) stay hidden.
+            Filling stays on the job page — use Live jobs or Database only if you need them.
+          </p>
+          <div className="toolbar">
+            <button className="primary" onClick={() => setTabPersist("live")}>
+              Live jobs
+            </button>
+            <button className="primary" onClick={() => setTabPersist("database")}>
+              Database
+            </button>
+          </div>
+          <p className="meta">
+            {answered} real fields answered · {requiredEmpty.length} required still empty on this step.
+          </p>
+        </>
+      ) : (
+        <>
+          {done ? (
+            <p className="banner done">Every required question has an answer. Start the auto bot to submit and continue 24/7.</p>
+          ) : null}
+          {props.profile ? (
+            <ResumeFiles
+              profile={props.profile}
+              paste={props.profile.rawResumeText}
+              onProfile={(next) => persistLocal("profile", next)}
+              onPaste={(text) => persistLocal("popupPaste", text)}
+              onStatus={(text) => persistLocal("popupStatus", text)}
+            />
+          ) : null}
+          <ul className="qlist">
+            {filtered.map((q) => (
+              <QuestionRow
+                key={q.id}
+                q={q}
+                draft={props.drafts?.[q.id]}
+                onFocus={() => props.onFocus(q.id)}
+                onEdit={(v) => props.onEdit(q.id, v)}
+                onSave={() => props.onSaveAnswer(q.label, q.value)}
+                onUndo={() => props.onUndo(q.id)}
+                onDraft={() => props.onDraft(q.id)}
+                onInsert={() => props.drafts?.[q.id]?.text && props.onInsertDraft(q.id, props.drafts[q.id].text)}
+              />
+            ))}
+          </ul>
+          <button
+            className="final-check"
+            onClick={() => {
+              const first = requiredEmpty[0];
+              if (first) props.onFocus(first.id);
+            }}
+          >
+            Final check — {requiredEmpty.length} required still empty. Auto bot submits when this hits zero.
+          </button>
+        </>
+      )}
     </Shell>
   );
 }
