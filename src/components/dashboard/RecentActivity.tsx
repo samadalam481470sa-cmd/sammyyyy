@@ -29,7 +29,9 @@ export function RecentActivity({ items }: RecentActivityProps) {
     <section className="rounded-xl border border-border bg-surface shadow-(--shadow-card)">
       <div className="border-b border-border px-5 py-4">
         <h2 className="font-brand text-lg font-bold text-navy-900">Recent Activity</h2>
-        <p className="mt-0.5 text-sm text-ink-muted">Latest updates across the Newport team</p>
+        <p className="mt-0.5 text-sm text-ink-muted">
+          Successful saves in this browser. Not synced to other browsers.
+        </p>
       </div>
 
       <ul className="divide-y divide-border/70">

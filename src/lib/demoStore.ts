@@ -1,6 +1,8 @@
 /**
  * Persistent local demo store for static hosting (GitHub Pages / CDN).
- * Saves CRM data in localStorage so edits survive closing and reopening the link.
+ * Saves CRM data in localStorage so edits survive refresh in THIS browser.
+ * Does not sync across browsers, devices, or users — that is why a Chrome
+ * stage change does not appear in Safari.
  */
 
 const PREFIX = 'newport_crm_demo_v1_'
