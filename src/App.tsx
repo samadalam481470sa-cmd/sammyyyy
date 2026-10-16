@@ -6,13 +6,11 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/pages/Dashboard'
 import { LoginPage } from '@/pages/LoginPage'
 import { OpportunitiesPage } from '@/pages/OpportunitiesPage'
-import { ProjectsPage } from '@/pages/ProjectsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RelationshipsPage } from '@/pages/RelationshipsPage'
 import { TasksPage } from '@/pages/TasksPage'
 import { SourcesPage } from '@/pages/SourcesPage'
 import { CarriersPage } from '@/pages/CarriersPage'
-import { PortfolioPage } from '@/pages/PortfolioPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { KeyControlPage } from '@/pages/KeyControlPage'
@@ -39,12 +37,12 @@ export default function App() {
             >
               <Route index element={<Dashboard />} />
               <Route path="opportunities" element={<OpportunitiesPage />} />
-              <Route path="projects" element={<ProjectsPage />} />
+              <Route path="projects" element={<Navigate to="/opportunities" replace />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />
               <Route path="sources" element={<SourcesPage />} />
               <Route path="carriers" element={<CarriersPage />} />
-              <Route path="portfolio" element={<PortfolioPage />} />
+              <Route path="portfolio" element={<Navigate to="/" replace />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="meetings" element={<MeetingsPage />} />
