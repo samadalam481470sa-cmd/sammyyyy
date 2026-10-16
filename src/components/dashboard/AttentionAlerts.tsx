@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react'
 
 interface AttentionAlertsProps {
   alerts: AttentionAlert[]
+  uniqueDealCount?: number
   onProjectClick?: (projectId: string) => void
   onViewAll?: () => void
 }
@@ -16,13 +17,22 @@ const ICONS: Record<AttentionReason, LucideIcon> = {
   'No deal owner assigned': UserX,
 }
 
-export function AttentionAlerts({ alerts, onProjectClick, onViewAll }: AttentionAlertsProps) {
+export function AttentionAlerts({
+  alerts,
+  uniqueDealCount,
+  onProjectClick,
+  onViewAll,
+}: AttentionAlertsProps) {
+  const dealCount = uniqueDealCount ?? new Set(alerts.map((row) => row.projectId)).size
   return (
     <section className="flex h-full flex-col rounded-xl border border-attention-border bg-surface shadow-(--shadow-card)">
       <div className="flex items-start justify-between gap-2 border-b border-attention-border/60 bg-attention-bg/50 px-5 py-4">
         <div>
           <h2 className="font-brand text-lg font-bold text-navy-900">Needs Attention</h2>
-          <p className="mt-0.5 text-sm text-ink-muted">Items requiring executive follow-up</p>
+          <p className="mt-0.5 text-sm text-ink-muted">
+            {dealCount} unique deal{dealCount === 1 ? '' : 's'} · showing {alerts.length} alert
+            {alerts.length === 1 ? '' : 's'}
+          </p>
         </div>
         {onViewAll && (
           <button
@@ -36,6 +46,9 @@ export function AttentionAlerts({ alerts, onProjectClick, onViewAll }: Attention
       </div>
 
       <ul className="divide-y divide-border/70">
+        {alerts.length === 0 && (
+          <li className="px-5 py-8 text-sm text-ink-muted">No outstanding date warnings.</li>
+        )}
         {alerts.map((alert) => {
           const Icon = ICONS[alert.reason]
           return (

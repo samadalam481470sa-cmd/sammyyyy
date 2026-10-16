@@ -2,6 +2,7 @@ interface UnsavedChangesDialogProps {
   open: boolean
   saving?: boolean
   error?: string | null
+  recordLabel?: string
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
@@ -11,6 +12,7 @@ export function UnsavedChangesDialog({
   open,
   saving = false,
   error,
+  recordLabel = 'record',
   onSave,
   onDiscard,
   onCancel,
@@ -40,7 +42,7 @@ export function UnsavedChangesDialog({
           Unsaved Changes
         </h2>
         <p id="unsaved-changes-message" className="mt-2 text-sm leading-relaxed text-ink-muted">
-          You have unsaved changes to this opportunity. Would you like to save them before
+          You have unsaved changes to this {recordLabel}. Would you like to save them before
           continuing?
         </p>
         {error && (

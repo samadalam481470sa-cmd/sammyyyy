@@ -95,7 +95,7 @@ export function ResourceWorkspace<T extends { id: string }>({
     try {
       await save(selected.id, draft as Partial<T>)
       setDraft({})
-      setMessage('Saved to database')
+      setMessage('Saved')
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -286,7 +286,7 @@ export function ResourceWorkspace<T extends { id: string }>({
                   onClick={() => void handleSave()}
                   className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Save changes to database'}
+                  {saving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </>

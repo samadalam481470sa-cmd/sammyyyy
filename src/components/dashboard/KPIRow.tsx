@@ -49,7 +49,7 @@ export function KPIRow({ kpis, filters, onStatusFilter }: KPIRowProps) {
       <KPICard
         label="Needs Attention"
         value={kpis.needsAttention}
-        subtitle="Overdue, stalled, or missing next steps"
+        subtitle="Unique deals with overdue or upcoming actions"
         tone="attention"
         icon={<AlertTriangle className="h-4 w-4" strokeWidth={1.75} />}
         onClick={() => onStatusFilter('Needs Attention')}

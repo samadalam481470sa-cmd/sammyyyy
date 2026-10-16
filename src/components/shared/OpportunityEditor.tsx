@@ -26,6 +26,8 @@ import {
   type OpportunityDraft,
 } from '@/lib/opportunityDraft'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
+import { dealIdFromOpportunity } from '@/lib/dealId'
+import { savedMessageLabel, saveButtonLabel } from '@/lib/persistenceMode'
 
 export type { OpportunityEditorHandle }
 
@@ -82,7 +84,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         const patch = opportunityDraftPatch(saved, draft)
         await onSave(patch)
         setSaved(draft)
-        setMessage('Saved to database')
+        setMessage(savedMessageLabel())
         return true
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Save failed')
@@ -166,7 +168,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
-              Project {opportunity.projectNumber ?? '—'}
+              {dealIdFromOpportunity(opportunity)}
             </p>
             <h2 className="mt-1 font-brand text-xl font-bold text-navy-900">
               {draft.projectName}
@@ -371,6 +373,12 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
 
           {(tab === 'actions' || tab === 'overview') && (
             <>
+              {opportunity.nextActionTaskId && tab === 'overview' && (
+                <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink-muted">
+                  Next action is currently driven by the most urgent unfinished linked task. Manual
+                  edits are kept if that task is completed or removed.
+                </p>
+              )}
               <Field label="Next action">
                 <input
                   className="field-input"
@@ -412,7 +420,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
             onClick={() => void persist()}
             className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : 'Save changes to database'}
+            {saveButtonLabel(saving)}
           </button>
         </div>
 
@@ -420,6 +428,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           open={pendingLeave != null}
           saving={saving}
           error={error}
+          recordLabel="opportunity"
           onSave={() => void handleDialogSave()}
           onDiscard={handleDialogDiscard}
           onCancel={handleDialogCancel}

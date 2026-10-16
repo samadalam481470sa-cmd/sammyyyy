@@ -12,7 +12,7 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
     <section className="rounded-xl border border-border bg-surface shadow-(--shadow-card)">
       <div className="flex items-end justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <h2 className="font-brand text-lg font-bold text-navy-900">Priority Deals</h2>
+          <h2 className="font-brand text-lg font-bold text-navy-900">Deals Requiring Action</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
             Confidential project code names with key financials and next actions
           </p>

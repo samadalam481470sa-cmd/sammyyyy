@@ -1,77 +1,186 @@
-import { useResource } from '@/hooks/useResource'
-import { ResourceWorkspace } from '@/components/shared/ResourceWorkspace'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Filter, Search, X } from 'lucide-react'
+import { useData } from '@/data/DataContext'
+import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
+import { dealIdFromOpportunity } from '@/lib/dealId'
 import {
-  CONFIDENTIALITY_LEVELS,
-  DOCUMENT_STATUSES,
-  DOCUMENT_TYPES,
-  mockDocuments,
-  type DocumentRecord,
-} from '@/data/mockModules'
+  DEFAULT_DOCUMENT_SLOTS,
+  slotDocument,
+} from '@/lib/documentSlots'
+import { FileKindIcon, iconKindForDocument } from '@/components/documents/FileKindIcon'
+import { DocumentWorkspace } from '@/components/documents/DocumentWorkspace'
+import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
+import type { AcquisitionStage, OpportunityStatus } from '@/types'
 
 export function DocumentsPage() {
-  const api = useResource<DocumentRecord>('documents', mockDocuments)
+  const { opportunities, documents, loading } = useData()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<OpportunityStatus | ''>('')
+  const [stageFilter, setStageFilter] = useState<AcquisitionStage | ''>('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const editorRef = useRef<OpportunityEditorHandle>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return opportunities.filter((o) => {
+      if (statusFilter && o.status !== statusFilter) return false
+      if (stageFilter && o.stage !== stageFilter) return false
+      if (!q) return true
+      const dealId = dealIdFromOpportunity(o).toLowerCase()
+      return `${o.projectName} ${o.entityName} ${dealId}`.toLowerCase().includes(q)
+    })
+  }, [opportunities, search, statusFilter, stageFilter])
+
+  const selected = selectedId ? (opportunities.find((o) => o.id === selectedId) ?? null) : null
+
+  useEffect(() => {
+    const onDoc = (event: MouseEvent) => {
+      if (!filterRef.current?.contains(event.target as Node)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const activate = (id: string) => {
+    if (selectedId === id) {
+      if (editorRef.current) editorRef.current.requestLeave(() => setSelectedId(null))
+      else setSelectedId(null)
+      return
+    }
+    if (editorRef.current) editorRef.current.requestLeave(() => setSelectedId(id))
+    else setSelectedId(id)
+  }
 
   return (
-    <ResourceWorkspace<DocumentRecord>
-      title="Documents"
-      description="Deal document register — NDAs, LOIs, financials, and diligence reports."
-      api={api}
-      searchKeys={['name', 'projectName', 'docType', 'uploadedBy']}
-      columns={[
-        { key: 'name', label: 'Document' },
-        { key: 'docType', label: 'Type' },
-        { key: 'projectName', label: 'Project' },
-        {
-          key: 'status',
-          label: 'Status',
-          render: (d) => (
-            <span
-              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                d.status === 'Executed'
-                  ? 'bg-success-bg text-success'
-                  : d.status === 'In Review'
-                    ? 'bg-accent-soft text-navy-800'
-                    : 'bg-canvas text-ink-muted'
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
+        <div>
+          <h1 className="font-brand text-2xl font-bold text-navy-900">Documents</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Project cards with NDA, CIM, and LOI slots. References only — no files are hosted here.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search Projects"
+              className="h-10 w-56 rounded-lg border border-border bg-canvas pr-3 pl-9 text-sm outline-none focus:border-accent"
+            />
+          </div>
+          <div ref={filterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setFilterOpen((v) => !v)}
+              className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold ${
+                statusFilter || stageFilter
+                  ? 'border-navy-900 bg-navy-900 text-white'
+                  : 'border-border bg-surface text-ink'
               }`}
             >
-              {d.status}
-            </span>
-          ),
-        },
-        { key: 'confidentiality', label: 'Confidentiality' },
-        { key: 'uploadedAt', label: 'Uploaded' },
-      ]}
-      statusKey="status"
-      statusOptions={DOCUMENT_STATUSES}
-      fields={[
-        { key: 'name', label: 'Document name', type: 'text' },
-        { key: 'docType', label: 'Type', type: 'select', options: DOCUMENT_TYPES },
-        { key: 'projectName', label: 'Project', type: 'text' },
-        {
-          key: 'confidentiality',
-          label: 'Confidentiality',
-          type: 'select',
-          options: CONFIDENTIALITY_LEVELS,
-        },
-        { key: 'uploadedBy', label: 'Uploaded by', type: 'text' },
-        { key: 'uploadedAt', label: 'Uploaded date', type: 'date' },
-        { key: 'link', label: 'Secure link (data room URL)', type: 'text', placeholder: 'https://…' },
-        { key: 'notes', label: 'Notes', type: 'textarea' },
-      ]}
-      itemTitle={(d) => d.name || 'New document'}
-      itemSubtitle={(d) => [d.docType, d.projectName].filter(Boolean).join(' · ')}
-      newRecord={() => ({
-        name: 'New Document',
-        docType: 'Other',
-        opportunityId: null,
-        projectName: '',
-        status: 'Draft',
-        confidentiality: 'Confidential',
-        uploadedBy: '',
-        link: '',
-        uploadedAt: new Date().toISOString().slice(0, 10),
-        notes: '',
-      })}
-    />
+              <Filter className="h-4 w-4" />
+              Filter
+            </button>
+            {filterOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-border bg-surface p-4 shadow-(--shadow-elevated)">
+                <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+                  Status
+                </label>
+                <select
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as OpportunityStatus | '')}
+                >
+                  <option value="">All statuses</option>
+                  {OPPORTUNITY_STATUSES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <label className="mt-3 block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+                  Acquisition Stage
+                </label>
+                <select
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value as AcquisitionStage | '')}
+                >
+                  <option value="">All stages</option>
+                  {ACQUISITION_STAGES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-ink-muted"
+                  onClick={() => {
+                    setStatusFilter('')
+                    setStageFilter('')
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear Filters
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div
+        className={
+          selected
+            ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]'
+            : 'flex min-h-0 w-full flex-1 flex-col'
+        }
+      >
+        <div className={`custom-scroll min-h-0 flex-1 overflow-auto p-6 ${selected ? 'border-r border-border' : ''}`}>
+          {loading && <p className="text-sm text-ink-muted">Loading records…</p>}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {filtered.map((opp) => {
+              const active = selected?.id === opp.id
+              return (
+                <button
+                  key={opp.id}
+                  type="button"
+                  onClick={() => activate(opp.id)}
+                  className={`rounded-2xl border bg-surface p-4 text-left shadow-(--shadow-card) transition-colors ${
+                    active ? 'border-accent bg-accent-soft/50' : 'border-border hover:border-accent-muted'
+                  }`}
+                >
+                  <p className="font-brand text-xl font-bold text-navy-900">{opp.projectName}</p>
+                  <p className="mt-1 text-sm font-semibold text-ink">{dealIdFromOpportunity(opp)}</p>
+                  <p className="text-sm text-ink-muted">{opp.entityName}</p>
+                  <div className="mt-4 flex items-center gap-2">
+                    {DEFAULT_DOCUMENT_SLOTS.map((slot) => {
+                      const doc = slotDocument(documents, opp.id, slot)
+                      const icon = iconKindForDocument(doc)
+                      return (
+                        <span key={slot} title={doc ? `${slot}: ${doc.name}` : `${slot}: No document attached`}>
+                          <FileKindIcon missing={icon.missing} kind={icon.kind} />
+                        </span>
+                      )
+                    })}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {selected && (
+          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
+            <DocumentWorkspace
+              ref={editorRef}
+              opportunity={selected}
+              onClose={() => setSelectedId(null)}
+            />
+          </aside>
+        )}
+      </div>
+    </div>
   )
 }

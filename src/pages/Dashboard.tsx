@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TopHeader } from '@/components/layout/TopHeader'
 import { StatusFilter } from '@/components/dashboard/StatusFilter'
 import { KPIRow } from '@/components/dashboard/KPIRow'
@@ -6,29 +7,34 @@ import { PipelineOverview } from '@/components/dashboard/PipelineOverview'
 import { PriorityDealsTable } from '@/components/dashboard/PriorityDealsTable'
 import { PriorityTasks } from '@/components/dashboard/PriorityTasks'
 import { AttentionAlerts } from '@/components/dashboard/AttentionAlerts'
-import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
 import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
-import { mockActivity, mockAlerts, mockPriorityTasks } from '@/data/mockTasks'
+import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
+import { useAuth } from '@/auth/AuthContext'
 import { getStoredSession } from '@/lib/api'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
-import { useAuth } from '@/auth/AuthContext'
-import { mockContacts, mockTasksDb } from '@/data/mockModules'
+import { mockContacts } from '@/data/mockModules'
 import type { ImportRow } from '@/lib/excelImport'
-import type { AcquisitionStage, DashboardFilters, Opportunity } from '@/types'
+import type { AcquisitionStage, DashboardFilters, Opportunity, PriorityTask } from '@/types'
 import {
-  computeDealsByStatus,
   computeKpis,
   computePipelineByStage,
   filterOpportunities,
   hasActiveFilters,
 } from '@/utils/dashboard'
+import {
+  rankOpportunitiesByNextAction,
+  topAttentionAlerts,
+  uniqueAttentionCount,
+} from '@/lib/attention'
+import { isActiveListTask, isUnfinishedTask } from '@/lib/taskLifecycle'
+import { dueDateSortValue, isWithinNextDays, isOverdueDate } from '@/lib/calendarDate'
 
 const DEFAULT_FILTERS: DashboardFilters = {
   status: 'All Deals',
@@ -37,13 +43,22 @@ const DEFAULT_FILTERS: DashboardFilters = {
 }
 
 export function Dashboard() {
-  const { opportunities, createOpportunity, saveOpportunity } = useData()
+  const {
+    opportunities,
+    tasks,
+    activity,
+    createOpportunity,
+    saveOpportunity,
+    createTask,
+  } = useData()
   const { user } = useAuth()
   const owner = sessionOwnerKey(user)
+  const navigate = useNavigate()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [excelOpen, setExcelOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -55,16 +70,12 @@ export function Dashboard() {
     [filters, opportunities],
   )
 
-  /** Pipeline / KPIs use a broader set when status filter is active stages matter */
   const pipelineSource = useMemo(() => {
-    // Pipeline should focus on Active + Pending for M&A view unless filtering Needs Attention
     if (filters.status === 'Needs Attention') {
       return opportunities.filter((o) => o.needsAttention)
     }
     if (filters.status === 'All Deals') {
-      return opportunities.filter(
-        (o) => o.status === 'Active' || o.status === 'Pending',
-      )
+      return opportunities.filter((o) => o.status === 'Active' || o.status === 'Pending')
     }
     return opportunities.filter((o) => o.status === filters.status)
   }, [filters.status, opportunities])
@@ -78,7 +89,6 @@ export function Dashboard() {
   }, [pipelineSource, filters.search])
 
   const kpis = useMemo(() => {
-    // Executive KPIs always reflect full book unless searching
     const base = filters.search.trim()
       ? filterOpportunities(opportunities, {
           status: 'All Deals',
@@ -86,62 +96,54 @@ export function Dashboard() {
           search: filters.search,
         })
       : opportunities
-    return computeKpis(base)
-  }, [filters.search, opportunities])
+    return {
+      ...computeKpis(base),
+      needsAttention: uniqueAttentionCount(base, tasks),
+    }
+  }, [filters.search, opportunities, tasks])
 
   const pipeline = useMemo(
     () => computePipelineByStage(pipelineFiltered),
     [pipelineFiltered],
   )
 
-  const chartOpportunities = useMemo(() => {
-    // Charts respond to status + search (not stage) so stage filter remains table-focused
-    return filterOpportunities(opportunities, {
-      status: filters.status,
-      stage: null,
-      search: filters.search,
-    })
-  }, [filters.status, filters.search, opportunities])
-
-  const byStatus = useMemo(
-    () => computeDealsByStatus(chartOpportunities),
-    [chartOpportunities],
-  )
-
-  const byStage = useMemo(() => {
-    const activeLike =
-      filters.status === 'All Deals' || filters.status === 'Active'
-        ? chartOpportunities.filter((o) => o.status === 'Active')
-        : chartOpportunities
-    return computePipelineByStage(activeLike).map(({ stage, count }) => ({
-      stage,
-      count,
-    }))
-  }, [chartOpportunities, filters.status])
-
-  /** Priority table: show filtered set, prefer Active/Pending when viewing all */
   const tableRows = useMemo(() => {
     let rows = filtered
     if (filters.status === 'All Deals' && !filters.stage && !filters.search.trim()) {
-      rows = opportunities.filter(
-        (o) => o.status === 'Active' || o.status === 'Pending',
-      )
+      rows = opportunities.filter((o) => o.status === 'Active' || o.status === 'Pending')
     }
-    return [...rows]
-      .sort((a, b) => {
-        const pri = { A: 0, B: 1, C: 2 }
-        if (pri[a.priority] !== pri[b.priority]) return pri[a.priority] - pri[b.priority]
-        if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1
-        return a.projectName.localeCompare(b.projectName)
-      })
-      .slice(0, 8)
-  }, [filtered, filters, opportunities])
+    return rankOpportunitiesByNextAction(rows, tasks).slice(0, 8)
+  }, [filtered, filters, opportunities, tasks])
+
+  const weekTasks = useMemo<PriorityTask[]>(() => {
+    return tasks
+      .filter((task) => isActiveListTask(task) && isUnfinishedTask(task))
+      .filter((task) => !task.dueDate || isOverdueDate(task.dueDate) || isWithinNextDays(task.dueDate, 7))
+      .sort((a, b) => dueDateSortValue(a.dueDate) - dueDateSortValue(b.dueDate))
+      .slice(0, 6)
+      .map((task) => ({
+        id: task.id,
+        priority: (task.priority === 'A' || task.priority === 'B' || task.priority === 'C'
+          ? task.priority
+          : 'B') as PriorityTask['priority'],
+        action: task.action,
+        projectId: task.opportunityId || '',
+        projectName: task.projectName,
+        owner: task.owner,
+        dueDate: task.dueDate || '',
+      }))
+  }, [tasks])
+
+  const alerts = useMemo(() => topAttentionAlerts(opportunities, tasks, 5), [opportunities, tasks])
+  const uniqueAlerts = useMemo(
+    () => uniqueAttentionCount(opportunities, tasks),
+    [opportunities, tasks],
+  )
 
   const setStatus = (status: DashboardFilters['status']) => {
     setFilters((prev) => ({
       ...prev,
       status: prev.status === status && status !== 'All Deals' ? 'All Deals' : status,
-      // Clear stage when switching broad status chips for clarity
       stage: status === 'All Deals' ? prev.stage : null,
     }))
   }
@@ -162,9 +164,7 @@ export function Dashboard() {
       <TopHeader
         search={filters.search}
         onSearchChange={(search) => setFilters((prev) => ({ ...prev, search }))}
-        onNewOpportunity={() =>
-          showToast('New Opportunity workflow — coming in a future sprint')
-        }
+        onNewOpportunity={() => setCreateOpen(true)}
       />
 
       <main className="flex-1 px-6 py-6 lg:px-8">
@@ -188,19 +188,18 @@ export function Dashboard() {
           <PriorityDealsTable opportunities={tableRows} onSelect={setSelected} />
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <PriorityTasks tasks={mockPriorityTasks} onProjectClick={openById} />
+            <PriorityTasks tasks={weekTasks} onProjectClick={openById} />
             <AttentionAlerts
-              alerts={mockAlerts}
+              alerts={alerts}
+              uniqueDealCount={uniqueAlerts}
               onProjectClick={openById}
               onViewAll={() => setStatus('Needs Attention')}
             />
           </div>
 
-          <DashboardCharts byStatus={byStatus} byStage={byStage} />
-
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-1">
-              <RecentActivity items={mockActivity} />
+              <RecentActivity items={activity.slice(0, 12)} />
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
@@ -210,7 +209,11 @@ export function Dashboard() {
                     return
                   }
                   if (action === 'new-opportunity') {
-                    showToast('Use Import Excel or Opportunities → create from a deal record')
+                    setCreateOpen(true)
+                    return
+                  }
+                  if (action === 'add-task') {
+                    void navigate('/tasks?new=1')
                     return
                   }
                   showToast(`${action.replace(/-/g, ' ')} — open the matching module to continue`)
@@ -223,6 +226,12 @@ export function Dashboard() {
           <p className="pb-4 text-center text-[11px] text-ink-subtle">{DEMO_DISCLAIMER}</p>
         </div>
       </main>
+
+      <OpportunityCreateForm
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(opp) => showToast(`Created ${opp.projectName}`)}
+      />
 
       <ExcelImportModal
         open={excelOpen}
@@ -239,39 +248,15 @@ export function Dashboard() {
           showToast('Opportunity autofilled from Excel')
         }}
         onImportTasks={async (rows: ImportRow[]) => {
-          if (getStoredSession()?.token === 'local-demo') {
-            const existing = loadOwnedCollection('tasks', owner, mockTasksDb)
-            const mapped = rows.map((r, i) => ({
-              id: `task_import_${Date.now()}_${i}`,
-              priority: String(r.priority ?? 'B'),
+          for (const [i, r] of rows.entries()) {
+            await createTask({
               action: String(r.action ?? r.nextAction ?? r.name ?? `Imported task ${i + 1}`),
-              opportunityId: null,
+              priority: String(r.priority ?? 'B'),
+              owner: String(r.dealLead ?? r.owner ?? ''),
               projectName: String(r.projectName ?? ''),
-              owner: String(r.dealLead ?? r.owner ?? 'Dennis'),
               dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
               status: 'Open',
               notes: String(r.notes ?? 'Excel import'),
-            }))
-            saveOwnedCollection('tasks', owner, [...mapped, ...existing])
-            return
-          }
-          const token = getStoredSession()?.token
-          for (const r of rows) {
-            await fetch('/api/resources/tasks', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify({
-                action: String(r.action ?? r.nextAction ?? r.name ?? 'Imported task'),
-                priority: String(r.priority ?? 'B'),
-                owner: String(r.dealLead ?? r.owner ?? ''),
-                projectName: String(r.projectName ?? ''),
-                dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
-                status: 'Open',
-                notes: String(r.notes ?? 'Excel import'),
-              }),
             })
           }
         }}
@@ -293,27 +278,6 @@ export function Dashboard() {
               notes: String(r.notes ?? 'Excel import'),
             }))
             saveOwnedCollection('contacts', owner, [...mapped, ...existing])
-            return
-          }
-          const token = getStoredSession()?.token
-          for (const r of rows) {
-            await fetch('/api/resources/contacts', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify({
-                name: String(r.name ?? r.entityName ?? 'Imported contact'),
-                title: String(r.title ?? ''),
-                company: String(r.company ?? ''),
-                email: String(r.email ?? ''),
-                phone: String(r.phone ?? ''),
-                projectName: String(r.projectName ?? ''),
-                status: 'Active',
-                notes: String(r.notes ?? 'Excel import'),
-              }),
-            })
           }
         }}
       />

@@ -28,9 +28,15 @@ export interface TaskRecord {
   opportunityId: string | null
   projectName: string
   owner: string
+  ownerId?: string | null
   dueDate: string | null
   status: string
   notes: string
+  completedAt?: string | null
+  archivedAt?: string | null
+  deletedAt?: string | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface SourceRecord {
@@ -82,6 +88,8 @@ export interface DocumentRecord {
   link: string
   uploadedAt: string
   notes: string
+  fileType?: string
+  createdAt?: string
 }
 
 export const CONTACT_CATEGORIES = [
@@ -102,14 +110,16 @@ export const INTEGRATION_STATUSES = ['Integrating', 'Integrated', 'Transition Se
 export const DOCUMENT_STATUSES = ['Draft', 'In Review', 'Executed', 'Archived'] as const
 export const DOCUMENT_TYPES = [
   'NDA',
+  'CIM',
+  'Teaser / CIM',
   'IOI',
   'LOI',
   'Financials',
   'Diligence Report',
   'Legal',
-  'Teaser / CIM',
   'Other',
 ] as const
+export const DOCUMENT_FILE_TYPES = ['pdf', 'docx', 'xlsx', 'pptx', 'url'] as const
 export const CONFIDENTIALITY_LEVELS = ['Confidential', 'Highly Confidential', 'Internal'] as const
 
 export const mockContacts: ContactRecord[] = [
@@ -221,6 +231,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-a',
     projectName: anonymousProjectName('opp-a'),
     owner: 'Dennis DiCapua',
+    ownerId: 'user-dennis',
     dueDate: '2026-10-10',
     status: 'In Progress',
     notes: 'Sample data room index received.',
@@ -232,6 +243,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-b',
     projectName: anonymousProjectName('opp-b'),
     owner: 'Mary Sbaschnig',
+    ownerId: 'user-mary',
     dueDate: '2026-10-08',
     status: 'Open',
     notes: 'Sample contact available Tue/Thu mornings.',
@@ -243,6 +255,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-c',
     projectName: anonymousProjectName('opp-c'),
     owner: 'Dennis DiCapua',
+    ownerId: 'user-dennis',
     dueDate: '2026-10-09',
     status: 'Open',
     notes: 'Sample redline on exclusivity section.',
@@ -254,6 +267,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-d',
     projectName: anonymousProjectName('opp-d'),
     owner: 'Mary Sbaschnig',
+    ownerId: 'user-mary',
     dueDate: '2026-10-14',
     status: 'Open',
     notes: 'Sample draft targeted by end of month.',
@@ -265,6 +279,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-e',
     projectName: anonymousProjectName('opp-e'),
     owner: 'Dennis DiCapua',
+    ownerId: 'user-dennis',
     dueDate: '2026-10-15',
     status: 'Open',
     notes: '',
@@ -276,6 +291,7 @@ export const mockTasksDb: TaskRecord[] = [
     opportunityId: 'opp-g',
     projectName: anonymousProjectName('opp-g'),
     owner: 'Dennis DiCapua',
+    ownerId: 'user-dennis',
     dueDate: '2026-10-20',
     status: 'Open',
     notes: 'Sample file with no activity since August.',
@@ -290,6 +306,21 @@ export const mockTasksDb: TaskRecord[] = [
     dueDate: '2026-10-12',
     status: 'Done',
     notes: 'Assigned at Monday partner meeting.',
+    completedAt: '2026-10-12T16:00:00Z',
+    ownerId: 'user-mary',
+  },
+  {
+    id: 'task-8',
+    priority: 'B',
+    action: 'Send sample NDA follow-up',
+    opportunityId: 'opp-a',
+    projectName: anonymousProjectName('opp-a'),
+    owner: 'Dennis DiCapua',
+    ownerId: 'user-dennis',
+    dueDate: '2026-09-30',
+    status: 'Done',
+    notes: 'Completed earlier in the demo timeline.',
+    completedAt: '2026-10-01T15:00:00Z',
   },
 ]
 

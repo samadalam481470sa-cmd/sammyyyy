@@ -8,6 +8,19 @@ import { mockOpportunities } from '@/data/mockOpportunities'
 import type { DashboardFilters } from '@/types'
 
 describe('dashboard filters', () => {
+  it('keeps All Deals inclusive of every status', () => {
+    const result = filterOpportunities(mockOpportunities, {
+      status: 'All Deals',
+      stage: null,
+      search: '',
+    })
+    expect(result).toHaveLength(mockOpportunities.length)
+    expect(result.some((o) => o.status === 'Inactive')).toBe(true)
+    expect(result.some((o) => o.status === 'Closed')).toBe(true)
+    expect(result.some((o) => o.status === 'Declined')).toBe(true)
+    expect(result.some((o) => o.status === 'Withdrew')).toBe(true)
+  })
+
   it('filters by Active status', () => {
     const filters: DashboardFilters = {
       status: 'Active',

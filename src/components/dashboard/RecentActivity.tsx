@@ -19,6 +19,9 @@ const TYPE_ICONS: Record<ActivityItem['type'], LucideIcon> = {
   document: FileUp,
   status_change: RefreshCw,
   update: MessageSquare,
+  create: FileUp,
+  task: StickyNote,
+  delete: RefreshCw,
 }
 
 export function RecentActivity({ items }: RecentActivityProps) {
@@ -30,8 +33,13 @@ export function RecentActivity({ items }: RecentActivityProps) {
       </div>
 
       <ul className="divide-y divide-border/70">
+        {items.length === 0 && (
+          <li className="px-5 py-8 text-sm text-ink-muted">
+            No saved activity yet in this browser. Successful saves will appear here.
+          </li>
+        )}
         {items.map((item) => {
-          const Icon = TYPE_ICONS[item.type]
+          const Icon = TYPE_ICONS[item.type] ?? MessageSquare
           return (
             <li key={item.id} className="flex gap-3 px-5 py-3.5">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">

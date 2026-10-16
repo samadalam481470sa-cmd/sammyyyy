@@ -59,6 +59,11 @@ export interface Opportunity {
   nextAction: string | null
   nextActionDate: string | null
   priority: TaskPriority
+  /** Preserved manual next-action when linked tasks are driving the summary. */
+  nextActionManual?: string | null
+  nextActionDateManual?: string | null
+  priorityManual?: TaskPriority
+  nextActionTaskId?: string | null
   lastActivityDate: string
   needsAttention: boolean
   attentionReasons: AttentionReason[]
@@ -76,13 +81,24 @@ export interface PriorityTask {
   dueDate: string
 }
 
+export type ActivityType =
+  | 'stage_change'
+  | 'status_change'
+  | 'note'
+  | 'document'
+  | 'update'
+  | 'create'
+  | 'task'
+  | 'delete'
+
 export interface ActivityItem {
   id: string
   actor: string | null
   message: string
   projectName: string
+  projectId?: string
   timestamp: string
-  type: 'stage_change' | 'note' | 'document' | 'status_change' | 'update'
+  type: ActivityType
 }
 
 export interface AttentionAlert {
@@ -137,5 +153,10 @@ export type OpportunityUpdate = Partial<
     | 'attentionReasons'
     | 'outstandingItems'
     | 'diligenceNotes'
+    | 'nextActionManual'
+    | 'nextActionDateManual'
+    | 'priorityManual'
+    | 'nextActionTaskId'
+    | 'lastActivityDate'
   >
 >

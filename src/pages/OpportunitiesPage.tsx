@@ -1,30 +1,58 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Filter, Plus, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
 import {
   OpportunityEditor,
   type OpportunityEditorHandle,
 } from '@/components/shared/OpportunityEditor'
-import { OPPORTUNITY_STATUSES } from '@/data/constants'
+import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
+import { WarningTriangle } from '@/components/shared/WarningTriangle'
+import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
 import { formatCurrency } from '@/utils/dashboard'
 import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
-import type { OpportunityStatus } from '@/types'
+import { dealIdFromOpportunity } from '@/lib/dealId'
+import { primaryDealWarning } from '@/lib/attention'
+import type { AcquisitionStage, OpportunityStatus } from '@/types'
+
+type StatusChip = 'All' | OpportunityStatus
 
 export function OpportunitiesPage() {
-  const { opportunities, loading, saveOpportunity } = useData()
+  const { opportunities, tasks, users, loading, saveOpportunity } = useData()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'All' | OpportunityStatus>('All')
+  const [statusFilter, setStatusFilter] = useState<StatusChip>('All')
+  const [stageFilter, setStageFilter] = useState<AcquisitionStage | ''>('')
+  const [ownerFilter, setOwnerFilter] = useState('')
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const editorRef = useRef<OpportunityEditorHandle>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
+
+  const dealOwners = useMemo(() => {
+    const names = new Set<string>()
+    users.forEach((u) => names.add(u.name))
+    opportunities.forEach((o) => {
+      if (o.dealLead.trim()) names.add(o.dealLead)
+    })
+    return [...names].sort()
+  }, [users, opportunities])
 
   const filtered = useMemo(() => {
-    if (statusFilter === 'All') return opportunities
-    return opportunities.filter((o) => o.status === statusFilter)
-  }, [opportunities, statusFilter])
+    return opportunities.filter((o) => {
+      if (statusFilter !== 'All' && o.status !== statusFilter) return false
+      if (stageFilter && o.stage !== stageFilter) return false
+      if (ownerFilter && o.dealLead !== ownerFilter) return false
+      if (needsAttentionOnly && !o.needsAttention) return false
+      return true
+    })
+  }, [opportunities, statusFilter, stageFilter, ownerFilter, needsAttentionOnly])
 
   const selected = selectedId
     ? (opportunities.find((o) => o.id === selectedId) ?? null)
     : null
 
   const closeEditor = () => setSelectedId(null)
+  const advancedActive = Boolean(stageFilter || ownerFilter || needsAttentionOnly)
 
   useEffect(() => {
     if (!selectedId) return
@@ -47,6 +75,14 @@ export function OpportunitiesPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selectedId])
+
+  useEffect(() => {
+    const onDoc = (event: MouseEvent) => {
+      if (!filterRef.current?.contains(event.target as Node)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   const onRowActivate = (id: string) => {
     if (selectedId === id) {
@@ -71,43 +107,125 @@ export function OpportunitiesPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-border bg-surface px-6 py-5 lg:px-8">
-        <h1 className="font-brand text-2xl font-bold text-navy-900">Opportunities</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Edit deal status, entity details, and the full acquisition record — one-stop view for
-          Dennis and the team.
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
+        <div>
+          <h1 className="font-brand text-2xl font-bold text-navy-900">Opportunities</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Edit deal status, entity details, and the full acquisition record — one-stop view for
+            Dennis and the team.
+          </p>
+        </div>
+        <p className="text-sm font-semibold text-navy-900">
+          {filtered.length} {filtered.length === 1 ? 'Opportunity' : 'Opportunities'}
         </p>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-canvas px-6 py-3 lg:px-8">
-        <span className="text-xs font-semibold tracking-[0.06em] text-ink-subtle uppercase">
-          Status
-        </span>
-        <button
-          type="button"
-          onClick={() => setStatusFilter('All')}
-          className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-            statusFilter === 'All'
-              ? 'border-navy-900 bg-navy-900 text-white'
-              : 'border-border bg-surface text-ink-muted'
-          }`}
-        >
-          All
-        </button>
-        {OPPORTUNITY_STATUSES.map((s) => (
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-canvas px-6 py-3 lg:px-8">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold tracking-[0.06em] text-ink-subtle uppercase">
+            Status
+          </span>
           <button
-            key={s}
             type="button"
-            onClick={() => setStatusFilter(s)}
+            onClick={() => setStatusFilter('All')}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-              statusFilter === s
+              statusFilter === 'All'
                 ? 'border-navy-900 bg-navy-900 text-white'
                 : 'border-border bg-surface text-ink-muted'
             }`}
           >
-            {s}
+            All
           </button>
-        ))}
+          {OPPORTUNITY_STATUSES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+                statusFilter === s
+                  ? 'border-navy-900 bg-navy-900 text-white'
+                  : 'border-border bg-surface text-ink-muted'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div ref={filterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setFilterOpen((v) => !v)}
+              className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold ${
+                advancedActive
+                  ? 'border-navy-900 bg-navy-900 text-white'
+                  : 'border-border bg-surface text-ink'
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+            </button>
+            {filterOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-border bg-surface p-4 shadow-(--shadow-elevated)">
+                <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+                  Acquisition Stage
+                </label>
+                <select
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value as AcquisitionStage | '')}
+                >
+                  <option value="">All stages</option>
+                  {ACQUISITION_STAGES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+                <label className="mt-3 block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+                  Deal Owner
+                </label>
+                <select
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={ownerFilter}
+                  onChange={(e) => setOwnerFilter(e.target.value)}
+                >
+                  <option value="">All owners</option>
+                  {dealOwners.map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+                <label className="mt-3 flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={needsAttentionOnly}
+                    onChange={(e) => setNeedsAttentionOnly(e.target.checked)}
+                  />
+                  Needs Attention
+                </label>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-ink-muted hover:text-ink"
+                  onClick={() => {
+                    setStageFilter('')
+                    setOwnerFilter('')
+                    setNeedsAttentionOnly(false)
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear Filters
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-navy-900 px-3.5 text-sm font-semibold text-white hover:bg-navy-800"
+          >
+            <Plus className="h-4 w-4" />
+            New Opportunity
+          </button>
+        </div>
       </div>
 
       <div
@@ -123,21 +241,21 @@ export function OpportunitiesPage() {
           }`}
         >
           {loading && (
-            <p className="px-6 py-8 text-sm text-ink-muted">Loading from database…</p>
+            <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>
           )}
           <table className="w-full table-fixed text-left text-sm">
             <colgroup>
-              <col className="w-[14%]" />
+              <col className="w-[16%]" />
               <col className="w-[20%]" />
-              <col className="w-[22%]" />
+              <col className="w-[20%]" />
               <col className="w-[14%]" />
               <col className="w-[18%]" />
               <col className="w-[12%]" />
             </colgroup>
             <thead className="sticky top-0 bg-canvas text-[11px] tracking-[0.06em] text-ink-subtle uppercase">
               <tr className="border-b border-border">
-                <th className="px-5 py-3 font-semibold">Project #</th>
-                <th className="px-3 py-3 font-semibold">Project</th>
+                <th className="px-5 py-3 font-semibold">Deal ID</th>
+                <th className="px-3 py-3 font-semibold">Project Name</th>
                 <th className="px-3 py-3 font-semibold">Entity</th>
                 <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="px-3 py-3 font-semibold">Stage</th>
@@ -147,6 +265,7 @@ export function OpportunitiesPage() {
             <tbody>
               {filtered.map((opp) => {
                 const active = selected?.id === opp.id
+                const warning = primaryDealWarning(opp, tasks)
                 return (
                   <tr
                     key={opp.id}
@@ -158,8 +277,11 @@ export function OpportunitiesPage() {
                       active ? 'bg-accent-soft/60' : 'hover:bg-accent-soft/30'
                     }`}
                   >
-                    <td className="truncate px-5 py-3.5 font-semibold text-navy-900">
-                      Project {opp.projectNumber}
+                    <td className="px-5 py-3.5 font-semibold text-navy-900">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate">{dealIdFromOpportunity(opp)}</span>
+                        <WarningTriangle warning={warning} />
+                      </span>
                     </td>
                     <td className="truncate px-3 py-3.5 font-medium text-ink">{opp.projectName}</td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
@@ -190,6 +312,8 @@ export function OpportunitiesPage() {
           </aside>
         )}
       </div>
+
+      <OpportunityCreateForm open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   )
 }
