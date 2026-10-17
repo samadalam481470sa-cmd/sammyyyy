@@ -39,6 +39,17 @@ export const DASHBOARD_STATUS_FILTERS = ['All Deals', 'Active', 'Pending', 'Comp
 
 export type DashboardStatusFilter = (typeof DASHBOARD_STATUS_FILTERS)[number]
 
+/** Dashboard All Deals = these three statuses only. Full taxonomy stays on Opportunities. */
+export const DASHBOARD_FOCUS_STATUSES: readonly OpportunityStatus[] = [
+  'Active',
+  'Pending',
+  'Completed',
+] as const
+
+export function isDashboardFocusStatus(status: OpportunityStatus): boolean {
+  return (DASHBOARD_FOCUS_STATUSES as readonly string[]).includes(status)
+}
+
 export const OPPORTUNITY_TYPES = [
   'Platform Acquisition',
   'Add-on Acquisition',

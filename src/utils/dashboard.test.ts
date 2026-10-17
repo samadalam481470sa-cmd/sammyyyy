@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
+  computeFinancialTotals,
   computeKpis,
+  filterDashboardOpportunities,
   filterOpportunities,
   hasActiveFilters,
+  safeMoney,
 } from '@/utils/dashboard'
 import { mockOpportunities } from '@/data/mockOpportunities'
 import type { DashboardFilters } from '@/types'
@@ -69,6 +72,28 @@ describe('dashboard filters', () => {
     const active = mockOpportunities.filter((o) => o.status === 'Active')
     expect(kpis.activeDeals).toBe(active.length)
     expect(kpis.activeNwp).toBe(active.reduce((s, o) => s + o.nwp, 0))
+  })
+
+  it('limits Dashboard All Deals to Active, Pending, and Completed', () => {
+    const result = filterDashboardOpportunities(mockOpportunities, {
+      status: 'All Deals',
+      stage: null,
+      search: '',
+    })
+    expect(result.every((o) => ['Active', 'Pending', 'Completed'].includes(o.status))).toBe(true)
+    expect(result.some((o) => o.status === 'Inactive')).toBe(false)
+    expect(result.length).toBe(
+      mockOpportunities.filter((o) => ['Active', 'Pending', 'Completed'].includes(o.status)).length,
+    )
+  })
+
+  it('sums financials from the filtered set and ignores invalid numbers', () => {
+    const totals = computeFinancialTotals([
+      mockOpportunities[0],
+      { ...mockOpportunities[0], id: 'bad', nwp: Number.NaN, pfEbitda: undefined as unknown as number },
+    ])
+    expect(totals.nwp).toBe(safeMoney(mockOpportunities[0].nwp))
+    expect(Number.isNaN(totals.nwp)).toBe(false)
   })
 
   it('detects active filters', () => {

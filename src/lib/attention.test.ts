@@ -41,14 +41,14 @@ describe('attention', () => {
     expect(uniqueAttentionCount([deal], [], NOW)).toBe(1)
   })
 
-  it('uses yellow for unfinished next actions due within seven days including today', () => {
+  it('uses navy for unfinished next actions due within seven days including today', () => {
     const deal = applyNextActionSummary(
       opp('opp-a', { nextAction: 'Review', nextActionDate: '2026-10-16', status: 'Pending' }),
       [],
       NOW,
     )
     const warning = primaryDealWarning(deal, [], NOW)
-    expect(warning?.level).toBe('yellow')
+    expect(warning?.level).toBe('navy')
   })
 
   it('uses red for Active deals with no next action', () => {

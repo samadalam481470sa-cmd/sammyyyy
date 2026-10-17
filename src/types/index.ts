@@ -99,6 +99,8 @@ export interface ActivityItem {
   projectId?: string
   timestamp: string
   type: ActivityType
+  targetType?: 'opportunity' | 'task' | 'document'
+  targetId?: string
 }
 
 export interface AttentionAlert {

@@ -37,13 +37,16 @@ import {
 } from '@/lib/taskLifecycle'
 import {
   applyNextActionSummary,
+  nextActionFieldsTouched,
   preserveManualNextAction,
+  syncDrivingTaskFromOpportunityPatch,
   withManualNextActionOverride,
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
 import {
   documentActivity,
   opportunityCreateActivity,
+  opportunityDeleteActivity,
   opportunityUpdateActivity,
   taskActivity,
 } from '@/lib/activityLog'
@@ -60,6 +63,7 @@ interface DataContextValue {
   refresh: () => Promise<void>
   saveOpportunity: (id: string, patch: OpportunityUpdate) => Promise<Opportunity>
   createOpportunity: (draft: Partial<Opportunity>) => Promise<Opportunity>
+  deleteOpportunity: (id: string) => Promise<void>
   saveTask: (id: string, patch: Partial<TaskRecord>) => Promise<TaskRecord>
   createTask: (draft: Partial<TaskRecord>) => Promise<TaskRecord>
   archiveTask: (id: string) => Promise<TaskRecord>
@@ -233,12 +237,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (id: string, patch: OpportunityUpdate) => {
       const existing = oppsRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Opportunity not found')
+      let taskList = tasksRef.current
+      if (nextActionFieldsTouched(patch)) {
+        const synced = syncDrivingTaskFromOpportunityPatch(existing, taskList, patch)
+        taskList = synced.tasks
+        if (synced.drivingId) persistTasks(taskList)
+      }
       const nextPatch: OpportunityUpdate = {
         ...withManualNextActionOverride(patch),
         lastActivityDate: nowIso(),
       }
       const mergedBase = { ...existing, ...nextPatch }
-      const merged = decorateOpportunities([mergedBase], tasksRef.current)[0]
+      const merged = decorateOpportunities([mergedBase], taskList)[0]
       if (getStoredSession()?.token === 'local-demo') {
         persistOpps(oppsRef.current.map((row) => (row.id === id ? merged : row)))
         logChange('opportunity', id, 'update', Object.keys(patch))
@@ -246,7 +256,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return merged
       }
       const updated = await updateOpportunity(id, nextPatch)
-      const decorated = decorateOpportunities([{ ...existing, ...updated }], tasksRef.current)[0]
+      const decorated = decorateOpportunities([{ ...existing, ...updated }], taskList)[0]
       persistOpps(oppsRef.current.map((row) => (row.id === id ? decorated : row)))
       pushActivity(opportunityUpdateActivity(user?.name ?? null, existing, patch))
       return decorated
@@ -320,6 +330,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistOpps([...oppsRef.current, decorated])
       pushActivity(opportunityCreateActivity(user?.name ?? null, decorated))
       return decorated
+    },
+    [owner, user],
+  )
+
+  const deleteOpportunity = useCallback(
+    async (id: string) => {
+      const existing = oppsRef.current.find((row) => row.id === id)
+      if (!existing) throw new Error('Opportunity not found')
+      if (getStoredSession()?.token !== 'local-demo') {
+        await resourceRequest(`/opportunities/${id}`, { method: 'DELETE' }).catch(() => undefined)
+      }
+      persistTasks(
+        tasksRef.current.map((row) =>
+          row.opportunityId === id ? { ...row, opportunityId: null, updatedAt: nowIso() } : row,
+        ),
+      )
+      persistDocs(docsRef.current.filter((row) => row.opportunityId !== id))
+      persistOpps(oppsRef.current.filter((row) => row.id !== id))
+      logChange('opportunity', id, 'delete', ['id'])
+      pushActivity(opportunityDeleteActivity(user?.name ?? null, existing))
     },
     [owner, user],
   )
@@ -543,6 +573,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       refresh,
       saveOpportunity,
       createOpportunity,
+      deleteOpportunity,
       saveTask,
       createTask,
       archiveTask,
@@ -563,6 +594,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       refresh,
       saveOpportunity,
       createOpportunity,
+      deleteOpportunity,
       saveTask,
       createTask,
       archiveTask,

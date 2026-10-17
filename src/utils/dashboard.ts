@@ -4,28 +4,34 @@ import type {
   Opportunity,
   OpportunityStatus,
 } from '@/types'
-import { ACQUISITION_STAGES } from '@/data/constants'
+import { ACQUISITION_STAGES, isDashboardFocusStatus } from '@/data/constants'
+
+export function safeMoney(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
 
 export function formatCurrency(value: number, compact = true): string {
+  const amount = safeMoney(value)
   if (compact) {
-    if (value >= 1_000_000_000) {
-      return `$${(value / 1_000_000_000).toFixed(1)}B`
+    if (amount >= 1_000_000_000) {
+      return `$${(amount / 1_000_000_000).toFixed(1)}B`
     }
-    if (value >= 1_000_000) {
-      const millions = value / 1_000_000
+    if (amount >= 1_000_000) {
+      const millions = amount / 1_000_000
       return millions >= 100
         ? `$${Math.round(millions)}M`
         : `$${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`
     }
-    if (value >= 1_000) {
-      return `$${Math.round(value / 1_000)}K`
+    if (amount >= 1_000) {
+      return `$${Math.round(amount / 1_000)}K`
     }
   }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
-  }).format(value)
+  }).format(amount)
 }
 
 export function formatDate(dateStr: string | null): string {
@@ -80,16 +86,53 @@ export function filterOpportunities(
   })
 }
 
+/** Dashboard chips: All Deals means Active + Pending + Completed only. */
+export function filterDashboardOpportunities(
+  opportunities: Opportunity[],
+  filters: DashboardFilters,
+): Opportunity[] {
+  return opportunities.filter((opp) => {
+    if (filters.status === 'Needs Attention') {
+      if (!opp.needsAttention) return false
+    } else if (filters.status === 'All Deals') {
+      if (!isDashboardFocusStatus(opp.status)) return false
+    } else if (opp.status !== filters.status) {
+      return false
+    }
+
+    if (filters.stage && opp.stage !== filters.stage) return false
+
+    if (filters.search.trim()) {
+      const q = filters.search.trim().toLowerCase()
+      const haystack = `${opp.projectName} ${opp.entityName} ${opp.dealLead}`.toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
+
+    return true
+  })
+}
+
+export function computeFinancialTotals(opportunities: Opportunity[]) {
+  return {
+    nwp: opportunities.reduce((sum, o) => sum + safeMoney(o.nwp), 0),
+    pfEbitda: opportunities.reduce((sum, o) => sum + safeMoney(o.pfEbitda), 0),
+  }
+}
+
 export function computeKpis(opportunities: Opportunity[]) {
   const active = opportunities.filter((o) => o.status === 'Active')
   const pending = opportunities.filter((o) => o.status === 'Pending')
   const needsAttention = opportunities.filter((o) => o.needsAttention)
+  const activeFinances = computeFinancialTotals(active)
+  const finances = computeFinancialTotals(opportunities)
 
   return {
     activeDeals: active.length,
     pendingDeals: pending.length,
-    activeNwp: active.reduce((sum, o) => sum + o.nwp, 0),
-    activePfEbitda: active.reduce((sum, o) => sum + o.pfEbitda, 0),
+    activeNwp: activeFinances.nwp,
+    activePfEbitda: activeFinances.pfEbitda,
+    nwp: finances.nwp,
+    pfEbitda: finances.pfEbitda,
     needsAttention: needsAttention.length,
   }
 }
@@ -103,7 +146,7 @@ export function computePipelineByStage(
     return {
       stage,
       count: deals.length,
-      nwp: deals.reduce((sum, o) => sum + o.nwp, 0),
+      nwp: deals.reduce((sum, o) => sum + safeMoney(o.nwp), 0),
     }
   })
 }

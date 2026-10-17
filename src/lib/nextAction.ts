@@ -1,6 +1,6 @@
 import type { Opportunity, TaskPriority } from '@/types'
 import type { TaskRecord } from '@/data/mockModules'
-import { dueDateSortValue } from '@/lib/calendarDate'
+import { dueDateSortValue, nowIso } from '@/lib/calendarDate'
 import { isUnfinishedTask } from '@/lib/taskLifecycle'
 
 export interface NextActionSummary {
@@ -96,4 +96,44 @@ export function withManualNextActionOverride(
   if (patch.nextActionDate !== undefined) next.nextActionDateManual = patch.nextActionDate
   if (patch.priority !== undefined) next.priorityManual = patch.priority
   return next
+}
+
+export function nextActionFieldsTouched(
+  patch: Partial<Pick<Opportunity, 'nextAction' | 'nextActionDate' | 'priority'>>,
+): boolean {
+  return (
+    patch.nextAction !== undefined ||
+    patch.nextActionDate !== undefined ||
+    patch.priority !== undefined
+  )
+}
+
+/**
+ * Keep the displayed next action in sync with the unfinished linked task that
+ * currently drives it, so an opportunity save is not overwritten by stale task fields.
+ */
+export function syncDrivingTaskFromOpportunityPatch(
+  opportunity: Opportunity,
+  tasks: TaskRecord[],
+  patch: Partial<Pick<Opportunity, 'nextAction' | 'nextActionDate' | 'priority'>>,
+  now = new Date(),
+): { tasks: TaskRecord[]; drivingId: string | null } {
+  if (!nextActionFieldsTouched(patch)) return { tasks, drivingId: opportunity.nextActionTaskId ?? null }
+  const unfinished = unfinishedTasksForOpportunity(tasks, opportunity.id, now)
+  const driving =
+    (opportunity.nextActionTaskId
+      ? unfinished.find((row) => row.id === opportunity.nextActionTaskId)
+      : null) ?? pickMostUrgentTask(unfinished, now)
+  if (!driving) return { tasks, drivingId: null }
+  const next: TaskRecord = {
+    ...driving,
+    action: patch.nextAction !== undefined ? patch.nextAction?.trim() || driving.action : driving.action,
+    dueDate: patch.nextActionDate !== undefined ? patch.nextActionDate : driving.dueDate,
+    priority: patch.priority !== undefined ? asPriority(patch.priority, asPriority(driving.priority)) : driving.priority,
+    updatedAt: nowIso(now),
+  }
+  return {
+    tasks: tasks.map((row) => (row.id === driving.id ? next : row)),
+    drivingId: driving.id,
+  }
 }

@@ -55,3 +55,14 @@ export function inferFileType(doc: Pick<DocumentRecord, 'fileType' | 'link' | 'n
 export function hasAttachedFile(doc: DocumentRecord | null | undefined): boolean {
   return Boolean(doc && (doc.link?.trim() || inferFileType(doc)))
 }
+
+export function isOpenableDocumentUrl(value: string | null | undefined): boolean {
+  const trimmed = value?.trim() ?? ''
+  if (!trimmed) return false
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}

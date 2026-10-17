@@ -15,6 +15,8 @@ export function makeActivity(input: {
   projectId?: string
   type: ActivityType
   timestamp?: string
+  targetType?: ActivityItem['targetType']
+  targetId?: string
 }): ActivityItem {
   return {
     id: activityId(),
@@ -24,6 +26,8 @@ export function makeActivity(input: {
     projectId: input.projectId,
     timestamp: input.timestamp ?? nowIso(),
     type: input.type,
+    targetType: input.targetType,
+    targetId: input.targetId,
   }
 }
 
@@ -34,6 +38,8 @@ export function opportunityCreateActivity(actor: string | null, opportunity: Opp
     projectId: opportunity.id,
     projectName: opportunity.projectName,
     message: `created ${opportunity.projectName} (${dealIdFromOpportunity(opportunity)})`,
+    targetType: 'opportunity',
+    targetId: opportunity.id,
   })
 }
 
@@ -54,7 +60,8 @@ export function opportunityUpdateActivity(
   }
   if (
     (patch.nextAction !== undefined && patch.nextAction !== before.nextAction) ||
-    (patch.nextActionDate !== undefined && patch.nextActionDate !== before.nextActionDate)
+    (patch.nextActionDate !== undefined && patch.nextActionDate !== before.nextActionDate) ||
+    (patch.priority !== undefined && patch.priority !== before.priority)
   ) {
     parts.push(`updated next action on ${before.projectName}`)
   }
@@ -80,6 +87,20 @@ export function opportunityUpdateActivity(
     projectId: before.id,
     projectName: before.projectName,
     message: parts.join('; '),
+    targetType: 'opportunity',
+    targetId: before.id,
+  })
+}
+
+export function opportunityDeleteActivity(actor: string | null, opportunity: Opportunity): ActivityItem {
+  return makeActivity({
+    actor,
+    type: 'delete',
+    projectId: opportunity.id,
+    projectName: opportunity.projectName,
+    message: `deleted ${opportunity.projectName} (${dealIdFromOpportunity(opportunity)})`,
+    targetType: 'opportunity',
+    targetId: opportunity.id,
   })
 }
 
@@ -96,6 +117,8 @@ export function taskActivity(
     projectId: task.opportunityId ?? undefined,
     projectName: task.projectName || '',
     message: `${verb} task “${task.action || 'Untitled'}” on ${project}`,
+    targetType: 'task',
+    targetId: task.id,
   })
 }
 
@@ -111,5 +134,7 @@ export function documentActivity(
     projectId: doc.opportunityId ?? undefined,
     projectName: doc.projectName || '',
     message: `${verb} document “${doc.name || doc.docType}” on ${project}`,
+    targetType: 'document',
+    targetId: doc.id,
   })
 }

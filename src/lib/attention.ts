@@ -4,7 +4,7 @@ import { isOverdueDate, isWithinNextDays } from '@/lib/calendarDate'
 import { formatDate } from '@/utils/dashboard'
 import { resolveNextAction } from '@/lib/nextAction'
 
-export type WarningLevel = 'red' | 'yellow'
+export type WarningLevel = 'red' | 'navy'
 
 export interface DealWarning {
   level: WarningLevel
@@ -43,7 +43,7 @@ export function dealWarnings(
   }
   if (!overdue && !activeMissing && upcoming) {
     warnings.push({
-      level: 'yellow',
+      level: 'navy',
       reason: 'Upcoming deadline within 7 days',
       detail: `${summary.nextAction} is due ${formatDate(summary.nextActionDate)}`,
     })
