@@ -15,8 +15,10 @@ import {
   customDocumentsForOpportunity,
   DEFAULT_DOCUMENT_SLOTS,
   inferFileType,
+  isOpenableDocumentUrl,
   slotDocument,
 } from '@/lib/documentSlots'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { FileKindIcon, iconKindForDocument } from '@/components/documents/FileKindIcon'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
@@ -32,6 +34,7 @@ import { useEditorGuard, type OpportunityEditorHandle } from '@/components/share
 interface DocumentWorkspaceProps {
   opportunity: Opportunity
   onClose: () => void
+  initialDocumentId?: string | null
 }
 
 type DocDraft = {
@@ -69,8 +72,8 @@ function emptyDraft(docType: string): DocDraft {
 }
 
 export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWorkspaceProps>(
-  function DocumentWorkspace({ opportunity, onClose }, ref) {
-    const { documents, createDocument, saveDocument } = useData()
+  function DocumentWorkspace({ opportunity, onClose, initialDocumentId }, ref) {
+    const { documents, createDocument, saveDocument, deleteDocument } = useData()
     const { user } = useAuth()
     const userName = user?.name ?? ''
     const guard = useEditorGuard()
@@ -87,10 +90,12 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
     const [error, setError] = useState<string | null>(null)
     const [message, setMessage] = useState<string | null>(null)
     const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
     const savingRef = useRef(false)
+    const deletingRef = useRef(false)
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
-    const currentSlotDoc = slotDocument(related, opportunity.id, tab)
     const customDocs = customDocumentsForOpportunity(related, opportunity.id)
 
     const loadSlot = (slot: string) => {
@@ -106,9 +111,33 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
     }
 
     useEffect(() => {
+      if (initialDocumentId) {
+        const existing = related.find((doc) => doc.id === initialDocumentId)
+        if (existing) {
+          setTab(
+            (DEFAULT_DOCUMENT_SLOTS as readonly string[]).includes(existing.docType) ||
+              existing.docType === 'Teaser / CIM'
+              ? existing.docType === 'Teaser / CIM'
+                ? 'CIM'
+                : existing.docType
+              : existing.id,
+          )
+          setMode(
+            (DEFAULT_DOCUMENT_SLOTS as readonly string[]).includes(existing.docType) ||
+              existing.docType === 'Teaser / CIM'
+              ? 'slot'
+              : 'custom',
+          )
+          setEditingId(existing.id)
+          const snap = fromRecord(existing)
+          setDraft(snap)
+          setSaved(snap)
+          return
+        }
+      }
       loadSlot('NDA')
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [opportunity.id])
+    }, [opportunity.id, initialDocumentId])
 
     const requestLeave = useCallback(
       (next: () => void) => {
@@ -143,8 +172,10 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           notes: draft.notes,
           opportunityId: opportunity.id,
           projectName: opportunity.projectName,
-          uploadedBy: userName || 'Newport user',
-          uploadedAt: nowIso().slice(0, 10),
+          uploadedBy:
+            related.find((doc) => doc.id === editingId)?.uploadedBy || userName || 'Newport user',
+          uploadedAt:
+            related.find((doc) => doc.id === editingId)?.uploadedAt || nowIso().slice(0, 10),
         }
         const result = editingId
           ? await saveDocument(editingId, payload)
@@ -259,11 +290,6 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         </div>
 
         <div className="custom-scroll flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          {mode === 'slot' && !currentSlotDoc && !dirty && (
-            <p className="rounded-lg border border-dashed border-border bg-canvas px-3 py-3 text-sm text-ink-muted">
-              No document attached
-            </p>
-          )}
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Name
             <input
@@ -272,6 +298,24 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
               onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
             />
           </label>
+          {isOpenableDocumentUrl(draft.link) ? (
+            <a
+              href={draft.link.trim()}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open Document
+            </a>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-canvas px-3 py-3">
+              <p className="text-sm font-medium text-ink">No document attached</p>
+              <p className="mt-1 text-xs text-ink-subtle">
+                Add an authorized https link below, then save. Files are not uploaded here.
+              </p>
+            </div>
+          )}
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Type
             <select
@@ -280,27 +324,6 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
               onChange={(e) => setDraft((p) => ({ ...p, docType: e.target.value }))}
             >
               {DOCUMENT_TYPES.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
-            Linked opportunity
-            <input
-              className="mt-1 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm font-normal text-ink-muted"
-              value={`${opportunity.projectName} (${dealIdFromOpportunity(opportunity)})`}
-              readOnly
-            />
-          </label>
-          <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
-            File type
-            <select
-              className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm font-normal text-ink"
-              value={draft.fileType}
-              onChange={(e) => setDraft((p) => ({ ...p, fileType: e.target.value }))}
-            >
-              <option value="">Not specified</option>
-              {DOCUMENT_FILE_TYPES.map((t) => (
                 <option key={t}>{t}</option>
               ))}
             </select>
@@ -329,6 +352,34 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
               ))}
             </select>
           </label>
+          <p className="text-xs text-ink-muted">
+            Added by{' '}
+            {related.find((doc) => doc.id === editingId)?.uploadedBy || userName || '—'} · Added on{' '}
+            {related.find((doc) => doc.id === editingId)?.uploadedAt ||
+              related.find((doc) => doc.id === editingId)?.createdAt ||
+              'unsaved'}
+          </p>
+          <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+            Linked opportunity
+            <input
+              className="mt-1 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm font-normal text-ink-muted"
+              value={`${opportunity.projectName} (${dealIdFromOpportunity(opportunity)})`}
+              readOnly
+            />
+          </label>
+          <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+            File type
+            <select
+              className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm font-normal text-ink"
+              value={draft.fileType}
+              onChange={(e) => setDraft((p) => ({ ...p, fileType: e.target.value }))}
+            >
+              <option value="">Not specified</option>
+              {DOCUMENT_FILE_TYPES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+          </label>
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Secure document URL (external)
             <input
@@ -340,23 +391,6 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           </label>
           <p className="text-xs text-ink-subtle">
             The CRM stores a reference only. Files are not uploaded to this public demo.
-          </p>
-          {draft.link.trim() ? (
-            <a
-              href={draft.link}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Open external link
-            </a>
-          ) : (
-            <p className="text-sm text-ink-muted">No document attached</p>
-          )}
-          <p className="text-xs text-ink-muted">
-            Added by {currentSlotDoc?.uploadedBy || userName || '—'} · Added on{' '}
-            {currentSlotDoc?.uploadedAt || currentSlotDoc?.createdAt || 'unsaved'}
           </p>
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Notes
@@ -373,12 +407,22 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || deleting}
             onClick={() => void persist()}
             className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
           >
             {saveButtonLabel(saving)}
           </button>
+          {editingId && mode !== 'new' && (
+            <button
+              type="button"
+              disabled={saving || deleting}
+              onClick={() => setConfirmDelete(true)}
+              className="mt-2 h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] disabled:opacity-60"
+            >
+              Delete Document
+            </button>
+          )}
         </div>
 
         <UnsavedChangesDialog
@@ -400,6 +444,34 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
             next?.()
           }}
           onCancel={() => setPendingLeave(null)}
+        />
+
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Delete Document?"
+          message="Are you sure you want to remove this document from the CRM? The external file is not deleted."
+          confirmLabel="Delete Document"
+          confirming={deleting}
+          onCancel={() => {
+            if (!deleting) setConfirmDelete(false)
+          }}
+          onConfirm={() => {
+            if (!editingId || deletingRef.current) return
+            deletingRef.current = true
+            setDeleting(true)
+            void deleteDocument(editingId)
+              .then(() => {
+                setConfirmDelete(false)
+                setDeleting(false)
+                deletingRef.current = false
+                loadSlot('NDA')
+              })
+              .catch((err) => {
+                deletingRef.current = false
+                setDeleting(false)
+                setError(err instanceof Error ? err.message : 'Delete failed')
+              })
+          }}
         />
       </div>
     )

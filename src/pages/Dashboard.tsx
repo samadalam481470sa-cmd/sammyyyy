@@ -21,11 +21,18 @@ import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { mockContacts } from '@/data/mockModules'
 import type { ImportRow } from '@/lib/excelImport'
-import type { AcquisitionStage, DashboardFilters, Opportunity, PriorityTask } from '@/types'
+import type {
+  AcquisitionStage,
+  ActivityItem,
+  DashboardFilters,
+  Opportunity,
+  PriorityTask,
+} from '@/types'
 import {
+  computeFinancialTotals,
   computeKpis,
   computePipelineByStage,
-  filterOpportunities,
+  filterDashboardOpportunities,
   hasActiveFilters,
 } from '@/utils/dashboard'
 import {
@@ -33,8 +40,8 @@ import {
   topAttentionAlerts,
   uniqueAttentionCount,
 } from '@/lib/attention'
-import { isActiveListTask, isUnfinishedTask } from '@/lib/taskLifecycle'
-import { dueDateSortValue, isWithinNextDays, isOverdueDate } from '@/lib/calendarDate'
+import { rankWeekPriorityTasks } from '@/lib/taskSort'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 const DEFAULT_FILTERS: DashboardFilters = {
   status: 'All Deals',
@@ -46,6 +53,7 @@ export function Dashboard() {
   const {
     opportunities,
     tasks,
+    documents,
     activity,
     createOpportunity,
     saveOpportunity,
@@ -59,6 +67,8 @@ export function Dashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [excelOpen, setExcelOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityNotice, setActivityNotice] = useState<string | null>(null)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -66,61 +76,34 @@ export function Dashboard() {
   }, [])
 
   const filtered = useMemo(
-    () => filterOpportunities(opportunities, filters),
+    () => filterDashboardOpportunities(opportunities, filters),
     [filters, opportunities],
   )
 
-  const pipelineSource = useMemo(() => {
-    if (filters.status === 'Needs Attention') {
-      return opportunities.filter((o) => o.needsAttention)
-    }
-    if (filters.status === 'All Deals') {
-      return opportunities.filter((o) => o.status === 'Active' || o.status === 'Pending')
-    }
-    return opportunities.filter((o) => o.status === filters.status)
-  }, [filters.status, opportunities])
+  const counts = useMemo(() => computeKpis(opportunities), [opportunities])
+  const finances = useMemo(() => computeFinancialTotals(filtered), [filtered])
 
-  const pipelineFiltered = useMemo(() => {
-    if (!filters.search.trim()) return pipelineSource
-    const q = filters.search.trim().toLowerCase()
-    return pipelineSource.filter((o) =>
-      `${o.projectName} ${o.entityName} ${o.dealLead}`.toLowerCase().includes(q),
-    )
-  }, [pipelineSource, filters.search])
-
-  const kpis = useMemo(() => {
-    const base = filters.search.trim()
-      ? filterOpportunities(opportunities, {
-          status: 'All Deals',
-          stage: null,
-          search: filters.search,
-        })
-      : opportunities
-    return {
-      ...computeKpis(base),
-      needsAttention: uniqueAttentionCount(base, tasks),
-    }
-  }, [filters.search, opportunities, tasks])
-
-  const pipeline = useMemo(
-    () => computePipelineByStage(pipelineFiltered),
-    [pipelineFiltered],
+  const kpis = useMemo(
+    () => ({
+      activeDeals: counts.activeDeals,
+      pendingDeals: counts.pendingDeals,
+      nwp: finances.nwp,
+      pfEbitda: finances.pfEbitda,
+      needsAttention: uniqueAttentionCount(opportunities, tasks),
+    }),
+    [counts.activeDeals, counts.pendingDeals, finances.nwp, finances.pfEbitda, opportunities, tasks],
   )
 
-  const tableRows = useMemo(() => {
-    let rows = filtered
-    if (filters.status === 'All Deals' && !filters.stage && !filters.search.trim()) {
-      rows = opportunities.filter((o) => o.status === 'Active' || o.status === 'Pending')
-    }
-    return rankOpportunitiesByNextAction(rows, tasks).slice(0, 8)
-  }, [filtered, filters, opportunities, tasks])
+  const pipeline = useMemo(() => computePipelineByStage(filtered), [filtered])
+
+  const tableRows = useMemo(
+    () => rankOpportunitiesByNextAction(filtered, tasks).slice(0, 8),
+    [filtered, tasks],
+  )
 
   const weekTasks = useMemo<PriorityTask[]>(() => {
-    return tasks
-      .filter((task) => isActiveListTask(task) && isUnfinishedTask(task))
-      .filter((task) => !task.dueDate || isOverdueDate(task.dueDate) || isWithinNextDays(task.dueDate, 7))
-      .sort((a, b) => dueDateSortValue(a.dueDate) - dueDateSortValue(b.dueDate))
-      .slice(0, 6)
+    return rankWeekPriorityTasks(tasks)
+      .slice(0, 5)
       .map((task) => ({
         id: task.id,
         priority: (task.priority === 'A' || task.priority === 'B' || task.priority === 'C'
@@ -133,6 +116,19 @@ export function Dashboard() {
         dueDate: task.dueDate || '',
       }))
   }, [tasks])
+
+  const recentActivity = useMemo(
+    () =>
+      [...activity]
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, 5),
+    [activity],
+  )
+
+  const allActivity = useMemo(
+    () => [...activity].sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+    [activity],
+  )
 
   const alerts = useMemo(() => topAttentionAlerts(opportunities, tasks, 5), [opportunities, tasks])
   const uniqueAlerts = useMemo(
@@ -157,6 +153,50 @@ export function Dashboard() {
   const openById = (projectId: string) => {
     const opp = opportunities.find((o) => o.id === projectId) ?? null
     setSelected(opp)
+  }
+
+  const openActivity = (item: ActivityItem) => {
+    const type =
+      item.targetType ??
+      (item.type === 'task' ? 'task' : item.type === 'document' ? 'document' : 'opportunity')
+    const id = item.targetId ?? item.projectId
+    if (!id) {
+      setActivityNotice('This activity is not linked to a record.')
+      return
+    }
+    if (type === 'opportunity') {
+      if (!opportunities.some((row) => row.id === id)) {
+        setActivityNotice('This opportunity was deleted and is no longer available.')
+        return
+      }
+      setActivityOpen(false)
+      void navigate(`/opportunities?select=${encodeURIComponent(id)}`)
+      return
+    }
+    if (type === 'task') {
+      const task = tasks.find((row) => row.id === id)
+      if (!task || task.deletedAt) {
+        setActivityNotice('This task was deleted and is no longer available.')
+        return
+      }
+      setActivityOpen(false)
+      void navigate(`/tasks?select=${encodeURIComponent(id)}`)
+      return
+    }
+    const doc = documents.find((row) => row.id === id)
+    if (!doc) {
+      setActivityNotice('This document was removed from the CRM.')
+      return
+    }
+    const opportunityId = doc.opportunityId ?? item.projectId
+    if (!opportunityId || !opportunities.some((row) => row.id === opportunityId)) {
+      setActivityNotice('The linked opportunity for this document is no longer available.')
+      return
+    }
+    setActivityOpen(false)
+    void navigate(
+      `/documents?select=${encodeURIComponent(opportunityId)}&doc=${encodeURIComponent(id)}`,
+    )
   }
 
   return (
@@ -188,18 +228,29 @@ export function Dashboard() {
           <PriorityDealsTable opportunities={tableRows} onSelect={setSelected} />
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <PriorityTasks tasks={weekTasks} onProjectClick={openById} />
+            <PriorityTasks
+              tasks={weekTasks}
+              onProjectClick={openById}
+              onViewAll={() => void navigate('/tasks')}
+            />
             <AttentionAlerts
               alerts={alerts}
               uniqueDealCount={uniqueAlerts}
               onProjectClick={openById}
-              onViewAll={() => setStatus('Needs Attention')}
+              onViewAll={() => void navigate('/opportunities?attention=1')}
             />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-1">
-              <RecentActivity items={activity.slice(0, 12)} />
+              <RecentActivity
+                items={recentActivity}
+                allItems={allActivity}
+                onViewAll={() => setActivityOpen(true)}
+                onItemClick={openActivity}
+                historyOpen={activityOpen}
+                onCloseHistory={() => setActivityOpen(false)}
+              />
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
@@ -283,6 +334,17 @@ export function Dashboard() {
       />
 
       <OpportunityDrawer opportunity={selected} onClose={() => setSelected(null)} />
+
+      <ConfirmDialog
+        open={Boolean(activityNotice)}
+        title="Record unavailable"
+        message={activityNotice ?? ''}
+        confirmLabel="OK"
+        cancelLabel="Close"
+        tone="default"
+        onConfirm={() => setActivityNotice(null)}
+        onCancel={() => setActivityNotice(null)}
+      />
 
       {toast && (
         <div

@@ -4,7 +4,13 @@ import { useSearchParams } from 'react-router-dom'
 import { useData } from '@/data/DataContext'
 import type { TaskRecord } from '@/data/mockModules'
 import { isActiveListTask, isHistoryTask } from '@/lib/taskLifecycle'
+import {
+  isOnTrackTask,
+  isOverdueUnfinishedTask,
+  sortVisibleTasks,
+} from '@/lib/taskSort'
 import { formatDate } from '@/utils/dashboard'
+import { WarningTriangle } from '@/components/shared/WarningTriangle'
 import {
   emptyTaskDraft,
   TaskEditor,
@@ -17,6 +23,8 @@ const PRIORITY_BADGES: Record<string, string> = {
   C: 'bg-canvas text-ink-muted border border-border',
 }
 
+type TaskListFilter = 'all' | 'overdue' | 'on-track'
+
 export function TasksPage() {
   const { tasks, opportunities, archiveTask, loading } = useData()
   const [params, setParams] = useSearchParams()
@@ -26,27 +34,40 @@ export function TasksPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<TaskRecord | null>(null)
   const [draftKey, setDraftKey] = useState(0)
+  const [listFilter, setListFilter] = useState<TaskListFilter>('all')
   const editorRef = useRef<OpportunityEditorHandle>(null)
 
   useEffect(() => {
+    const next = new URLSearchParams(params)
+    let changed = false
     if (params.get('new') === '1') {
       setDraftOpen(true)
       setSelectedId(null)
-      const next = new URLSearchParams(params)
       next.delete('new')
-      setParams(next, { replace: true })
+      changed = true
     }
+    const select = params.get('select')
+    if (select) {
+      setDraftOpen(false)
+      setSelectedId(select)
+      next.delete('select')
+      changed = true
+    }
+    if (changed) setParams(next, { replace: true })
   }, [params, setParams])
 
   const activeTasks = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return tasks.filter((task) => {
+    const rows = tasks.filter((task) => {
       if (!isActiveListTask(task)) return false
+      if (listFilter === 'overdue' && !isOverdueUnfinishedTask(task)) return false
+      if (listFilter === 'on-track' && !isOnTrackTask(task)) return false
       if (!q) return true
       const entity = opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? ''
       return `${task.action} ${task.projectName} ${task.owner} ${entity}`.toLowerCase().includes(q)
     })
-  }, [tasks, search, opportunities])
+    return sortVisibleTasks(rows)
+  }, [tasks, search, opportunities, listFilter])
 
   const historyTasks = useMemo(
     () => tasks.filter((task) => isHistoryTask(task)),
@@ -136,6 +157,29 @@ export function TasksPage() {
         </div>
       </header>
 
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-canvas px-6 py-3 lg:px-8">
+        {(
+          [
+            ['all', 'All Tasks'],
+            ['overdue', 'Overdue'],
+            ['on-track', 'On Track'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setListFilter(id)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+              listFilter === id
+                ? 'border-navy-900 bg-navy-900 text-white'
+                : 'border-border bg-surface text-ink-muted'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div
         className={
           editorOpen
@@ -175,6 +219,7 @@ export function TasksPage() {
                 const active = !draftOpen && selected?.id === task.id
                 const entity =
                   opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? '—'
+                const overdue = isOverdueUnfinishedTask(task)
                 return (
                   <tr
                     key={task.id}
@@ -192,7 +237,20 @@ export function TasksPage() {
                         {task.priority}
                       </span>
                     </td>
-                    <td className="truncate px-3 py-3.5 font-medium">{task.action}</td>
+                    <td className="px-3 py-3.5 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate">{task.action}</span>
+                        {overdue && (
+                          <WarningTriangle
+                            warning={{
+                              level: 'red',
+                              reason: 'Next action overdue',
+                              detail: `${task.action} is overdue`,
+                            }}
+                          />
+                        )}
+                      </span>
+                    </td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{task.projectName || '—'}</td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{entity}</td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{task.owner || '—'}</td>

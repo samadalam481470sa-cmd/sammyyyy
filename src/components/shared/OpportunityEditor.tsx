@@ -28,6 +28,8 @@ import {
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { savedMessageLabel, saveButtonLabel } from '@/lib/persistenceMode'
+import { useData } from '@/data/DataContext'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 export type { OpportunityEditorHandle }
 
@@ -35,6 +37,7 @@ interface OpportunityEditorProps {
   opportunity: Opportunity
   onSave: (patch: OpportunityUpdate) => Promise<void>
   onClose?: () => void
+  onDeleted?: () => void
   tabs?: Array<{ id: string; label: string }>
 }
 
@@ -46,7 +49,7 @@ const DEFAULT_TABS = [
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
-  function OpportunityEditor({ opportunity, onSave, onClose, tabs = DEFAULT_TABS }, ref) {
+  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS }, ref) {
     const [tab, setTab] = useState(tabs[0]?.id ?? 'overview')
     const [saved, setSaved] = useState(() => snapshotOpportunityDraft(opportunity))
     const [draft, setDraft] = useState<OpportunityDraft>(() => snapshotOpportunityDraft(opportunity))
@@ -55,8 +58,16 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const [message, setMessage] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
+    const { tasks, documents, deleteOpportunity } = useData()
+    const deletingRef = useRef(false)
 
     const dirty = !opportunityDraftsEqual(saved, draft)
+    const linkedTaskCount = tasks.filter(
+      (task) => task.opportunityId === opportunity.id && !task.deletedAt,
+    ).length
+    const linkedDocCount = documents.filter((doc) => doc.opportunityId === opportunity.id).length
     const guard = useEditorGuard()
 
     useEffect(() => {
@@ -375,8 +386,8 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
             <>
               {opportunity.nextActionTaskId && tab === 'overview' && (
                 <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink-muted">
-                  Next action is currently driven by the most urgent unfinished linked task. Manual
-                  edits are kept if that task is completed or removed.
+                  Next Action is linked to an unfinished task. Saving Next Action, date, or priority
+                  also updates that task so the value is not overwritten.
                 </p>
               )}
               <Field label="Next action">
@@ -416,11 +427,19 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || deleting}
             onClick={() => void persist()}
             className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
           >
             {saveButtonLabel(saving)}
+          </button>
+          <button
+            type="button"
+            disabled={saving || deleting}
+            onClick={() => setConfirmDelete(true)}
+            className="mt-2 h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] disabled:opacity-60"
+          >
+            Delete Opportunity
           </button>
         </div>
 
@@ -432,6 +451,37 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           onSave={() => void handleDialogSave()}
           onDiscard={handleDialogDiscard}
           onCancel={handleDialogCancel}
+        />
+
+        <ConfirmDialog
+          open={confirmDelete}
+          title="Delete Opportunity?"
+          message={`Are you sure you want to delete this opportunity? This action may affect associated tasks, documents, and activity records.${
+            linkedTaskCount || linkedDocCount
+              ? ` ${linkedTaskCount} linked task${linkedTaskCount === 1 ? '' : 's'} will be unlinked (not deleted). ${linkedDocCount} document reference${linkedDocCount === 1 ? '' : 's'} will be removed from the CRM; external files are not deleted.`
+              : ''
+          }`}
+          confirmLabel="Delete Opportunity"
+          confirming={deleting}
+          onCancel={() => {
+            if (!deleting) setConfirmDelete(false)
+          }}
+          onConfirm={() => {
+            if (deletingRef.current) return
+            deletingRef.current = true
+            setDeleting(true)
+            void deleteOpportunity(opportunity.id)
+              .then(() => {
+                setConfirmDelete(false)
+                onDeleted?.()
+                onClose?.()
+              })
+              .catch((err) => {
+                deletingRef.current = false
+                setDeleting(false)
+                setError(err instanceof Error ? err.message : 'Delete failed')
+              })
+          }}
         />
 
         <style>{`

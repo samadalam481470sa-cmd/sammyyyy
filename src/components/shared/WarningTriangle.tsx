@@ -8,7 +8,7 @@ interface WarningTriangleProps {
 
 export function WarningTriangle({ warning, className = '' }: WarningTriangleProps) {
   if (!warning) return null
-  const color = warning.level === 'red' ? 'text-[var(--color-danger)]' : 'text-warning'
+  const color = warning.level === 'red' ? 'text-[var(--color-danger)]' : 'text-navy-900'
   return (
     <span
       className={`inline-flex shrink-0 ${color} ${className}`}

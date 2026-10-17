@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Filter, Plus, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
 import {
@@ -18,6 +19,7 @@ type StatusChip = 'All' | OpportunityStatus
 
 export function OpportunitiesPage() {
   const { opportunities, tasks, users, loading, saveOpportunity } = useData()
+  const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusChip>('All')
   const [stageFilter, setStageFilter] = useState<AcquisitionStage | ''>('')
@@ -27,6 +29,20 @@ export function OpportunitiesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const attention = params.get('attention') === '1'
+    const select = params.get('select')
+    if (attention) setNeedsAttentionOnly(true)
+    if (select) setSelectedId(select)
+    if (select) {
+      const next = new URLSearchParams(params)
+      next.delete('select')
+      setParams(next, { replace: true })
+    }
+    // Apply inbound query once on mount / URL change; keep attention=1 visible.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.get('attention'), params.get('select')])
 
   const dealOwners = useMemo(() => {
     const names = new Set<string>()
@@ -153,6 +169,11 @@ export function OpportunitiesPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {needsAttentionOnly && (
+            <span className="rounded-full border border-attention bg-attention-bg px-3 py-1.5 text-xs font-semibold text-attention">
+              Needs Attention
+            </span>
+          )}
           <div ref={filterRef} className="relative">
             <button
               type="button"
@@ -198,7 +219,15 @@ export function OpportunitiesPage() {
                   <input
                     type="checkbox"
                     checked={needsAttentionOnly}
-                    onChange={(e) => setNeedsAttentionOnly(e.target.checked)}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setNeedsAttentionOnly(checked)
+                      if (!checked && params.get('attention') === '1') {
+                        const next = new URLSearchParams(params)
+                        next.delete('attention')
+                        setParams(next, { replace: true })
+                      }
+                    }}
                   />
                   Needs Attention
                 </label>
@@ -209,6 +238,11 @@ export function OpportunitiesPage() {
                     setStageFilter('')
                     setOwnerFilter('')
                     setNeedsAttentionOnly(false)
+                    if (params.get('attention') === '1') {
+                      const next = new URLSearchParams(params)
+                      next.delete('attention')
+                      setParams(next, { replace: true })
+                    }
                   }}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -307,6 +341,7 @@ export function OpportunitiesPage() {
               ref={editorRef}
               opportunity={selected}
               onClose={closeEditor}
+              onDeleted={closeEditor}
               onSave={(patch) => saveOpportunity(selected.id, patch).then(() => undefined)}
             />
           </aside>

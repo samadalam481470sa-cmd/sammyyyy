@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Filter, Search, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
 import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
@@ -14,13 +15,28 @@ import type { AcquisitionStage, OpportunityStatus } from '@/types'
 
 export function DocumentsPage() {
   const { opportunities, documents, loading } = useData()
+  const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectDocId, setSelectDocId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | ''>('')
   const [stageFilter, setStageFilter] = useState<AcquisitionStage | ''>('')
   const [filterOpen, setFilterOpen] = useState(false)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const select = params.get('select')
+    const doc = params.get('doc')
+    if (select) {
+      setSelectedId(select)
+      setSelectDocId(doc)
+      const next = new URLSearchParams(params)
+      next.delete('select')
+      next.delete('doc')
+      setParams(next, { replace: true })
+    }
+  }, [params, setParams])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -176,7 +192,11 @@ export function DocumentsPage() {
             <DocumentWorkspace
               ref={editorRef}
               opportunity={selected}
-              onClose={() => setSelectedId(null)}
+              initialDocumentId={selectDocId}
+              onClose={() => {
+                setSelectedId(null)
+                setSelectDocId(null)
+              }}
             />
           </aside>
         )}
