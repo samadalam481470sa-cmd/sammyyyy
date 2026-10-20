@@ -1,46 +1,90 @@
-# Fraud & failure testing — TheNetTicket (`test.ticket.thenetvr.com`)
+# TheNetTicket — fraud, email & void findings
 
-**Date:** 2026-10-20  
-**Environment:** `https://test.ticket.thenetvr.com` (Clerk `pk_test_…`, health OK)  
-**Blocked for live card buys:** no public event on test; seller signup blocked by Cloudflare Turnstile; no Stripe dashboard / venue credentials in this agent.  
-**What was done instead:** reverse-engineered the deployed buyer, wallet, seller-orders, and gate-scanner bundles; probed `/api/webhooks/stripe`.
+**Sources:** full GitHub read of email / payment / refund / fraud / gate-scan paths, schema, tests, SES infra, and design docs (2026-10-20); corroborated against the deployed bundles on `test.ticket.thenetvr.com` and `ticket.thenetvr.com`.  
+**Nothing in the app source was modified.** Live Stripe card tests on test remain blocked from this workspace (no test event + Turnstile on seller signup).
 
 ---
 
-## Combined results (paragraph)
+## Short answers
 
-On `test.ticket.thenetvr.com` the live purchase matrix (SES bounce addresses, Stripe Dashboard refunds, Radar/dispute cards, offline gate scans of voided QRs) could not be executed end-to-end because there is no public on-sale event and seller signup is blocked by Turnstile, but the shipped client code already shows how the system behaves and where David’s risks land. Tickets are delivered by email and also via a wallet page at `/tickets/{accessToken}` that polls while the order is `pending` (up to ~60s) waiting for the Stripe webhook to issue them, so a failed email alone does not necessarily leave a paid buyer with nothing if they still have the wallet link from checkout; the seller orders UI also surfaces `buyerEmailed: false` after an in-app refund and offers “Copy ticket link,” which implies email failure is partially visible to staff but there is no dedicated “email bounced / resend ticket” control in the buyer-facing wallet chunk we inspected. In-app refunds go through `POST /api/seller/orders/:id/refund`, which the UI treats as voiding QR codes, putting capacity back on sale, retaining the platform fee by default (`platformFeeRefunded` false → “retained”), and showing the buyer wallet status as `refunded` (“Refunded — no longer valid”) or otherwise void; online gate check-in has an explicit `refunded` verdict (“Refunded — do not admit”). Offline, however, the scanner only verifies the Ed25519 signature against cached keys and then checks whether the ticket id is in `unavailableTicketIds` from the last `/api/scanner/bundle` sync—if a refund happened after that sync, a still-valid signature with an id not on that list is admitted as `valid`, with the refund only surfacing as `already_used` once the device has re-synced; that matches the README risk that a voided ticket can still get through an offline gate. Stripe Dashboard refunds and fraud disputes were not observable live; the only refund path wired in the seller UI is the app’s own refund endpoint, and `/api/webhooks/stripe` exists and enforces signature verification but does not expose which event types it handles from the outside—so if the README’s gap is real (no `charge.refunded` / `charge.dispute.created` / `radar.early_fraud_warning.created`), a Dashboard refund or bank dispute would leave tickets scannable until someone refunds inside the app or the scanner bundle is refreshed with those ids marked unavailable. Declined/blocked cards and SES bounce purchases remain unverified pending a throwaway free or paid test event plus Stripe test-mode access.
-
----
-
-## Expectation vs evidence table
-
-| Test | Expected | Actual (this run) | Pass/Fail |
-| --- | --- | --- | --- |
-| 0 — Webhook handles Dashboard refunds/disputes | Handler voids on `charge.refunded` / dispute | Source repo not readable; client has **no** Dashboard-refund sync—only `POST …/refund`. Webhook route exists, signature-checked. | **Inconclusive / likely gap** (needs source or live Dashboard refund) |
-| 1 — Email bounce / typo | Seller sees failure; resend or wallet works; capacity correct | **Not run** (no event). Code: wallet `/tickets/:token` + pending poll; seller toast if `buyerEmailed` false; no buyer “resend” found. | **Blocked** |
-| 2 — In-app refund | Void in UI + wallet; capacity restored; fee kept; online scan rejects | Code confirms void UI, fee retained, wallet `refunded`, online verdict `refunded`. Live buy/refund **not run**. | **Code PASS / live blocked** |
-| 3 — Stripe Dashboard refund | App voids ticket; scan rejects | **Not run.** No client path polls Stripe refunds. | **Likely FAIL if webhook omits `charge.refunded`** |
-| 4 — Fraud cards 0259 / 0019 / 0002 | Dispute voids or flags; block/decline issue nothing | **Not run** (needs Checkout). | **Blocked** |
-| 5 — Offline scan of refunded QR | Reject, or conflict on sync | Code: offline admits if signature OK and id ∉ `unavailableTicketIds` from last sync → **can admit voided ticket**. | **Code FAIL (design gap)** |
+| Question | Answer |
+| --- | --- |
+| Buyer never gets the ticket email | Tickets are still **valid**. The app does **not** record that email failed. No resend. No buyer self-service lookup by email. |
+| Refund inside the app | **Yes — voided.** Status set to `refunded` before Stripe is called; online scan rejects; wallet hides QR. Covered by integration tests. |
+| Refund or fraud dispute in Stripe | **No.** Webhook ignores those events. Ticket stays valid and can still open the gate. |
 
 ---
 
-## Strongest code findings (for David)
+## Combined results
 
-1. **Offline void gap (confirmed in shipped scanner JS):** after signature verify, only `unavailableTicketIds.includes(ticketId)` blocks; otherwise `Valid — admit`. Refunded tickets are labeled “used or refunded **when this device last synced**.”
-2. **In-app refund path is complete in the UI:** voids QR, restores capacity, retains $1.50 fee, emails buyer when possible, wallet shows “Refunded — no longer valid.”
-3. **Alternate delivery exists:** checkout can land on `walletUrl`; `/tickets/{accessToken}` is the recovery path if email fails—but only if the buyer has that link.
-4. **Dashboard/Stripe-side refund → app void is the unverified (and highest-priority) live test** once a test event exists.
+Payment is confirmed by the Stripe webhook, which marks the order paid, creates tickets, then sends email (`server/api/webhooks/stripe.post.ts`); if that send fails, the failure is only logged—the order still counts as success—and because `orders` has no “email sent” column (`server/database/schema.ts`) the seller dashboard cannot show who never received tickets. SES bounces surface only as a CloudWatch rate (alarm at 5/hour in `infra/modules/app/ses.tf`), so a single typo address never alarms, and any bounced or complained address is permanently suppressed (`infra/stacks/network/ses.tf`) while the app still believes mail went out. There is no resend (handoff.md items 12/14, notes.md §7); staff must copy the ticket link from Orders (`app/pages/dashboard/orders.vue`), and buyers who leave the Stripe success page have no email-based recovery—only `/tickets/{accessToken}` if they still have that URL. Worse, `confirmOrderPaid` splits “mark paid” from “create tickets,” so a retry after a partial failure can treat the order as already processed and skip email entirely, and if the webhook records Stripe’s event id then times out without throwing, Stripe’s retry is dropped as a duplicate while the order stays `pending` until the hold expires—buyer paid, no ticket—while the wallet only polls every 3s for 20 tries and never asks Stripe directly (`app/pages/tickets/[accessToken].vue`). On voids: an in-app refund sets tickets to `refunded` before calling Stripe and rolls status back if Stripe fails (`server/services/refunds.ts`), so online check-in returns “Refunded — do not admit” (`server/services/checkin.ts`), the wallet hides the QR, and `test/integration/checkin-and-refunds.test.ts` covers that path. Refunds and fraud disputes made in the Stripe dashboard never reach the app: the webhook handles six event types and `default: return`s everything else as “informational for the MVP,” including `charge.refunded`, and the codebase never mentions “dispute,” so chargebacks leave tickets valid even though `app/pages/legal/refunds.vue` claims a disputed charge cancels the ticket while the dispute is open. When an in-app refund fails, the API tells staff to refund in Stripe (`server/api/seller/orders/[id]/refund.post.ts`)—sending them into that gap—and afterward the order still shows Paid, so Refund in the app is rejected by Stripe and the code restores tickets to valid, with no manual Void button. The Orders UI never sends the API’s “fraudulent” reason (empty body). Offline (and after a 1.5s online timeout fallback), the gate only verifies the signature and checks `unavailableTicketIds` from the last `/api/scanner/bundle` load (`app/composables/useGateScanner.ts`); a ticket refunded after that sync still has a valid signature and is admitted as “Valid — admit,” and when that scan later syncs the server records `refunded` but only treats `already_used` as a conflict (`server/api/checkin/sync.post.ts`), so the operator is not warned.
 
 ---
 
-## Unblock to finish Tests 1–5 live
+## Evidence map (files)
 
-Provide any one of:
+### Email path
+- `server/api/webhooks/stripe.post.ts` — pay → create tickets → send email; failures logged only
+- `server/services/orders.ts` (`confirmOrderPaid`) — paid mark vs ticket create vs email; retry / duplicate-event hazards
+- `server/database/schema.ts` — no email-delivery field on orders
+- `infra/modules/app/ses.tf` / `infra/stacks/network/ses.tf` — bounce alarm threshold; suppression list
+- `app/pages/tickets/[accessToken].vue` — pending poll 3s × 20, then stops
+- `app/pages/dashboard/orders.vue` — copy link only; no resend
+- `handoff.md` (12, 14), `notes.md` §7 — resend called out as unbuilt
 
-- Seller login on **test** (or disable Turnstile for a test user), or  
-- A public test event path `/venue/…/…` with free tickets + Stripe test mode, or  
-- Read access to the TheNetTicket GitHub repo (`server/api/webhooks/**`, `handoff.md`, `notes.md` §4)
+### In-app refund (works)
+- `server/services/refunds.ts` — status `refunded` before Stripe; restore on Stripe failure
+- `server/services/checkin.ts` — online “Refunded — do not admit”
+- `test/integration/checkin-and-refunds.test.ts` — covered
 
-Then re-run Dashboard refund + dispute card + offline scan immediately.
+### Stripe-side refund / fraud (broken)
+- `server/api/webhooks/stripe.post.ts` — six event types; `default: return` for the rest (incl. `charge.refunded`)
+- No `dispute` / fraud handlers anywhere in repo search
+- `app/pages/legal/refunds.vue` — promises dispute cancellation; code does not
+- `server/api/seller/orders/[id]/refund.post.ts` — on failure, directs staff to Stripe Dashboard
+- Orders UI posts `{}` — never sends `fraudulent` reason
+
+### Offline / slow-network gate
+- `app/composables/useGateScanner.ts` + `server/api/scanner/bundle.get.ts` — void list only at load
+- Offline: valid signature + id not in `unavailableTicketIds` → admit
+- Online: 1.5s timeout then same offline path
+- `server/api/checkin/sync.post.ts` — synced `refunded` scan not counted as operator conflict
+
+### Deployed corroboration (this workspace)
+- Test/prod scanner chunks: `unavailableTicketIds` → else `Valid — admit`; detail text “when this device last synced”
+- Seller orders chunk: `POST /api/seller/orders/:id/refund`, fee retained by default, `buyerEmailed` toast
+- Wallet chunk: `refunded` → “Refunded — no longer valid”
+- `POST /api/webhooks/stripe` on test: exists, signature-verified (event-type list not exposed without source)
+
+---
+
+## Live tests still to run (test only)
+
+Prod has real money — use `test.ticket.thenetvr.com` + Stripe test mode only.
+
+1. Buy with `bounce@simulator.amazonses.com` — any dashboard warning? Close success page; can buyer recover tickets?
+2. Buy with `4242…4242`, refund in **Stripe Dashboard**, scan + open wallet; then click Refund in the app and record the restore-to-valid behavior.
+3. Buy with `4000 0000 0000 0259` (auto dispute) — scan afterward.
+4. Load event on `/scan`, refund in-app, airplane mode, scan; reconnect — is there a conflict?
+
+---
+
+## Fixes to suggest
+
+1. **Webhook:** handle `charge.refunded` and `charge.dispute.created` (and ideally `radar.early_fraud_warning.created`); void matching tickets the same way in-app refunds do. Align legal refunds copy with reality until shipped.
+2. **Manual void:** add a “Void ticket” / “Void order” action that does **not** call Stripe (needed after Dashboard refunds and for fraud).
+3. **Email delivery:** persist send/bounce/complaint state on the order (or outbox table); seller “Resend tickets”; optional buyer lookup-by-email with strict rate limits.
+4. **Gate scanner:** while online, refresh `unavailableTicketIds` on an interval; treat a synced offline scan of a `refunded` ticket as a **conflict** the operator must see—not only `already_used`.
+
+---
+
+## Priority for November / December events
+
+| Priority | Item | Why |
+| --- | --- | --- |
+| P0 | Stripe `charge.refunded` + `charge.dispute.created` → void | Live money path; policy page already promises dispute cancel |
+| P0 | Manual void without Stripe | Unblocks staff after Dashboard refund / failed in-app refund |
+| P1 | Offline scanner refresh + conflict on refunded sync | Door can admit voided QR today |
+| P1 | Email sent/failed flag + resend | Paid buyers with typo/bounce emails |
+| P2 | Webhook timeout / duplicate-event hardening in `confirmOrderPaid` | Paid-but-pending / skipped-email races |
+| P2 | Fix legal copy or implement it | Avoid promising dispute cancel before code does |
