@@ -1,0 +1,183 @@
+{
+  "checks": [
+    {
+      "label": "signin-dashboard",
+      "url": "https://ticket.thenetvr.com/sign-in?redirect=/dashboard",
+      "props": null,
+      "appUrl": null,
+      "scanSsr": null,
+      "errors": [],
+      "pathInPayload": "\":-1,\"organization\":-1},\"session_token\",null,[],[\"Set\"],[\"ShallowReactive\",16],{},\"\\u002Fsign-in?redirect=%2Fdashboard\"]",
+      "clerkProbe": {
+        "href": "https://ticket.thenetvr.com/sign-in?redirect=/dashboard",
+        "hasClerk": true,
+        "clerkLoaded": true,
+        "clerkVersion": "6.39.0",
+        "publishableKey": "pk_live_Y2xlcmsudGlja2V0",
+        "hasEvilInDom": false,
+        "hasLocalhostAppUrl": true
+      },
+      "vueProps": [],
+      "shot": "/opt/cursor/artifacts/signin-audit/signin-dashboard.png"
+    },
+    {
+      "label": "signin-evil-https",
+      "url": "https://ticket.thenetvr.com/sign-in?redirect=https%3A%2F%2Fevil.example%2Fphish",
+      "props": null,
+      "appUrl": null,
+      "scanSsr": null,
+      "errors": [],
+      "pathInPayload": "-1},\"session_token\",null,[],[\"Set\"],[\"ShallowReactive\",16],{},\"\\u002Fsign-in?redirect=https:%2F%2Fevil.example%2Fphish\"]",
+      "clerkProbe": {
+        "href": "https://ticket.thenetvr.com/sign-in?redirect=https://evil.example/phish",
+        "hasClerk": true,
+        "clerkLoaded": true,
+        "clerkVersion": "6.39.0",
+        "publishableKey": "pk_live_Y2xlcmsudGlja2V0",
+        "hasEvilInDom": true,
+        "hasLocalhostAppUrl": true
+      },
+      "vueProps": [],
+      "shot": "/opt/cursor/artifacts/signin-audit/signin-evil-https.png"
+    },
+    {
+      "label": "signin-evil-protocol",
+      "url": "https://ticket.thenetvr.com/sign-in?redirect=%2F%2Fevil.example%2Fphish",
+      "props": null,
+      "appUrl": null,
+      "scanSsr": null,
+      "errors": [],
+      "pathInPayload": "tion\":-1},\"session_token\",null,[],[\"Set\"],[\"ShallowReactive\",16],{},\"\\u002Fsign-in?redirect=%2F%2Fevil.example%2Fphish\"]",
+      "clerkProbe": {
+        "href": "https://ticket.thenetvr.com/sign-in?redirect=//evil.example/phish",
+        "hasClerk": true,
+        "clerkLoaded": true,
+        "clerkVersion": "6.39.0",
+        "publishableKey": "pk_live_Y2xlcmsudGlja2V0",
+        "hasEvilInDom": true,
+        "hasLocalhostAppUrl": true
+      },
+      "vueProps": [],
+      "shot": "/opt/cursor/artifacts/signin-audit/signin-evil-protocol.png"
+    },
+    {
+      "label": "signup-evil",
+      "url": "https://ticket.thenetvr.com/sign-up?redirect=https%3A%2F%2Fevil.example%2Fphish",
+      "props": null,
+      "appUrl": null,
+      "scanSsr": null,
+      "errors": [],
+      "pathInPayload": "-1},\"session_token\",null,[],[\"Set\"],[\"ShallowReactive\",16],{},\"\\u002Fsign-up?redirect=https:%2F%2Fevil.example%2Fphish\"]",
+      "clerkProbe": {
+        "href": "https://ticket.thenetvr.com/sign-up?redirect=https://evil.example/phish",
+        "hasClerk": true,
+        "clerkLoaded": true,
+        "clerkVersion": "6.39.0",
+        "publishableKey": "pk_live_Y2xlcmsudGlja2V0",
+        "hasEvilInDom": true,
+        "hasLocalhostAppUrl": true
+      },
+      "vueProps": [],
+      "shot": "/opt/cursor/artifacts/signin-audit/signup-evil.png"
+    }
+  ],
+  "console": [
+    {
+      "type": "warning",
+      "text": "Clerk: Redirect URL https://evil.example/phish is not on one of the allowedRedirectOrigins, falling back to the default redirect URL."
+    },
+    {
+      "type": "warning",
+      "text": "Clerk: Redirect URL https://evil.example/phish is not on one of the allowedRedirectOrigins, falling back to the default redirect URL."
+    },
+    {
+      "type": "warning",
+      "text": "Clerk: Redirect URL https://evil.example/phish is not on one of the allowedRedirectOrigins, falling back to the default redirect URL."
+    },
+    {
+      "type": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 ()"
+    }
+  ],
+  "requests": [
+    "https://ticket.thenetvr.com/sign-in?redirect=/dashboard",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6.39.0/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/v1/environment?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/v1/client?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/framework_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/vendors_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui-common_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/7181_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signup_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/8746_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signin_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/subscriptionDetails_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/3736_ui_96623b_1.40.0.js",
+    "https://img.clerk.com/static/google.svg",
+    "https://ticket.thenetvr.com/sign-in?redirect=https%3A%2F%2Fevil.example%2Fphish",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6.39.0/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/v1/environment?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/v1/client?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/framework_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/vendors_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui-common_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/7181_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signup_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/8746_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signin_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/subscriptionDetails_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/3736_ui_96623b_1.40.0.js",
+    "https://img.clerk.com/static/google.svg",
+    "https://ticket.thenetvr.com/sign-in?redirect=%2F%2Fevil.example%2Fphish",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6.39.0/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/v1/environment?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/v1/client?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/framework_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/vendors_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui-common_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/7181_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signup_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/8746_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signin_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/subscriptionDetails_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/3736_ui_96623b_1.40.0.js",
+    "https://img.clerk.com/static/google.svg",
+    "https://ticket.thenetvr.com/sign-up?redirect=https%3A%2F%2Fevil.example%2Fphish",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6.39.0/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/v1/environment?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/v1/client?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/framework_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/vendors_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui-common_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/7181_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/signup_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/subscriptionDetails_ui_96623b_1.40.0.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/3736_ui_96623b_1.40.0.js",
+    "https://img.clerk.com/static/google.svg",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/clerk-js@6.39.0/dist/clerk.browser.js",
+    "https://clerk.ticket.thenetvr.com/npm/@clerk/ui@1.40.0/dist/ui.browser.js",
+    "https://clerk.ticket.thenetvr.com/v1/environment?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0",
+    "https://clerk.ticket.thenetvr.com/v1/client?__clerk_api_version=2026-05-12&_clerk_js_version=6.39.0"
+  ],
+  "scan": {
+    "url": "https://ticket.thenetvr.com/scan",
+    "title": "Gate scanner · TheNetTicket",
+    "bodyText": "Gate scanner\n\ngate-68863415\n\nOnline\nSet up this gate\n\nPick the event while you still have signal. The scanner caches the verification keys so it keeps working if the network drops.\n\nChoose an event\nCache event for offline scanning",
+    "redirectedToSignIn": false,
+    "ssrFalse": true
+  }
+}

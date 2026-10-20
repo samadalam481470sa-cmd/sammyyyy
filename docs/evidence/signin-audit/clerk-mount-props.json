@@ -1,0 +1,15 @@
+{
+  "url": "https://ticket.thenetvr.com/sign-in?redirect=https%3A%2F%2Fevil.example%2Fsteal-session",
+  "audit": [
+    {
+      "when": "mountSignIn",
+      "props": {
+        "path": "/sign-in",
+        "fallbackRedirectUrl": "https://evil.example/steal-session",
+        "signUpFallbackRedirectUrl": "https://evil.example/steal-session",
+        "signUpUrl": "/sign-up",
+        "routing": "path"
+      }
+    }
+  ]
+}
