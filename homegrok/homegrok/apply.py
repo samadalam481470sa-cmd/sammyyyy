@@ -21,22 +21,24 @@ import time
 from .profile import current_resume, current_resume_info
 
 # Your answers (you can change any of them in workspace/config.json -> "apply_answers").
-# The contact fields below are placeholders. Put your own street address, city, ZIP, phone,
-# and email here before you apply. Do not commit real personal details.
+# Every value below is a placeholder. Put your own name, address, phone, email, school,
+# GPA, employers, and other details here before you apply. Do not commit real personal details.
 DEFAULT_ANSWERS = {
-    "degree": "Bachelor's Degree",
-    "school": ["The University of Texas at Dallas", "University of Texas at Dallas", "UT Dallas"],
-    "start_date": "ASAP",
-    "country": ["United States", "United States of America", "USA"],
-    "street": "YOUR_STREET_ADDRESS", "address_city": "YOUR_CITY", "state": ["Texas", "TX"], "zip": "YOUR_ZIP",
+    "degree": "YOUR_DEGREE",
+    "school": ["YOUR_SCHOOL"],
+    "start_date": "YOUR_START_DATE",
+    "country": ["YOUR_COUNTRY"],
+    "street": "YOUR_STREET_ADDRESS", "address_city": "YOUR_CITY", "state": ["YOUR_STATE", "YOUR_STATE_ABBR"], "zip": "YOUR_ZIP",
     "phone": "YOUR_PHONE", "email": "you@example.com",
-    "current_city": ["YOUR_CITY, Texas", "Dallas, Texas", "YOUR_CITY, TX", "Dallas, TX"],
-    "school_start_month": "August", "school_start_year": "2022",
-    "gpa": "3.9", "race": ["Asian", "White"], "veteran": "not a protected veteran", "hispanic": "No",
-    "citizen": "Yes", "authorized": "Yes", "sponsorship": "No", "heard": "LinkedIn",
-    "work_authorization_needed": "No",
-    "gender": "Male",   # you're a US citizen: no work authorization needed
-    "criminal_record": "No",             # never convicted of a felony or crime: the default for every application
+    "current_city": ["YOUR_CITY, YOUR_STATE", "YOUR_CITY, YOUR_STATE_ABBR"],
+    "school_start_month": "YOUR_START_MONTH", "school_start_year": "YOUR_START_YEAR",
+    "grad_month": "YOUR_GRAD_MONTH", "grad_year": "YOUR_GRAD_YEAR",
+    "gpa": "YOUR_GPA", "race": ["YOUR_RACE"], "veteran": "YOUR_VETERAN_STATUS", "hispanic": "YOUR_HISPANIC_LATINO",
+    "citizen": "YOUR_ANSWER", "authorized": "YOUR_ANSWER", "sponsorship": "YOUR_ANSWER", "heard": "YOUR_REFERRAL_SOURCE",
+    "work_authorization_needed": "YOUR_ANSWER",
+    "gender": "YOUR_GENDER",
+    "criminal_record": "YOUR_ANSWER",
+    "salary_expectation": "YOUR_SALARY", "salary_digits": "YOUR_SALARY_MIN", "salary_end": "YOUR_SALARY_MAX",
     "custom": {},   # question -> answer, from what you answer on the HomeGrok page
 }
 
@@ -131,10 +133,10 @@ def profile_from_resume(text):
 # Facts that are always true for you. Any yes/no answer to these questions, from any source
 # (saved answers, Claude, past applications), is corrected to match.
 FACT_GUARDS = [
-    (re.compile(r"convicted|felony|criminal (?:offen|conviction|record|history)|legal proceeding", re.I), "No"),
-    (re.compile(r"sponsor|visa|h-?1b|immigration", re.I), "No"),
-    (re.compile(r"authori[sz]|legally (?:able|eligible|permitted)|eligible to work|right to work", re.I), "Yes"),
-    (re.compile(r"\bu\.?s\.? citizen|are you a citizen", re.I), "Yes"),
+    (re.compile(r"convicted|felony|criminal (?:offen|conviction|record|history)|legal proceeding", re.I), "YOUR_ANSWER"),
+    (re.compile(r"sponsor|visa|h-?1b|immigration", re.I), "YOUR_ANSWER"),
+    (re.compile(r"authori[sz]|legally (?:able|eligible|permitted)|eligible to work|right to work", re.I), "YOUR_ANSWER"),
+    (re.compile(r"\bu\.?s\.? citizen|are you a citizen", re.I), "YOUR_ANSWER"),
 ]
 
 
@@ -167,7 +169,10 @@ def check_fact(question, value, a):
             continue
         if kind == "number":
             nums = re.findall(r"\d+(?:\.\d+)?", value)
-            if nums and float(nums[0]) != float(str(truth)):
+            truth_nums = re.findall(r"\d+(?:\.\d+)?", str(truth))
+            if nums and not truth_nums:
+                return str(truth)
+            if nums and truth_nums and float(nums[0]) != float(truth_nums[0]):
                 return str(truth)
         elif kind == "digits":
             digits = re.sub(r"\D", "", value)
@@ -216,10 +221,11 @@ def _answer_for(field, p, a):
         (r"linkedin", p.get("linkedin")),
         (r"\bgpa\b|grade point", a["gpa"]), (r"school|university|college|institution", a["school"]),
         (r"discipline|major|field of study|area of study", p.get("major")), (r"\bdegree\b", a["degree"]),
-        (r"end date month|graduation month", p.get("grad_month") or "August"),
-        (r"end date year|graduation year", p.get("grad_year") or "2026"),
+        (r"end date month|graduation month", p.get("grad_month") or a.get("grad_month") or "YOUR_GRAD_MONTH"),
+        (r"end date year|graduation year", p.get("grad_year") or a.get("grad_year") or "YOUR_GRAD_YEAR"),
         (r"start date month|start month", a["school_start_month"]), (r"start date year|start year", a["school_start_year"]),
-        (r"graduat", p.get("graduation")), (r"\bgender\b|\bsex\b", a.get("gender", "Male")), (r"hispanic|latin", a["hispanic"]), (r"\brace\b|ethnicity", a["race"]),
+        (r"graduat", p.get("graduation") or f"{a.get('grad_month', 'YOUR_GRAD_MONTH')} {a.get('grad_year', 'YOUR_GRAD_YEAR')}"),
+        (r"\bgender\b|\bsex\b", a.get("gender", "YOUR_GENDER")), (r"hispanic|latin", a["hispanic"]), (r"\brace\b|ethnicity", a["race"]),
         (r"veteran", a["veteran"]),
         (r"how did you (?:hear|find|learn)|hear about (?:us|this)|where did you (?:hear|find|see)|brought you to (?:this|the) (?:job|posting|role)", a["heard"]),
         # "Do you currently have any work or employment authorization...?" is about needing one: a US citizen doesn't
@@ -227,11 +233,11 @@ def _answer_for(field, p, a):
         (r"convicted|felony|criminal (?:offen|conviction|record|history)|legal proceeding|jail|prison|incarcerat", a.get("criminal_record", "No")),
         # Salary ranges: the beginning gets the number in digits (forms reject "$" and commas); the end is yours to pick.
         (r"(?:beginning|minimum|lowest|from).{0,60}(?:salary|pay|compensation)|(?:salary|pay|compensation).{0,60}(?:beginning|minimum|lowest)",
-         a.get("salary_digits", "70000")),
-        # "Anything over 70000": the end of the range has no ceiling. The form needs a number, so 999999 stands for that.
+         a.get("salary_digits", "YOUR_SALARY_MIN")),
+        # The high end of a pay range. Replace YOUR_SALARY_MAX with your own number; forms need digits.
         (r"(?:end|maximum|highest|upper|to).{0,60}(?:salary|pay|compensation)|(?:salary|pay|compensation).{0,60}(?:end|maximum|highest)",
-         a.get("salary_end", "999999")),
-        (r"salary|compensation|pay (?:expectation|range|rate)|desired pay|expected pay|hourly rate", a.get("salary_expectation", "")),
+         a.get("salary_end", "YOUR_SALARY_MAX")),
+        (r"salary|compensation|pay (?:expectation|range|rate)|desired pay|expected pay|hourly rate", a.get("salary_expectation", "YOUR_SALARY")),
         (r"authori[sz]ed|authori[sz]ation|legally (?:able|eligible|permitted)", a["authorized"]),
         (r"sponsor|visa", a["sponsorship"]),
         (r"citizen", a["citizen"]),
@@ -245,7 +251,7 @@ def _answer_for(field, p, a):
         (r"\bcity\b", a["address_city"]),
     ]
     # A long free-text question (a paragraph) only matches on its own words, never on a keyword buried in it:
-    # "gender" in "other than your ethnicity, gender..." must not answer "Male".
+    # A buried word such as "gender" inside a long prompt must not fill the gender answer.
     free_text = field.get("tag") == "textarea" or field.get("type") in ("text", "")
     for text in (field["own"], field["question"], field["label"]):
         text = text.lower()
@@ -274,7 +280,7 @@ def option_matches(option, value):
         if any(w in option for w in ("above", "higher", "more")) or "+" in option:
             return v >= nums[0]
         return len(nums) >= 2 and nums[0] <= v <= nums[1]
-    # Whole-option matches only: "No" must not match "Latino", and "Asian" must not match "East Asian".
+    # Whole-option matches only: "No" must not match "Not really", and a short word must not match a longer one.
     return option == value or bool(re.match(re.escape(value) + r"[\s,(/.\-]", option))
 
 
@@ -289,15 +295,15 @@ def choose(options, wanted):
 def search_terms(value):
     """What to type into a search-as-you-type list, most useful first.
 
-    Search boxes match single distinctive words far better than long phrases ("Dallas" finds
-    "University of Texas - Dallas"; the full phrase finds nothing), so those come first.
+    Search boxes match single distinctive words far better than long phrases ("City" finds
+    "Example University - City"; the full phrase finds nothing), so those come first.
     """
     terms = []
     for v in ([value] if isinstance(value, str) else value):
         v = re.sub(r"^The ", "", v)
         words = [w for w in re.findall(r"[A-Za-z0-9&']+", v) if w.lower().replace("'s", "") not in GENERIC]
         if words:
-            terms.append(words[-1])   # e.g. "Dallas"
+            terms.append(words[-1])   # e.g. "City"
         terms.append(v)
     return list(dict.fromkeys(t for t in terms if len(t) >= 3))[:4]
 
@@ -610,10 +616,10 @@ def application_url(url):
 
 
 # -- Claude answers the questions HomeGrok doesn't know --------------------------------------
-FACTS_TEXT = ("US citizen. Never needs visa sponsorship, now or in the future. Authorized to work in the US. "
-              "Education: The University of Texas at Dallas (UT Dallas, Richardson TX), Bachelor's degree, "
-              "started August 2022, graduated August 2026 (already graduated). GPA 3.9. Lives in YOUR_CITY, "
-              "YOUR_STATE. Available to start ASAP. Not a veteran. Check the resume before answering anything else.")
+FACTS_TEXT = ("Placeholders only — replace them in homegrok/apply.py DEFAULT_ANSWERS before applying. "
+              "School: YOUR_SCHOOL. Degree: YOUR_DEGREE. GPA: YOUR_GPA. "
+              "Started YOUR_START_MONTH YOUR_START_YEAR, graduated YOUR_GRAD_MONTH YOUR_GRAD_YEAR. "
+              "Lives in YOUR_CITY, YOUR_STATE. Check the resume before answering anything else.")
 AI_SCHEMA = {"type": "object", "required": ["answers"], "properties": {"answers": {"type": "array", "items": {
     "type": "object", "required": ["key", "answer", "ask_user", "remember"],
     "properties": {"key": {"type": "string"}, "answer": {"type": "string"},
@@ -1171,9 +1177,11 @@ def run(ws, url, log=print):
                     missing = [q for q in questions if q.get("searched") and SCHOOL_Q.search(q["question"])
                                and len(q.get("options") or []) >= 3]
                     if missing:
+                        school_names = merged.get("school") or ["YOUR_SCHOOL"]
+                        school_label = school_names[0] if isinstance(school_names, list) else school_names
                         record_skip(ws, e["url"], e["page"].title() if not e["page"].is_closed() else "",
-                                    "UT Dallas isn't in this employer's school list")
-                        log(f"Application filler: skipped {e['url']} (UT Dallas isn't in their school list)")
+                                    f"{school_label} isn't in this employer's school list")
+                        log(f"Application filler: skipped {e['url']} ({school_label} isn't in their school list)")
                         e["page"].close()
                         continue
                     # Questions nobody has answered yet go to Claude first (one batch at a time).

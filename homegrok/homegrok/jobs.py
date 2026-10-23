@@ -51,10 +51,9 @@ DEFAULT_PREFS = {
         "director": 8, "manager": 3, "hardware": 3, "mechanical": 4, "electrical": 3, "chemical": 4,
         "civil": 4, "nurse": 8, "physician": 8,
     },
-    "kinds": {"new_grad": 6, "internship": -4},   # you've graduated: full-time new-grad roles first
+    "kinds": {"new_grad": 6, "internship": -4},   # raise the kind you want; tune this for yourself
     "locations": {
-        "dallas": 4, "richardson": 4, "plano": 4, "irving": 4, "frisco": 3, "fort worth": 3, "addison": 3,
-        ", tx": 2, "texas": 2, "remote": 3, "austin": 1, "houston": 1,
+        "YOUR_CITY": 4, "remote": 3,
     },
 }
 

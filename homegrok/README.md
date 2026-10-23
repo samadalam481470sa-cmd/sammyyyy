@@ -1,6 +1,8 @@
+HomeGrok runs the AI trainer locally on your own machine/GPU — you can teach it anything.
+
 # HomeGrok
 
-Your own AI platform, running on your Mac. Claude is the brain (through your Claude subscription),
+Your own AI platform, running on your machine. Claude is the brain (through your Claude subscription),
 your files are its knowledge, and it keeps working in the background around the clock.
 
 Open **http://127.0.0.1:8000**. The page updates live; there is nothing to refresh, start or pause.
@@ -17,8 +19,9 @@ Open **http://127.0.0.1:8000**. The page updates live; there is nothing to refre
 - **Memory.** Claude reads new and changed files in your folders, plus what you tell it in chat, and
   keeps a memory note about you (school, skills, experience, preferences). Tell it your major, GPA,
   contact details and experience once, and every resume after that uses them.
-- **Its own model.** A small transformer (the second diagram) trains on your files on the Mac's GPU,
-  improving itself with a genetic algorithm. It answers when Claude can't, for example when your usage
+- **Its own model.** A small transformer (the second diagram) trains on your files locally. `./hg learn`,
+  `train`, `evolve`, and `pipeline` use a GPU when Apple Metal or CUDA is available, and otherwise the CPU.
+  It improves itself with a genetic algorithm and answers when Claude can't, for example when your usage
   limit is reached. It rests on battery and once it stops improving, until your files change.
 
 HomeGrok **prepares** applications; it never submits them, sends messages or signs in anywhere. You
@@ -75,10 +78,12 @@ The contact fields committed in this copy are placeholders, not a real person. B
 application filler, edit `homegrok/apply.py` and replace the values in `DEFAULT_ANSWERS`:
 
 - `street` — `YOUR_STREET_ADDRESS`
-- `address_city` and `current_city` — `YOUR_CITY`
+- `address_city`, `current_city`, and `state` — `YOUR_CITY` / `YOUR_STATE`
 - `zip` — `YOUR_ZIP`
 - `phone` — `YOUR_PHONE`
 - `email` — `you@example.com`
+- `school`, `degree`, and `gpa` — `YOUR_SCHOOL`, `YOUR_DEGREE`, `YOUR_GPA`
+- `gender`, `race`, and the other form answers — `YOUR_GENDER`, `YOUR_RACE`, `YOUR_ANSWER`
 
 Paste your resume on the HomeGrok page as well. A phone number or email on the resume is used when
 it is present. Do not commit a real street address, phone number, email address, birth date, or password.

@@ -46,7 +46,7 @@ Pick one (in priority order):
 |---|---|---|
 | `RESUME_TEXT` CI variable | CI/CD → Variables → add `RESUME_TEXT`, paste resume text | **Recommended.** Keeps contact details out of a public repo. |
 | `RESUME_FILE` CI variable | Add a "File" type variable; the script reads the path | Also keeps it out of git. |
-| `job-finder/resume.txt` | Commit it | Only safe if contact details are redacted (as they are in the committed copy). |
+| `job-finder/resume.txt` | Commit it | The committed copy is placeholders only. Put your real resume in `resume.local.txt` or `RESUME_TEXT`. |
 
 A git-ignored `job-finder/resume.local.txt` is also available for keeping a
 full local copy with real contact details.
@@ -60,7 +60,7 @@ full local copy with real contact details.
     "lever":      { "enabled": true, "companies": ["plaid"] },          // slug from jobs.lever.co/<slug>
     "ashby":      { "enabled": true, "boards": ["linear"] },            // slug from jobs.ashbyhq.com/<slug>
     "remoteok":   { "enabled": true, "tags": [] },
-    "adzuna":     { "enabled": false, "country": "us", "what": "software engineer", "where": "dallas" },
+    "adzuna":     { "enabled": false, "country": "us", "what": "software engineer", "where": "YOUR_CITY" },
     "usajobs":    { "enabled": false, "keyword": "information technology" }
   },
   "filters": {
@@ -140,7 +140,7 @@ public API — don't add scrapers for sites that prohibit automated access.
 ```
 job-finder/
 ├── config.json           # sources + filters (edit this)
-├── resume.txt            # resume used for matching (contact details redacted)
+├── resume.txt            # placeholder resume used for matching (put yours in resume.local.txt)
 ├── package.json
 ├── src/
 │   ├── index.js          # orchestrates a run

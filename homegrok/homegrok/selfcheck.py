@@ -35,8 +35,8 @@ def _fact_checks():
     a = answers(Workspace())   # the same merged settings the filler uses
     assert check_fact("What is your GPA?", "3.2", a) == str(a.get("gpa"))
     assert check_fact("Zip code", "75001", a) == str(a.get("zip"))
-    assert guard("Have you ever been convicted of a felony?", "Yes") == "No"
-    assert guard("Are you legally authorized to work in the US?", "No") == "Yes"
+    assert guard("Have you ever been convicted of a felony?", "Yes") == "YOUR_ANSWER"
+    assert guard("Are you legally authorized to work in the US?", "No") == "YOUR_ANSWER"
     return "fact guards and checks"
 
 
@@ -47,17 +47,17 @@ def _answers():
     ws = Workspace()
     p, a = profile_from_resume(current_resume(ws)), answers(ws)
     f = lambda q: answer_for({"question": q, "own": "", "label": q, "options": []}, p, a)
-    assert f("Do you now or in the future require visa sponsorship?") == "No"
-    assert f("Are you a U.S. citizen?") == "Yes"
-    assert f("What is your expected salary?") == "$70,000 and above"
+    assert f("Do you now or in the future require visa sponsorship?") == "YOUR_ANSWER"
+    assert f("Are you a U.S. citizen?") == "YOUR_ANSWER"
+    assert f("What is your expected salary?") == "YOUR_SALARY"
     return "saved answers"
 
 
 def _matching():
     from .apply import same_answer, search_terms
-    assert same_answer("University of Texas - Dallas", "The University of Texas at Dallas")
-    assert not same_answer("University of Dallas", "The University of Texas at Dallas")
-    assert search_terms("Dallas")[0] == "Dallas"
+    assert same_answer("Example University - City", "The Example University at City")
+    assert not same_answer("University of City", "The Example University at City")
+    assert search_terms("City")[0] == "City"
     return "option matching"
 
 
