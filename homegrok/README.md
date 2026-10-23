@@ -1,4 +1,6 @@
-HomeGrok runs the AI trainer locally on your own machine/GPU — you can teach it anything.
+HomeGrok fully runs an AI trainer on your own GPU — you can teach it anything.
+
+<small><em>(Uses Apple Metal or NVIDIA CUDA when available; falls back to CPU otherwise.)</em></small>
 
 # HomeGrok
 
