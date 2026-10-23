@@ -42,3 +42,9 @@ On static hosting, edits persist in the browser (`localStorage`) so reopening th
 ## Modules
 
 Dashboard, Opportunities, Projects, Relationships, Tasks, Sources/Bankers, Carriers/Reinsurers, Portfolio, Documents, Reports, Security.
+
+## Projects in this repo
+
+- **Newport Acquisition CRM** (repo root) — Enterprise M&A / acquisition deal-management app for Newport Specialty Partners.
+- **homegrok/** — Local AI assistant and job-application helper that runs on your machine (Python).
+- **market-agent-connector/** — Python AI agent connector for Kalshi and Polymarket prediction markets and stock trading via MCP and REST.
