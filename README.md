@@ -51,4 +51,8 @@ Dashboard, Opportunities, Projects, Relationships, Tasks, Sources/Bankers, Carri
 
 ## HomeGrok
 
-HomeGrok runs the AI trainer locally on your own machine/GPU — you can teach it anything. The trainer (`./hg learn`, `train`, `evolve`, and `pipeline` in `homegrok/`) uses a GPU when Apple Metal or CUDA is available, and otherwise trains on the CPU.
+HomeGrok fully runs an AI trainer on your own GPU — you can teach it anything.
+
+<small><em>(Uses Apple Metal or NVIDIA CUDA when available; falls back to CPU otherwise.)</em></small>
+
+The trainer (`./hg learn`, `train`, `evolve`, and `pipeline` in `homegrok/`) uses a GPU when Apple Metal or CUDA is available, and otherwise trains on the CPU.
