@@ -11,7 +11,7 @@
 # Setup:
 #   1. Add a CI variable RESUME_TEXT (type: Variable, masked off) containing
 #      your resume text — this keeps contact details out of the repository.
-#      Alternatively commit job-finder/resume.txt (contact details redacted).
+#      Alternatively commit job-finder/resume.txt (placeholders only; no real contact details).
 #   2. Optional: JOB_ALERT_WEBHOOK (Slack/Discord incoming webhook URL) to get
 #      a summary pushed to you each run.
 #   3. Optional API keys: ADZUNA_APP_ID, ADZUNA_APP_KEY, USAJOBS_API_KEY,

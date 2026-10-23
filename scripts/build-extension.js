@@ -131,7 +131,7 @@ fs.cpSync(SRC, stagedRoot, { recursive: true });
 
 // Strip anything that shouldn't ship.
 walk(stagedRoot)
-  .filter((f) => path.basename(f) === ".DS_Store")
+  .filter((f) => path.basename(f) === ".DS_Store" || path.basename(f) === "package.json")
   .forEach((f) => fs.rmSync(f));
 
 fs.rmSync(OUT_ZIP, { force: true });

@@ -49,6 +49,8 @@
     // Resumes almost always put "City, ST" in the header block.
     const headerLines = text.split("\n").slice(0, 6);
     for (const line of headerLines) {
+      const placeholder = line.match(/\b(YOUR_CITY),\s*(YOUR_STATE)\b/);
+      if (placeholder) return `${placeholder[1]}, ${placeholder[2]}`;
       const match = line.match(/\b([A-Z][a-zA-Z.'-]+(?:\s[A-Z][a-zA-Z.'-]+)*),\s*([A-Z]{2})\b/);
       if (match) return `${match[1]}, ${match[2]}`;
     }

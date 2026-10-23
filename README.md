@@ -42,3 +42,13 @@ On static hosting, edits persist in the browser (`localStorage`) so reopening th
 ## Modules
 
 Dashboard, Opportunities, Projects, Relationships, Tasks, Sources/Bankers, Carriers/Reinsurers, Portfolio, Documents, Reports, Security.
+
+## Projects in this repo
+
+- **Newport Acquisition CRM** (repo root) — Enterprise M&A / acquisition deal-management app for Newport Specialty Partners.
+- **homegrok/** — Local AI assistant and job-application helper that runs on your machine (Python).
+- **market-agent-connector/** — Python AI agent connector for Kalshi and Polymarket prediction markets and stock trading via MCP and REST.
+
+## HomeGrok
+
+HomeGrok runs the AI trainer locally on your own machine/GPU — you can teach it anything. The trainer (`./hg learn`, `train`, `evolve`, and `pipeline` in `homegrok/`) uses a GPU when Apple Metal or CUDA is available, and otherwise trains on the CPU.

@@ -29,7 +29,7 @@
       "enabled": false,
       "country": "us",
       "what": "software engineer new grad",
-      "where": "dallas",
+      "where": "YOUR_CITY",
       "pages": 2,
       "resultsPerPage": 50,
       "maxDaysOld": 30
@@ -37,7 +37,7 @@
     "usajobs": {
       "enabled": false,
       "keyword": "information technology",
-      "locationName": "Dallas, Texas",
+      "locationName": "YOUR_CITY, YOUR_STATE",
       "remoteOnly": false,
       "resultsPerPage": 50
     }

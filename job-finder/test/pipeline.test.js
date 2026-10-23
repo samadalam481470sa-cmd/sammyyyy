@@ -43,9 +43,9 @@ const JOB_WEAK = {
 test("resume parser handles a real-world resume format", () => {
   const profile = ResumeParser.parseResume(RESUME);
 
-  assert.strictEqual(profile.name, "Samad Alam");
-  assert.strictEqual(profile.linkedin, "linkedin.com/in/samadaalam");
-  assert.strictEqual(profile.location, "Carrollton, TX");
+  assert.strictEqual(profile.name, "YOUR_NAME");
+  assert.strictEqual(profile.linkedin, "linkedin.com/in/YOUR_LINKEDIN");
+  assert.strictEqual(profile.location, "YOUR_CITY, YOUR_STATE");
 
   // "Category: a, b, c" lines must not leak the category label into skills.
   assert.ok(profile.skills.includes("Python"), "should extract Python");
@@ -56,13 +56,13 @@ test("resume parser handles a real-world resume format", () => {
   );
 
   // PROJECTS must terminate the WORK EXPERIENCE section.
-  assert.ok(profile.experience.includes("Surge Plus Technologies"));
-  assert.ok(!profile.experience.includes("Food Trucks of Canada"), "projects should not bleed into experience");
-  assert.ok(profile.projects.includes("Marking Systems"));
+  assert.ok(profile.experience.includes("YOUR_EMPLOYER"));
+  assert.ok(!profile.experience.includes("YOUR_PROJECT_ORG"), "projects should not bleed into experience");
+  assert.ok(profile.projects.includes("YOUR_CLIENT"));
 
   // Bullets are pulled from both experience and projects.
   assert.ok(profile.bullets.length >= 5, `expected several bullets, got ${profile.bullets.length}`);
-  assert.ok(profile.bullets.some((b) => b.startsWith("Extracted and consolidated historical quoting data")));
+  assert.ok(profile.bullets.some((b) => b.startsWith("YOUR_BULLET")));
 });
 
 test("scoring ranks a relevant posting above an irrelevant one", () => {
@@ -140,7 +140,7 @@ test("cover letter draft uses real content and keeps placeholders", () => {
   const job = { ...JOB_STRONG, score: 42, matched: ["python", "sql"], missing: ["kubernetes"] };
   const draft = buildCoverLetterDraft(profile, job);
 
-  assert.ok(draft.includes("Samad Alam"), "should sign with the real name");
+  assert.ok(draft.includes("YOUR_NAME"), "should sign with the name on the resume");
   assert.ok(draft.includes("DRAFT"), "must be labelled a draft");
   assert.ok(/\[ADD 1-2 SENTENCES/.test(draft), "must leave an explicit placeholder for the human");
   assert.ok(/Don't claim skills you don't have/.test(draft));
