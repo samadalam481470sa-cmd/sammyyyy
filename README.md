@@ -23,10 +23,11 @@ npm run dev
 
 ## Sign in
 
-The CRM opens Microsoft 365 sign-in immediately (work or @outlook.com). After Microsoft
-authenticates the user, the dashboard loads. Managerial keys and API-key login are retired.
+The home screen offers four ways in: **Microsoft** (large, on top), then **Outlook**, **Gmail**, and **other email**.
+Any valid address is checked immediately and opens the dashboard. Sign out ends that session only —
+CRM edits stay in this browser and come back with the same email.
 
-Set `VITE_MSAL_CLIENT_ID` to the Entra SPA app ID (see `.env.example`). SPA client IDs are public.
+When `VITE_MSAL_CLIENT_ID` is set, Continue with Microsoft 365 still redirects to Entra.
 
 ## 24/7 static demo (GitHub Pages)
 

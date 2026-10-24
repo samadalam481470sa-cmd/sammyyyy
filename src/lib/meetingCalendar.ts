@@ -17,6 +17,7 @@ export function calendarOwnerKey(user: AuthUser | null | undefined): string {
   if (!user) return 'anonymous'
   return ownerKeyFromAuth({
     userId: user.id,
+    email: user.email,
     authMethod: user.authMethod,
     apiKeySlot: user.apiKeySlot,
     apiKeyId: user.apiKeyId,

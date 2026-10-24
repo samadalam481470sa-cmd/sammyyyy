@@ -8,6 +8,9 @@ import {
   createSessionProof,
   persistProof,
   readProofBlob,
+  readSessionItem,
+  removeSessionItem,
+  writeSessionItem,
 } from '@/lib/sessionProof'
 import { sha256Hex } from '@/lib/sha256'
 
@@ -26,7 +29,7 @@ function lockUserToProof(user: AuthUser, proof: { isManager: boolean; apiKeySlot
 }
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = sessionStorage.getItem(TOKEN_KEY)
+  const token = readSessionItem(TOKEN_KEY)
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
   headers.set('X-Requested-With', 'XMLHttpRequest')
@@ -41,8 +44,8 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export function getStoredSession(): { token: string; user: AuthUser } | null {
-  const token = sessionStorage.getItem(TOKEN_KEY)
-  const raw = sessionStorage.getItem(USER_KEY)
+  const token = readSessionItem(TOKEN_KEY)
+  const raw = readSessionItem(USER_KEY)
   const proof = readProofBlob()
   if (!token || !raw || !proof) return null
   if (proof.token !== token || proof.expiresAt < Date.now()) {
@@ -65,14 +68,15 @@ export async function storeSession(token: string, user: AuthUser, fingerprint: s
     authMethod: user.authMethod,
   })
   const proof = await createSessionProof({ token, user: locked, fingerprint })
-  sessionStorage.setItem(TOKEN_KEY, token)
-  sessionStorage.setItem(USER_KEY, JSON.stringify(locked))
+  writeSessionItem(TOKEN_KEY, token)
+  writeSessionItem(USER_KEY, JSON.stringify(locked))
   persistProof(proof)
 }
 
+/** Ends the signed-in session only. CRM edits in localStorage are left intact. */
 export function clearSession() {
-  sessionStorage.removeItem(TOKEN_KEY)
-  sessionStorage.removeItem(USER_KEY)
+  removeSessionItem(TOKEN_KEY)
+  removeSessionItem(USER_KEY)
   clearProof()
 }
 
@@ -220,7 +224,7 @@ export async function fetchApiKeySlots() {
  * downloadable everywhere (CSV for Excel, JSON for integrations, full .db file).
  */
 async function downloadFile(path: string) {
-  const token = sessionStorage.getItem(TOKEN_KEY)
+  const token = readSessionItem(TOKEN_KEY)
   const res = await fetch(`${API_BASE}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })

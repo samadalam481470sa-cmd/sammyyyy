@@ -53,6 +53,19 @@ describe('meetingCalendar', () => {
     expect(cells[4]).toBe('2026-10-01') // Thu
   })
 
+  it('keys a Microsoft email session to the normalized address', () => {
+    expect(
+      calendarOwnerKey({
+        id: 'oid-mary',
+        email: 'Mary@Outlook.com',
+        name: 'Mary',
+        role: 'partner',
+        initials: 'MS',
+        authMethod: 'microsoft',
+      }),
+    ).toBe('email:mary@outlook.com')
+  })
+
   it('uses the same owner key on the server as the calendar', () => {
     expect(
       ownerKeyFromAuth({

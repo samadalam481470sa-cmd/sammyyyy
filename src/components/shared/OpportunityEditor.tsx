@@ -428,6 +428,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           <button
             type="button"
             disabled={saving || deleting}
+            data-testid="save-opportunity"
             onClick={() => void persist()}
             className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
           >

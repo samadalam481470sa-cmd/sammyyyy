@@ -61,7 +61,7 @@ function visibleNavItems(): NavItem[] {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { signOut, user } = useAuth()
+  const { signOut, signingOut, user } = useAuth()
   const navigate = useNavigate()
   const editorGuard = useEditorGuard()
   const owner = sessionOwnerKey(user)
@@ -265,14 +265,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </NavLink>
         <button
           type="button"
+          disabled={signingOut}
+          data-testid="sidebar-sign-out"
           onClick={() => {
             const leave = () => {
-              void signOut().then(() => navigate('/login'))
+              void signOut().finally(() => navigate('/login'))
             }
             if (editorGuard) editorGuard.guardAction(leave)
             else leave()
           }}
-          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/5 hover:text-white ${
+          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50 ${
             collapsed ? 'justify-center px-2' : ''
           }`}
           title={collapsed ? 'Sign out' : undefined}

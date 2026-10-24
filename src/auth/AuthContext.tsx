@@ -4,14 +4,25 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import type { AuthUser } from '@/types'
 import { clearSession, getStoredSession, signOut as apiSignOut, storeSession } from '@/lib/api'
+import {
+  LAST_EMAIL_KEY,
+  LAST_PROVIDER_KEY,
+  displayNameFromEmail,
+  initialsFromName,
+  loginProviderFromEmail,
+  parseLoginEmail,
+  type LoginProvider,
+} from '@/lib/emailIdentity'
 import { readProofBlob, verifySessionProof, MSAL_TOKEN } from '@/lib/sessionProof'
 import { sha256Hex } from '@/lib/sha256'
 import {
+  clearMicrosoftCache,
   ensureMsal,
   getMicrosoftAccount,
   isMsalConfigured,
@@ -24,42 +35,87 @@ interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
   authReady: boolean
+  signingOut: boolean
+  signInWithEmail: (email: string, provider?: LoginProvider) => Promise<void>
   signInWithMicrosoft: () => Promise<void>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+export function userFromEmailAddress(email: string): AuthUser {
+  const name = displayNameFromEmail(email)
+  return {
+    id: email,
+    email,
+    name,
+    role: 'partner',
+    initials: initialsFromName(name),
+    authMethod: 'microsoft',
+    isManager: false,
+    apiKeyId: null,
+    apiKeySlot: null,
+    apiKeyLabel: null,
+  }
+}
+
+async function rememberLastEmail(email: string, provider?: LoginProvider) {
+  try {
+    localStorage.setItem(LAST_EMAIL_KEY, email)
+    localStorage.setItem(LAST_PROVIDER_KEY, provider ?? loginProviderFromEmail(email))
+  } catch {
+    // ignore
+  }
+}
+
 async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicrosoftAccount>) {
   if (!account) return null
   const user = userFromMicrosoftAccount(account)
-  await storeSession(MSAL_TOKEN, user, await sha256Hex(user.id))
+  await storeSession(MSAL_TOKEN, user, await sha256Hex(user.email || user.id))
+  await rememberLastEmail(user.email)
   return user
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const epochRef = useRef(0)
+  const signingOutRef = useRef(false)
 
   const hydrate = useCallback(async () => {
-    await ensureMsal()
-    const account = getMicrosoftAccount()
-    if (account) {
-      const next = await sessionFromMicrosoftAccount(account)
-      setUser(next)
-      return
-    }
-
-    const stored = getStoredSession()
-    if (import.meta.env.DEV && stored?.user.authMethod === 'microsoft') {
-      const ok = await verifySessionProof(stored.token, stored.user, readProofBlob())
-      if (ok) {
-        setUser(stored.user)
+    const epoch = epochRef.current
+    if (signingOutRef.current) return
+    if (isMsalConfigured()) {
+      try {
+        await ensureMsal()
+      } catch {
+        // Email sessions must still restore when Entra is not configured.
+      }
+      if (epoch !== epochRef.current || signingOutRef.current) return
+      const account = getMicrosoftAccount()
+      if (account) {
+        const next = await sessionFromMicrosoftAccount(account)
+        if (epoch !== epochRef.current || signingOutRef.current) return
+        setUser(next)
         return
       }
     }
 
-    if (stored) clearSession()
+    const stored = getStoredSession()
+    const proof = readProofBlob()
+    if (stored?.user && proof) {
+      const ok = await verifySessionProof(stored.token, stored.user, proof)
+      if (epoch !== epochRef.current || signingOutRef.current) return
+      if (ok) {
+        await storeSession(stored.token, stored.user, proof.fingerprint)
+        if (epoch !== epochRef.current || signingOutRef.current) return
+        setUser(stored.user)
+        return
+      }
+      clearSession()
+    }
+    if (epoch !== epochRef.current || signingOutRef.current) return
     setUser(null)
   }, [])
 
@@ -70,47 +126,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     const id = window.setInterval(() => {
       void hydrate()
-    }, 20_000)
+    }, 60_000)
     return () => {
       cancelled = true
       window.clearInterval(id)
     }
   }, [hydrate])
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    const w = window as Window & { __newportDevMicrosoftLogin?: () => Promise<void> }
-    w.__newportDevMicrosoftLogin = async () => {
-      const devUser: AuthUser = {
-        id: 'ms-oid-mary-dev',
-        email: 'mary@outlook.com',
-        name: 'Mary Sbaschnig',
-        role: 'partner',
-        initials: 'MS',
-        authMethod: 'microsoft',
-        isManager: false,
-        apiKeyId: null,
-        apiKeySlot: null,
-        apiKeyLabel: null,
-      }
-      await storeSession(MSAL_TOKEN, devUser, await sha256Hex(devUser.id))
-      setUser(devUser)
-    }
-    return () => {
-      delete w.__newportDevMicrosoftLogin
-    }
+  const signInWithEmail = useCallback(async (raw: string, provider?: LoginProvider) => {
+    const parsed = parseLoginEmail(raw)
+    if (!parsed.ok) throw new Error(parsed.error)
+    epochRef.current += 1
+    signingOutRef.current = false
+    const next = userFromEmailAddress(parsed.email)
+    await clearMicrosoftCache().catch(() => undefined)
+    await storeSession(MSAL_TOKEN, next, await sha256Hex(parsed.email))
+    await rememberLastEmail(parsed.email, provider)
+    setUser(next)
   }, [])
 
   const signInWithMicrosoft = useCallback(async () => {
+    if (!isMsalConfigured()) {
+      throw new Error('Microsoft 365 redirect is not connected. Use any valid email to continue.')
+    }
     await startMicrosoftLogin()
   }, [])
 
   const signOut = useCallback(async () => {
-    await apiSignOut()
+    epochRef.current += 1
+    signingOutRef.current = true
+    setSigningOut(true)
+    const hadMsalAccount = Boolean(isMsalConfigured() && getMicrosoftAccount())
+    try {
+      await apiSignOut()
+    } catch {
+      // Static demo has no auth API.
+    }
     clearSession()
     setUser(null)
-    if (isMsalConfigured()) {
-      await microsoftLogout()
+    try {
+      sessionStorage.removeItem('newport_post_login_path')
+    } catch {
+      // ignore
+    }
+    try {
+      if (hadMsalAccount) {
+        await microsoftLogout()
+      } else {
+        await clearMicrosoftCache()
+      }
+    } catch {
+      await clearMicrosoftCache().catch(() => undefined)
+    } finally {
+      signingOutRef.current = false
+      setSigningOut(false)
     }
   }, [])
 
@@ -119,10 +188,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: Boolean(user),
       authReady,
+      signingOut,
+      signInWithEmail,
       signInWithMicrosoft,
       signOut,
     }),
-    [user, authReady, signInWithMicrosoft, signOut],
+    [user, authReady, signingOut, signInWithEmail, signInWithMicrosoft, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

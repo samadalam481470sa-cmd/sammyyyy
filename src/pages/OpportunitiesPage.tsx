@@ -304,6 +304,7 @@ export function OpportunitiesPage() {
                   <tr
                     key={opp.id}
                     tabIndex={0}
+                    data-testid={`opportunity-row-${opp.id}`}
                     aria-selected={active}
                     onClick={() => onRowActivate(opp.id)}
                     onKeyDown={(event) => onRowKeyDown(event, opp.id)}

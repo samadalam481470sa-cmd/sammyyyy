@@ -75,7 +75,7 @@ describe('sessionProof', () => {
       user: mary,
       fingerprint: 'oid-hash',
     })
-    expect(proof.ownerKey).toBe('ms:oid-mary')
+    expect(proof.ownerKey).toBe('email:mary@outlook.com')
     expect(await verifySessionProof('msal', mary, proof)).toBe(true)
   })
 

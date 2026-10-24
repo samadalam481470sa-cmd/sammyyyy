@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
+import { loginProviderFromEmail, loginProviderLabel } from '@/lib/emailIdentity'
 import { LogOut } from 'lucide-react'
 
 interface ProfileMenuProps {
@@ -8,7 +10,8 @@ interface ProfileMenuProps {
 }
 
 export function ProfileMenu({ open, onClose }: ProfileMenuProps) {
-  const { user, signOut } = useAuth()
+  const { user, signOut, signingOut } = useAuth()
+  const navigate = useNavigate()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,14 +45,20 @@ export function ProfileMenu({ open, onClose }: ProfileMenuProps) {
           <dt className="text-[10px] font-semibold tracking-[0.1em] text-ink-subtle uppercase">
             Auth method
           </dt>
-          <dd className="mt-0.5 text-ink">Microsoft 365</dd>
+          <dd className="mt-0.5 text-ink">
+            {user.email ? loginProviderLabel(loginProviderFromEmail(user.email)) : 'Microsoft 365'}
+          </dd>
         </div>
       </dl>
       <div className="border-t border-border p-2">
         <button
           type="button"
-          onClick={() => void signOut()}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-canvas"
+          disabled={signingOut}
+          data-testid="profile-sign-out"
+          onClick={() => {
+            void signOut().finally(() => navigate('/login'))
+          }}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50"
         >
           <LogOut className="h-4 w-4" />
           Sign out

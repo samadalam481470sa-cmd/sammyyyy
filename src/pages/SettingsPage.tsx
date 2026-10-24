@@ -12,8 +12,8 @@ export function SettingsPage() {
       <header className="border-b border-border bg-surface px-6 py-5 lg:px-8">
         <h1 className="font-brand text-2xl font-bold text-navy-900">Settings</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Session preferences for this Microsoft 365 account. Your CRM edits stay with this
-          account in this browser.
+          Session preferences for this Microsoft, Outlook, Gmail, or work email. Sign out ends this
+          session and keeps every edit; signing back in with the same email restores them.
         </p>
       </header>
 

@@ -108,12 +108,23 @@ export async function startMicrosoftLogin(): Promise<void> {
   })
 }
 
+export async function clearMicrosoftCache(): Promise<void> {
+  const instance = await ensureMsal()
+  if (!instance) return
+  instance.setActiveAccount(null)
+  await instance.clearCache()
+}
+
 export async function microsoftLogout(): Promise<void> {
   const instance = await ensureMsal()
   if (!instance) return
   const account = instance.getActiveAccount() ?? instance.getAllAccounts()[0]
+  if (!account) {
+    await instance.clearCache()
+    return
+  }
   await instance.logoutRedirect({
-    account: account ?? undefined,
+    account,
     postLogoutRedirectUri: spaRedirectUri(),
   })
 }

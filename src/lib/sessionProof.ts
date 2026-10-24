@@ -2,6 +2,7 @@ import type { AuthUser } from '@/types'
 import { MANAGER_KEY_HASH, SLOT1_KEY_HASH, DEMO_FINGERPRINT } from '@/lib/credentialHashes'
 import { sha256Hex } from '@/lib/sha256'
 import { isLocalSlotRevoked, loadLocalIssuedKeys } from '@/lib/demoStore'
+import { emailOwnerKey } from '@/lib/emailIdentity'
 
 const PEPPER = 'nwp-session-proof-v2'
 const PROOF_KEY = 'newport_crm_session_proof'
@@ -10,7 +11,53 @@ const USER_KEY = 'newport_crm_session_user'
 
 const LOCAL_TOKEN = 'local-demo'
 const MSAL_TOKEN = 'msal'
-const SESSION_MS = 8 * 60 * 60 * 1000
+const SESSION_MS = 30 * 24 * 60 * 60 * 1000
+
+function storageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key) ?? sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // private mode
+  }
+  try {
+    sessionStorage.setItem(key, value)
+  } catch {
+    // private mode
+  }
+}
+
+function storageRemove(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+  try {
+    sessionStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}
+
+export function readSessionItem(key: string): string | null {
+  return storageGet(key)
+}
+
+export function writeSessionItem(key: string, value: string): void {
+  storageSet(key, value)
+}
+
+export function removeSessionItem(key: string): void {
+  storageRemove(key)
+}
 
 export interface SessionProof {
   v: 2
@@ -48,8 +95,12 @@ export function ownerKeyFromProofFields(input: {
   apiKeySlot: number | null
   authMethod?: AuthUser['authMethod']
   userId?: string | null
+  email?: string | null
 }): string {
-  if (input.authMethod === 'microsoft') return input.userId ? `ms:${input.userId}` : 'anonymous'
+  if (input.authMethod === 'microsoft') {
+    if (input.email?.trim()) return emailOwnerKey(input.email)
+    return input.userId ? `ms:${input.userId}` : 'anonymous'
+  }
   if (input.isManager || input.authMethod === 'manager_key') return 'key:manager'
   if (input.apiKeySlot != null) return `key:slot-${input.apiKeySlot}`
   if (input.authMethod === 'demo') return 'key:demo'
@@ -78,6 +129,7 @@ export async function createSessionProof(input: {
       apiKeySlot,
       authMethod: input.user.authMethod,
       userId: input.user.id,
+      email: input.user.email,
     }),
     isManager,
     apiKeySlot,
@@ -88,7 +140,7 @@ export async function createSessionProof(input: {
 
 export function readProofBlob(): SessionProof | null {
   try {
-    const raw = sessionStorage.getItem(PROOF_KEY)
+    const raw = storageGet(PROOF_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as SessionProof
     if (parsed?.v !== 2 || typeof parsed.sig !== 'string') return null
@@ -143,15 +195,15 @@ export async function verifySessionProof(
 }
 
 export function persistProof(proof: SessionProof): void {
-  sessionStorage.setItem(PROOF_KEY, JSON.stringify(proof))
+  storageSet(PROOF_KEY, JSON.stringify(proof))
 }
 
 export function clearProof(): void {
-  sessionStorage.removeItem(PROOF_KEY)
+  storageRemove(PROOF_KEY)
 }
 
 export function hasProofEnvelope(): boolean {
-  return Boolean(sessionStorage.getItem(PROOF_KEY))
+  return Boolean(storageGet(PROOF_KEY))
 }
 
 export { TOKEN_KEY, USER_KEY, LOCAL_TOKEN, MSAL_TOKEN, PROOF_KEY }
