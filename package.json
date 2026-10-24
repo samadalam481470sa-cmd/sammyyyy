@@ -11,6 +11,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "db:dump": "tsx scripts/dump-seed.ts",
+    "db:rebuild": "mkdir -p data && rm -f data/newport-crm.db data/newport-crm.db-wal data/newport-crm.db-shm && sqlite3 data/newport-crm.db < server/db/schema.sql && sqlite3 data/newport-crm.db < server/db/seed.sql",
     "db:reset": "rm -f data/newport-crm.db data/newport-crm.db-wal data/newport-crm.db-shm && npm run dev:api"
   },
   "dependencies": {

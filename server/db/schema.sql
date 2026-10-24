@@ -1,6 +1,7 @@
--- Newport Specialty Partners Acquisition CRM Database
--- SQLite database for acquisition deal tracking (confidential M&A data).
--- Schema is the source of truth; replace SQLite with Postgres in production.
+-- Permanent Newport Specialty Partners Acquisition CRM database schema.
+-- GitHub source of truth together with server/db/seed.sql (dataset anon-letter-v1).
+-- Rebuild: sqlite3 data/newport-crm.db < server/db/schema.sql && sqlite3 data/newport-crm.db < server/db/seed.sql
+-- Replace SQLite with Postgres in production. Do not commit runtime data/*.db files.
 
 PRAGMA foreign_keys = ON;
 
@@ -13,6 +14,12 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Dataset version and other durable app keys. Seed writes demo_dataset=anon-letter-v1.
+CREATE TABLE IF NOT EXISTS app_meta (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
 );
 
 -- Exactly five API key slots for application access (keys provisioned by security team).

@@ -2,7 +2,6 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'node:crypto'
 import { mockOpportunities } from '../../src/data/mockOpportunities.ts'
 import {
@@ -14,10 +13,18 @@ import {
   mockTasksDb,
 } from '../../src/data/mockModules.ts'
 import { mockMeetings } from '../../src/data/mockMeetings.ts'
+import { DEMO_DATASET_VERSION, DEMO_PASSWORD_HASH } from './constants.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = path.resolve(__dirname, '../../data')
-const dbPath = path.join(dataDir, 'newport-crm.db')
+const dbPath = process.env.CRM_DB_PATH
+  ? path.resolve(process.env.CRM_DB_PATH)
+  : path.join(
+      process.env.CRM_DATA_DIR
+        ? path.resolve(process.env.CRM_DATA_DIR)
+        : path.resolve(__dirname, '../../data'),
+      'newport-crm.db',
+    )
+const dataDir = path.dirname(dbPath)
 
 fs.mkdirSync(dataDir, { recursive: true })
 
@@ -82,8 +89,6 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
-const DEMO_DATASET_VERSION = 'anon-letter-v1'
-
 function resetPublicDemoTablesIfNeeded() {
   db.exec(`CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`)
   const row = db.prepare(`SELECT v FROM app_meta WHERE k = 'demo_dataset'`).get() as
@@ -120,7 +125,7 @@ export function seedDatabase() {
       name: 'Mary Sbaschnig',
       role: 'partner',
       initials: 'MS',
-      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+      password_hash: DEMO_PASSWORD_HASH,
     })
     insertUser.run({
       id: 'user-dennis',
@@ -128,7 +133,7 @@ export function seedDatabase() {
       name: 'Dennis DiCapua',
       role: 'partner',
       initials: 'DD',
-      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+      password_hash: DEMO_PASSWORD_HASH,
     })
     insertUser.run({
       id: 'user-manager',
@@ -136,7 +141,7 @@ export function seedDatabase() {
       name: 'Samad Alam',
       role: 'admin',
       initials: 'SA',
-      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+      password_hash: DEMO_PASSWORD_HASH,
     })
   } else {
     // Ensure managerial principal exists on upgraded databases
@@ -150,7 +155,7 @@ export function seedDatabase() {
         'samad@newportspecialty.demo',
         'Samad Alam',
         'SA',
-        bcrypt.hashSync('demo-only-not-for-production', 10),
+        DEMO_PASSWORD_HASH,
       )
     }
   }

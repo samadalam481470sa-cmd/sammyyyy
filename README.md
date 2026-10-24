@@ -4,6 +4,19 @@ Enterprise M&A / acquisition deal-management app for Newport Specialty Partners.
 
 > This repository also contains other packages under `job-finder/` and `chrome-extension/` from prior work. The **root** of the repo is the Newport Acquisition CRM.
 
+## Permanent database (GitHub)
+
+GitHub holds the reconstructable CRM database and every application source file:
+
+- Schema: `server/db/schema.sql`
+- Canonical demo rows: `server/db/seed.sql` (dataset `anon-letter-v1`)
+- TypeScript seed used by the static demo: `src/data/mockOpportunities.ts`, `mockModules.ts`, `mockMeetings.ts`
+- App and API: `src/` and `server/`
+
+Rebuild a local SQLite file with `npm run db:rebuild`. Refresh `seed.sql` after mock or schema edits with `npm run db:dump`. Runtime `data/*.db` files stay gitignored (WAL, sessions, live edits). Do not commit user vaults.
+
+GitHub Pages cannot run SQLite. The hosted demo stores each signed-in email's edits in that browser. Sign-out ends the session only; the same email restores that vault.
+
 ## Stack
 
 - React 19 + TypeScript + Vite + Tailwind CSS
