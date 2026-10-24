@@ -12,6 +12,5 @@ function render() {
   )
 }
 
-void ensureMsal()
-  .catch(() => undefined)
-  .finally(render)
+render()
+void ensureMsal().catch(() => undefined)

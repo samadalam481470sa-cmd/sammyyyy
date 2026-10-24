@@ -181,13 +181,10 @@ export async function startMicrosoftLogin(loginHint?: string): Promise<Microsoft
     if (code === 'interaction_in_progress') {
       await instance.handleRedirectPromise().catch(() => undefined)
     }
-    try {
-      await instance.loginRedirect(request)
-      return { status: 'redirect' }
-    } catch (redirectErr) {
-      if (isMicrosoftAuthCancelled(redirectErr)) throw redirectErr
-      throw err
-    }
+    // Do not loginRedirect here — a full-page bounce away from the CRM is the
+    // main login glitch when the popup is blocked. The login page falls back
+    // to a valid email and opens the dashboard in place.
+    throw err
   }
 }
 

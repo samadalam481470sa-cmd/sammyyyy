@@ -106,23 +106,47 @@ function decorateOpportunities(list: Opportunity[], tasks: TaskRecord[]): Opport
   return withLiveAttention(withManual, tasks)
 }
 
+function snapshotLocalCrm(owner: string, users: CrmUser[]) {
+  const rawTasks = applyTaskArchiveRules(
+    loadOwnedCollection('tasks', owner, mockTasksDb).map((row) => migrateTaskRecord(row, users)),
+  )
+  const rawOpps = loadOwnedCollection('opportunities', owner, mockOpportunities)
+  const rawDocs = loadOwnedCollection('documents', owner, mockDocuments)
+  const rawActivity = loadOwnedCollection<ActivityItem>('activity', owner, [])
+  return {
+    tasks: rawTasks.tasks,
+    opportunities: decorateOpportunities(rawOpps, rawTasks.tasks),
+    documents: rawDocs,
+    activity: rawActivity,
+  }
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth()
   const owner = sessionOwnerKey(user)
   const users = useMemo(() => crmUsersForSession(user), [user])
   const local = isLocalPersistence()
+  const seeded =
+    local && isAuthenticated
+      ? snapshotLocalCrm(owner, users)
+      : {
+          opportunities: [] as Opportunity[],
+          tasks: [] as TaskRecord[],
+          documents: [] as DocumentRecord[],
+          activity: [] as ActivityItem[],
+        }
 
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [tasks, setTasks] = useState<TaskRecord[]>([])
-  const [documents, setDocuments] = useState<DocumentRecord[]>([])
-  const [activity, setActivity] = useState<ActivityItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(seeded.opportunities)
+  const [tasks, setTasks] = useState<TaskRecord[]>(seeded.tasks)
+  const [documents, setDocuments] = useState<DocumentRecord[]>(seeded.documents)
+  const [activity, setActivity] = useState<ActivityItem[]>(seeded.activity)
+  const [loading, setLoading] = useState(!local)
   const [error, setError] = useState<string | null>(null)
 
-  const oppsRef = useRef<Opportunity[]>([])
-  const tasksRef = useRef<TaskRecord[]>([])
-  const docsRef = useRef<DocumentRecord[]>([])
-  const activityRef = useRef<ActivityItem[]>([])
+  const oppsRef = useRef<Opportunity[]>(seeded.opportunities)
+  const tasksRef = useRef<TaskRecord[]>(seeded.tasks)
+  const docsRef = useRef<DocumentRecord[]>(seeded.documents)
+  const activityRef = useRef<ActivityItem[]>(seeded.activity)
 
   const persistOpps = (next: Opportunity[]) => {
     oppsRef.current = next
@@ -188,25 +212,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setActivity([])
       return
     }
-    setLoading(true)
     setError(null)
     const loadLocal = () => {
-      const rawTasks = applyTaskArchiveRules(
-        loadOwnedCollection('tasks', owner, mockTasksDb).map((row) => migrateTaskRecord(row, users)),
-      )
-      const rawOpps = loadOwnedCollection('opportunities', owner, mockOpportunities)
-      const rawDocs = loadOwnedCollection('documents', owner, mockDocuments)
-      const rawActivity = loadOwnedCollection<ActivityItem>('activity', owner, [])
-      persistTasks(rawTasks.tasks)
-      persistOpps(syncOpportunitySummaries(rawOpps, rawTasks.tasks))
-      persistDocs(rawDocs)
-      persistActivity(rawActivity)
+      const snap = snapshotLocalCrm(owner, users)
+      persistTasks(snap.tasks)
+      persistOpps(snap.opportunities)
+      persistDocs(snap.documents)
+      persistActivity(snap.activity)
     }
     if (isLocalPersistence()) {
       loadLocal()
       setLoading(false)
       return
     }
+    setLoading(true)
     try {
       const [data, apiTasks, apiDocs] = await Promise.all([
         fetchOpportunities(),

@@ -80,7 +80,9 @@ async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicroso
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [authReady, setAuthReady] = useState(false)
+  const [authReady, setAuthReady] = useState(
+    () => !isMsalConfigured() && !getStoredSession(),
+  )
   const [signingOut, setSigningOut] = useState(false)
   const epochRef = useRef(0)
   const signingOutRef = useRef(false)

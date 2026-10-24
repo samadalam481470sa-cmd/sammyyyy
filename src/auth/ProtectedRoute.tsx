@@ -6,7 +6,7 @@ export function ProtectedRoute() {
   const location = useLocation()
 
   if (!authReady) {
-    return <div className="min-h-full bg-navy-950" aria-busy="true" />
+    return <div className="min-h-full bg-[#040b16]" aria-busy="true" />
   }
 
   if (!isAuthenticated) {

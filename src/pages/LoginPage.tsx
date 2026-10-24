@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
+import { dashboardPathAfterLogin } from '@/lib/loginDestination'
 import {
   isMicrosoftAuthCancelled,
   isMsalConfigured,
@@ -16,15 +17,6 @@ import {
 import { attachLoginShield } from '@/lib/loginGuard'
 import { recordLoginFailure } from '@/lib/loginThrottle'
 import newportLogo from '@/assets/newport-logo.png'
-
-function postLoginPath(): string {
-  try {
-    sessionStorage.removeItem('newport_post_login_path')
-  } catch {
-    // ignore
-  }
-  return '/'
-}
 
 function lastEmail(): string {
   try {
@@ -116,11 +108,13 @@ function OtherMark({ className }: { className?: string }) {
 
 export function LoginPage() {
   const { isAuthenticated, authReady, signInWithEmail, signInWithMicrosoft } = useAuth()
+  const navigate = useNavigate()
   const [provider, setProvider] = useState<LoginProvider>(lastProvider)
   const [email, setEmail] = useState(lastEmail)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
+  const inFlightRef = useRef(false)
   const configured = isMsalConfigured()
   const copy = PROVIDERS[provider]
 
@@ -131,7 +125,19 @@ export function LoginPage() {
   }, [])
 
   if (!authReady) return <div className="min-h-full bg-[#040b16]" aria-busy="true" />
-  if (isAuthenticated) return <Navigate to={postLoginPath()} replace />
+  if (isAuthenticated) return <Navigate to={dashboardPathAfterLogin()} replace />
+
+  const openDashboard = () => {
+    inFlightRef.current = false
+    navigate(dashboardPathAfterLogin(), { replace: true })
+  }
+
+  const fail = (message: string) => {
+    inFlightRef.current = false
+    setBusy(false)
+    setError(message)
+    emailRef.current?.focus()
+  }
 
   const pickProvider = (next: LoginProvider) => {
     setProvider(next)
@@ -155,6 +161,7 @@ export function LoginPage() {
       return false
     }
     await signInWithEmail(parsed.email, nextProvider)
+    openDashboard()
     return true
   }
 
@@ -164,30 +171,36 @@ export function LoginPage() {
       onMicrosoft365()
       return
     }
+    if (inFlightRef.current) return
+    inFlightRef.current = true
     setBusy(true)
     setError(null)
     try {
       const ok = await finishEmailSignIn(provider)
-      if (!ok) setBusy(false)
+      if (!ok) {
+        inFlightRef.current = false
+        setBusy(false)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed')
-      setBusy(false)
+      fail(err instanceof Error ? err.message : 'Sign-in failed')
     }
   }
 
   const onMicrosoft365 = () => {
-    pickProvider('microsoft')
+    if (inFlightRef.current) return
+    inFlightRef.current = true
+    setProvider('microsoft')
     setBusy(true)
     setError(null)
     void (async () => {
       if (configured) {
         try {
           await signInWithMicrosoft(email.trim() || undefined)
+          openDashboard()
           return
         } catch (err) {
           if (isMicrosoftAuthCancelled(err)) {
-            setError('Microsoft 365 sign-in was cancelled. Try again.')
-            setBusy(false)
+            fail('Microsoft 365 sign-in was cancelled. Try again.')
             return
           }
           if (!(err instanceof MicrosoftAuthUnavailableError)) {
@@ -195,26 +208,26 @@ export function LoginPage() {
             if (parsed.ok) {
               try {
                 await signInWithEmail(parsed.email, 'microsoft')
+                openDashboard()
                 return
               } catch (emailErr) {
-                setError(emailErr instanceof Error ? emailErr.message : 'Sign-in failed')
-                setBusy(false)
+                fail(emailErr instanceof Error ? emailErr.message : 'Sign-in failed')
                 return
               }
             }
-            setError(err instanceof Error ? err.message : 'Microsoft 365 sign-in failed')
-            setBusy(false)
-            emailRef.current?.focus()
+            fail(err instanceof Error ? err.message : 'Enter a Microsoft 365 email to continue.')
             return
           }
         }
       }
       try {
         const ok = await finishEmailSignIn('microsoft')
-        if (!ok) setBusy(false)
+        if (!ok) {
+          inFlightRef.current = false
+          setBusy(false)
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Sign-in failed')
-        setBusy(false)
+        fail(err instanceof Error ? err.message : 'Sign-in failed')
       }
     })()
   }
@@ -315,7 +328,13 @@ export function LoginPage() {
                 </button>
               )}
               {provider === 'microsoft' && (
-                <button type="submit" className="hidden" data-testid="login-continue" tabIndex={-1}>
+                <button
+                  type="submit"
+                  className="hidden"
+                  data-testid="login-continue"
+                  tabIndex={-1}
+                  disabled={busy}
+                >
                   Continue with Microsoft
                 </button>
               )}
