@@ -19,7 +19,8 @@ import { CallStage } from '@/components/meetings/CallStage'
 import { TranscriptPanel } from '@/components/meetings/TranscriptPanel'
 import { MeetingCalendar } from '@/components/meetings/MeetingCalendar'
 import { TeamHuddle } from '@/components/meetings/TeamHuddle'
-import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay } from '@/lib/meetingLinks'
+import { createAzureTeamsMeeting } from '@/lib/azureMeetings'
+import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay, openPhoneLink } from '@/lib/meetingLinks'
 import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import {
   clearLiveMeetingDraft,
@@ -504,6 +505,11 @@ export function MeetingsPage() {
       return
     }
     setCustomer((c) => ({ ...c, phone: c.phone || phone }))
+    const tel = buildJoinUrl('phone', { phone: dialNumber })
+    if (!openPhoneLink(tel)) {
+      setError('That number could not be sent to the phone dialer.')
+      return
+    }
     await beginSession({
       channel: 'phone',
       title: sanitizeText(title, FIELD_LIMITS.title) || `Phone call ${phone}`,
@@ -519,7 +525,10 @@ export function MeetingsPage() {
       setError('That phone number could not be used for a landline connection.')
       return
     }
-    safeOpenJoinUrl(href, 'landline', '_self')
+    if (!openPhoneLink(href)) {
+      setError('That phone number could not be used for a landline connection.')
+      return
+    }
     setChannel('landline')
     void beginSession({
       channel: 'landline',
@@ -545,7 +554,18 @@ export function MeetingsPage() {
       setError('That join link was blocked. Use an official Teams, Zoom, Meet, Webex, or Skype link.')
       return
     }
-    const url = buildJoinUrl(platform, { meetingId: joinId, title })
+    let meetingId = joinId
+    if (platform === 'teams' && !joinId.trim()) {
+      const created = await createAzureTeamsMeeting({
+        subject: sanitizeText(title, FIELD_LIMITS.title) || 'Newport Teams meeting',
+        attendeeEmail: customer.email,
+        attendeeName: customer.name,
+      })
+      meetingId = created.joinUrl
+      setJoinId(created.joinUrl)
+      setMessage(created.detail)
+    }
+    const url = buildJoinUrl(platform, { meetingId, title })
     if (!isAllowedJoinUrl(url, platform)) {
       setError('That join link was blocked. Use an official Teams, Zoom, Meet, Webex, or Skype link.')
       return
@@ -557,7 +577,11 @@ export function MeetingsPage() {
       joinUrl: url,
       withCamera: false,
     })
-    setMessage(`Opened ${channelLabel(platform)}. Captions are running in Newport — keep this tab open.`)
+    setMessage((prev) =>
+      platform === 'teams' && prev
+        ? `${prev} Captions are running in Newport — keep this tab open.`
+        : `Opened ${channelLabel(platform)}. Captions are running in Newport — keep this tab open.`,
+    )
   }
 
   const onShareScreen = async () => {
@@ -690,7 +714,8 @@ export function MeetingsPage() {
       setError('Saved join link is no longer valid for this platform.')
       return
     }
-    safeOpenJoinUrl(selected.joinUrl, selected.channel, selected.channel === 'landline' ? '_self' : '_blank')
+    if (selected.channel === 'phone' || selected.channel === 'landline') openPhoneLink(selected.joinUrl)
+    else safeOpenJoinUrl(selected.joinUrl, selected.channel)
     void beginSession({
       channel: selected.channel,
       title: selected.title,
@@ -936,7 +961,24 @@ export function MeetingsPage() {
               if (track) {
                 track.enabled = !track.enabled
                 setCamOn(track.enabled)
-              } else setCamOn((v) => !v)
+                return
+              }
+              if (!live) return
+              void navigator.mediaDevices
+                .getUserMedia({ video: true })
+                .then((cam) => {
+                  const videoTrack = cam.getVideoTracks()[0]
+                  if (!videoTrack) return
+                  setStream((prev) => {
+                    if (!prev) return cam
+                    return new MediaStream([...prev.getAudioTracks(), videoTrack])
+                  })
+                  setCamOn(true)
+                })
+                .catch(() => {
+                  setCamOn(false)
+                  setMessage('Camera could not start in this browser.')
+                })
             }}
             onToggleMic={() => {
               const track = stream?.getAudioTracks()[0]
@@ -1029,8 +1071,15 @@ export function MeetingsPage() {
             summary={summary}
             onSummarize={() => setSummary(summarizeTranscript(fullTranscript))}
             onCopy={() => {
-              void navigator.clipboard.writeText(fullTranscript || summary)
-              setMessage('Transcript copied.')
+              const text = fullTranscript || summary
+              if (!text) {
+                setMessage('Nothing to copy yet.')
+                return
+              }
+              void navigator.clipboard.writeText(text).then(
+                () => setMessage('Transcript copied.'),
+                () => setError('Clipboard permission was blocked.'),
+              )
             }}
           />
           {selected && !live && (

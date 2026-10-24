@@ -1,6 +1,7 @@
 import {
   isAllowedHttpsJoinUrl,
   isAllowedJoinUrl,
+  isAllowedTelUrl,
   isDangerousJoinInput,
   sanitizePhone,
 } from '@/lib/meetingSecurity'
@@ -63,6 +64,17 @@ export function buildJoinUrl(
     default:
       return '#'
   }
+}
+
+/** Hand the number to the device dialer without leaving the CRM tab. */
+export function openPhoneLink(url: string): boolean {
+  if (!isAllowedTelUrl(url) || typeof document === 'undefined') return false
+  const anchor = document.createElement('a')
+  anchor.href = url
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  return true
 }
 
 export function channelLabel(channel: MeetingChannel): string {

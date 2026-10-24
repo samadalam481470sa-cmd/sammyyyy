@@ -6,6 +6,7 @@ import {
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
   isMicrosoftCredentialDenied,
+  clientIdFromEntraDocument,
   ENTRA_SPA_CLIENT_ID,
   LOGIN_SCOPES,
   msalAuthority,
@@ -43,6 +44,14 @@ describe('Microsoft 365 SPA URLs', () => {
   it('ships the registered Entra SPA client ID so Microsoft cloud sign-in is connected', () => {
     expect(ENTRA_SPA_CLIENT_ID).toBe('2e296364-cbf0-4742-ba8f-3e0615a4e777')
     expect(msalClientId()).toBe(ENTRA_SPA_CLIENT_ID)
+  })
+
+  it('lets a future entra.json replace the client ID and keeps the default when the file is empty', () => {
+    expect(clientIdFromEntraDocument({ clientId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' })).toBe(
+      'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    )
+    expect(clientIdFromEntraDocument({ clientId: '  ' })).toBe(ENTRA_SPA_CLIENT_ID)
+    expect(clientIdFromEntraDocument(null)).toBe(ENTRA_SPA_CLIENT_ID)
   })
 
   it('forces the hosted Microsoft password page and prefills the typed email', () => {

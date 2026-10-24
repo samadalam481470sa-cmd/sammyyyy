@@ -15,6 +15,7 @@ import {
 } from '@/lib/meetingCalendar'
 import { pushCalendarReminders } from '@/lib/calendarReminders'
 import { registerVaultFlush } from '@/lib/userVault'
+import { syncCalendarToOutlook } from '@/lib/azureMeetings'
 import { FIELD_LIMITS, sanitizeCalendarEvent } from '@/lib/meetingSecurity'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -122,6 +123,14 @@ export function MeetingCalendar() {
         ? 'Saved on your key calendar. A reminder will appear in Notifications.'
         : 'Saved on your key calendar.',
     )
+    void syncCalendarToOutlook({
+      title: nextItem.title,
+      date: nextItem.date,
+      time: nextItem.time,
+      notes: nextItem.notes,
+    }).then((result) => {
+      if (result.synced) setMessage(result.detail)
+    })
   }
 
   const remove = (id: string) => {

@@ -68,7 +68,10 @@ export function SoftPhone({
         <button
           type="button"
           disabled={live || disabled}
-          onClick={() => onNumberChange(number.slice(0, -1))}
+          onClick={() => {
+            const digits = number.replace(/\D/g, '').slice(0, -1)
+            onNumberChange(digits ? normalizePhoneDisplay(digits) : '')
+          }}
           className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-semibold text-ink-muted hover:bg-canvas disabled:opacity-40"
         >
           <Delete className="h-4 w-4" />

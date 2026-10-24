@@ -31,7 +31,7 @@ export const FIELD_LIMITS = {
   project: 160,
   notes: 4000,
   tags: 120,
-  joinUrl: 500,
+  joinUrl: 2048,
   transcript: 100_000,
   transcriptJson: 150_000,
   summary: 4000,

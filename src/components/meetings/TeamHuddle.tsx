@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Lock, Mic, Phone, Users, Video } from 'lucide-react'
+import { Lock, Mic, MicOff, Phone, Users, Video, VideoOff } from 'lucide-react'
+import { createAzureTeamsMeeting } from '@/lib/azureMeetings'
+import { safeOpenJoinUrl } from '@/lib/meetingSecurity'
 import { useAuth } from '@/auth/AuthContext'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { ALL_TEAM_MEMBERS, defaultInvitees, memberByOwnerKey } from '@/lib/teamRoster'
@@ -37,6 +39,8 @@ export function TeamHuddle() {
   const [room, setRoom] = useState<HuddleRoom | null>(() => loadHuddleRoom())
   const [selected, setSelected] = useState<string[]>(() => defaultInvitees())
   const [video, setVideo] = useState(true)
+  const [micOn, setMicOn] = useState(true)
+  const [camOn, setCamOn] = useState(true)
   const [live, setLive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('Idle')
@@ -50,6 +54,12 @@ export function TeamHuddle() {
     const tick = window.setInterval(() => setRoom(loadHuddleRoom()), 1200)
     return () => window.clearInterval(tick)
   }, [])
+
+  useEffect(() => {
+    if (!live || !localRef.current || !localStream.current) return
+    localRef.current.srcObject = localStream.current
+    void localRef.current.play().catch(() => undefined)
+  }, [live, video])
 
   useEffect(() => {
     return () => {
@@ -114,6 +124,29 @@ export function TeamHuddle() {
           : 'Camera / microphone permission is required to join the team call.',
       )
     }
+  }
+
+  const openTeamsCloud = async () => {
+    setError(null)
+    setStatus('Creating a Microsoft Teams meeting…')
+    const created = await createAzureTeamsMeeting({ subject: 'Newport team huddle' })
+    const opened = safeOpenJoinUrl(created.joinUrl, 'teams')
+    setStatus(created.detail)
+    if (!opened) setError('Teams could not be opened from this browser.')
+  }
+
+  const toggleMic = () => {
+    const track = localStream.current?.getAudioTracks()[0]
+    if (!track) return
+    track.enabled = !track.enabled
+    setMicOn(track.enabled)
+  }
+
+  const toggleCam = () => {
+    const track = localStream.current?.getVideoTracks()[0]
+    if (!track) return
+    track.enabled = !track.enabled
+    setCamOn(track.enabled)
   }
 
   const leave = async () => {
@@ -226,6 +259,25 @@ export function TeamHuddle() {
                 <RemoteTile key={feed.ownerKey} {...feed} />
               ))}
             </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={toggleMic}
+                className="flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-border text-xs font-semibold text-ink"
+              >
+                {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                {micOn ? 'Mute' : 'Unmute'}
+              </button>
+              <button
+                type="button"
+                onClick={toggleCam}
+                disabled={!video}
+                className="flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-border text-xs font-semibold text-ink disabled:opacity-40"
+              >
+                {camOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                {camOn ? 'Camera off' : 'Camera on'}
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => void leave()}
@@ -254,6 +306,14 @@ export function TeamHuddle() {
             >
               <Users className="h-4 w-4" />
               {video ? 'Start encrypted video huddle' : 'Start encrypted voice huddle'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void openTeamsCloud()}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-navy-800 text-sm font-semibold text-navy-900 hover:bg-canvas"
+            >
+              <Video className="h-4 w-4" />
+              Start Microsoft Teams cloud call
             </button>
           </div>
         )}

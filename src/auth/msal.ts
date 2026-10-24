@@ -70,18 +70,30 @@ export function hasEntraRedirectReturn(
   }
 }
 
-/** Load the Entra SPA application ID from entra.json when env is empty. */
+/** Future app registrations replace the client ID in entra.json. Empty keeps the built-in default. */
+export function clientIdFromEntraDocument(
+  json: { clientId?: string } | null | undefined,
+  fallback = ENTRA_SPA_CLIENT_ID,
+): string {
+  const id = String(json?.clientId ?? '').trim()
+  return id || fallback
+}
+
+/** Load entra.json on top of the built-in client ID so the Azure app can be swapped later. */
 export async function loadEntraConfig(): Promise<void> {
-  if (resolvedClientId) return
   if (typeof fetch === 'undefined' || typeof document === 'undefined') return
   try {
     const res = await fetch(new URL('entra.json', document.baseURI).href, { cache: 'no-store' })
     if (!res.ok) return
     const json = (await res.json()) as { clientId?: string }
-    const id = String(json.clientId ?? '').trim()
-    if (id) resolvedClientId = id
+    const next = clientIdFromEntraDocument(json, resolvedClientId || ENTRA_SPA_CLIENT_ID)
+    if (next !== resolvedClientId) {
+      resolvedClientId = next
+      pca = null
+      initPromise = null
+    }
   } catch {
-    // keep compile-time env
+    if (!resolvedClientId) resolvedClientId = ENTRA_SPA_CLIENT_ID
   }
 }
 
