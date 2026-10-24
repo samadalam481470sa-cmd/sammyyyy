@@ -3,7 +3,7 @@ import type { AuthUser } from '@/types'
 import { clearSession, getStoredSession, storeSession } from '@/lib/api'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { emailOwnerKey } from '@/lib/emailIdentity'
-import { TOKEN_KEY, USER_KEY, PROOF_KEY } from '@/lib/sessionProof'
+import { TOKEN_KEY, USER_KEY, PROOF_KEY, DEVICE_SECRET_KEY } from '@/lib/sessionProof'
 
 function memoryStorage() {
   const store: Record<string, string> = {}
@@ -63,6 +63,7 @@ describe('logout keeps CRM edits', () => {
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull()
     expect(localStorage.getItem(USER_KEY)).toBeNull()
     expect(localStorage.getItem(PROOF_KEY)).toBeNull()
+    expect(localStorage.getItem(DEVICE_SECRET_KEY)).toBeTruthy()
     expect(loadOwnedCollection('opportunities', owner, [])).toEqual([
       { id: 'opp-a', projectName: 'Edited Deal Alpha' },
     ])

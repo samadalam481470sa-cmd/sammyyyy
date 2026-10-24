@@ -18,3 +18,17 @@ export function hexToBytes(hex: string): Uint8Array {
   }
   return out
 }
+
+/** Constant-time compare for hex signatures. Length mismatch still returns false. */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let out = 0
+  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return out === 0
+}
+
+export function randomHex(bytes = 32): string {
+  const buf = new Uint8Array(bytes)
+  crypto.getRandomValues(buf)
+  return bytesToHex(buf)
+}

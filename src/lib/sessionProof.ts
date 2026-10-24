@@ -1,10 +1,11 @@
 import type { AuthUser } from '@/types'
 import { MANAGER_KEY_HASH, SLOT1_KEY_HASH, DEMO_FINGERPRINT } from '@/lib/credentialHashes'
-import { sha256Hex } from '@/lib/sha256'
+import { randomHex, sha256Hex, timingSafeEqual } from '@/lib/sha256'
 import { isLocalSlotRevoked, loadLocalIssuedKeys } from '@/lib/demoStore'
-import { emailOwnerKey } from '@/lib/emailIdentity'
+import { emailOwnerKey, normalizeEmail } from '@/lib/emailIdentity'
+import { readDeviceSecret } from '@/lib/deviceSecret'
 
-const PEPPER = 'nwp-session-proof-v2'
+const PEPPER = 'nwp-session-proof-v3'
 const PROOF_KEY = 'newport_crm_session_proof'
 const TOKEN_KEY = 'newport_crm_session_token'
 const USER_KEY = 'newport_crm_session_user'
@@ -12,6 +13,7 @@ const USER_KEY = 'newport_crm_session_user'
 const LOCAL_TOKEN = 'local-demo'
 const MSAL_TOKEN = 'msal'
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000
+const PROOF_VERSION = 3 as const
 
 function storageGet(key: string): string | null {
   try {
@@ -59,13 +61,18 @@ export function removeSessionItem(key: string): void {
   storageRemove(key)
 }
 
+export async function newSessionToken(): Promise<string> {
+  return randomHex(32)
+}
+
 export interface SessionProof {
-  v: 2
+  v: 3
   token: string
   issuedAt: number
   expiresAt: number
   fingerprint: string
   ownerKey: string
+  email: string
   isManager: boolean
   apiKeySlot: number | null
   authMethod: AuthUser['authMethod']
@@ -80,6 +87,7 @@ function claims(p: Omit<SessionProof, 'sig'>): string {
     p.expiresAt,
     p.fingerprint,
     p.ownerKey,
+    p.email,
     p.isManager ? '1' : '0',
     p.apiKeySlot ?? '',
     p.authMethod ?? '',
@@ -87,7 +95,7 @@ function claims(p: Omit<SessionProof, 'sig'>): string {
 }
 
 async function sign(body: Omit<SessionProof, 'sig'>): Promise<string> {
-  return sha256Hex(`${PEPPER}|${claims(body)}`)
+  return sha256Hex(`${PEPPER}|${readDeviceSecret()}|${claims(body)}`)
 }
 
 export function ownerKeyFromProofFields(input: {
@@ -118,8 +126,9 @@ export async function createSessionProof(input: {
 }): Promise<SessionProof> {
   const isManager = Boolean(input.user.isManager || input.user.authMethod === 'manager_key')
   const apiKeySlot = isManager ? null : (input.user.apiKeySlot ?? null)
+  const email = normalizeEmail(input.user.email || '')
   const body: Omit<SessionProof, 'sig'> = {
-    v: 2,
+    v: PROOF_VERSION,
     token: input.token,
     issuedAt: Date.now(),
     expiresAt: Date.now() + SESSION_MS,
@@ -131,6 +140,7 @@ export async function createSessionProof(input: {
       userId: input.user.id,
       email: input.user.email,
     }),
+    email,
     isManager,
     apiKeySlot,
     authMethod: input.user.authMethod,
@@ -143,7 +153,7 @@ export function readProofBlob(): SessionProof | null {
     const raw = storageGet(PROOF_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as SessionProof
-    if (parsed?.v !== 2 || typeof parsed.sig !== 'string') return null
+    if (parsed?.v !== PROOF_VERSION || typeof parsed.sig !== 'string') return null
     return parsed
   } catch {
     return null
@@ -156,7 +166,15 @@ function privilegeMatches(user: AuthUser, proof: SessionProof): boolean {
   const slot = isManager ? null : (user.apiKeySlot ?? null)
   if (slot !== proof.apiKeySlot) return false
   if ((user.authMethod ?? '') !== (proof.authMethod ?? '')) return false
-  return true
+  if (normalizeEmail(user.email || '') !== proof.email) return false
+  const expectedOwner = ownerKeyFromProofFields({
+    isManager,
+    apiKeySlot: slot,
+    authMethod: user.authMethod,
+    userId: user.id,
+    email: user.email,
+  })
+  return expectedOwner === proof.ownerKey
 }
 
 export async function verifySessionProof(
@@ -165,28 +183,30 @@ export async function verifySessionProof(
   proof: SessionProof | null,
 ): Promise<boolean> {
   if (!proof) return false
+  if (proof.v !== PROOF_VERSION) return false
   if (proof.token !== token) return false
   if (proof.expiresAt < Date.now()) return false
   if (!privilegeMatches(user, proof)) return false
   const expected = await sign({
-    v: 2,
+    v: PROOF_VERSION,
     token: proof.token,
     issuedAt: proof.issuedAt,
     expiresAt: proof.expiresAt,
     fingerprint: proof.fingerprint,
     ownerKey: proof.ownerKey,
+    email: proof.email,
     isManager: proof.isManager,
     apiKeySlot: proof.apiKeySlot,
     authMethod: proof.authMethod,
   })
-  if (expected !== proof.sig) return false
+  if (!timingSafeEqual(expected, proof.sig)) return false
   if (proof.isManager && proof.fingerprint !== MANAGER_KEY_HASH) return false
   if (proof.authMethod === 'demo' && proof.fingerprint !== DEMO_FINGERPRINT) return false
   if (proof.apiKeySlot != null && isLocalSlotRevoked(proof.apiKeySlot)) return false
   if (proof.apiKeySlot === 1) {
     const issued = loadLocalIssuedKeys().find((k) => k.slot === 1)
-    const expected = issued?.keyHash || SLOT1_KEY_HASH
-    if (proof.fingerprint !== expected && proof.fingerprint !== SLOT1_KEY_HASH) return false
+    const expectedHash = issued?.keyHash || SLOT1_KEY_HASH
+    if (proof.fingerprint !== expectedHash && proof.fingerprint !== SLOT1_KEY_HASH) return false
   } else if (proof.apiKeySlot != null) {
     const issued = loadLocalIssuedKeys().find((k) => k.slot === proof.apiKeySlot)
     if (!issued?.keyHash || issued.keyHash !== proof.fingerprint) return false
@@ -207,3 +227,4 @@ export function hasProofEnvelope(): boolean {
 }
 
 export { TOKEN_KEY, USER_KEY, LOCAL_TOKEN, MSAL_TOKEN, PROOF_KEY }
+export { DEVICE_SECRET_KEY } from '@/lib/deviceSecret'

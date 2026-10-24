@@ -88,4 +88,43 @@ describe('sessionProof', () => {
     proof.sig = 'a'.repeat(64)
     expect(await verifySessionProof('local-demo', slot1, proof)).toBe(false)
   })
+
+  it('rejects swapping in another email on a Microsoft session', async () => {
+    const mary: AuthUser = {
+      id: 'mary@outlook.com',
+      email: 'mary@outlook.com',
+      name: 'Mary',
+      role: 'partner',
+      initials: 'M',
+      authMethod: 'microsoft',
+      isManager: false,
+    }
+    const proof = await createSessionProof({
+      token: 'tok',
+      user: mary,
+      fingerprint: 'fp',
+    })
+    const other = { ...mary, id: 'other@gmail.com', email: 'other@gmail.com' }
+    expect(await verifySessionProof('tok', other, proof)).toBe(false)
+  })
+
+  it('rejects a proof signed on a different browser secret', async () => {
+    const mary: AuthUser = {
+      id: 'mary@outlook.com',
+      email: 'mary@outlook.com',
+      name: 'Mary',
+      role: 'partner',
+      initials: 'M',
+      authMethod: 'microsoft',
+      isManager: false,
+    }
+    const proof = await createSessionProof({
+      token: 'tok',
+      user: mary,
+      fingerprint: 'fp',
+    })
+    vi.stubGlobal('localStorage', memoryStorage())
+    vi.stubGlobal('sessionStorage', memoryStorage())
+    expect(await verifySessionProof('tok', mary, proof)).toBe(false)
+  })
 })

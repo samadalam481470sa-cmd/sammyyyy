@@ -14,6 +14,7 @@ import {
   type LoginProvider,
 } from '@/lib/emailIdentity'
 import { attachLoginShield } from '@/lib/loginGuard'
+import { recordLoginFailure } from '@/lib/loginThrottle'
 import newportLogo from '@/assets/newport-logo.png'
 
 function postLoginPath(): string {
@@ -144,6 +145,7 @@ export function LoginPage() {
   const finishEmailSignIn = async (nextProvider: LoginProvider) => {
     const parsed = parseLoginEmail(email)
     if (!parsed.ok) {
+      recordLoginFailure()
       setError(
         nextProvider === 'microsoft'
           ? parsed.error.replace('work email', 'Microsoft 365 email')

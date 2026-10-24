@@ -7,6 +7,7 @@ function productionCsp(): Plugin {
   const csp = [
     "default-src 'self'",
     "script-src 'self'",
+    "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://login.microsoftonline.com https://graph.microsoft.com",
@@ -29,6 +30,7 @@ function productionCsp(): Plugin {
         `<head>
     <meta http-equiv="Content-Security-Policy" content="${csp}" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="Permissions-Policy" content="camera=(self), microphone=(self), geolocation=(), payment=(), usb=()" />`,
       )
     },

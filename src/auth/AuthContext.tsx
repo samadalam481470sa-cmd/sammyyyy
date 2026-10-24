@@ -16,10 +16,12 @@ import {
   displayNameFromEmail,
   initialsFromName,
   loginProviderFromEmail,
+  normalizeEmail,
   parseLoginEmail,
   type LoginProvider,
 } from '@/lib/emailIdentity'
-import { readProofBlob, verifySessionProof, MSAL_TOKEN } from '@/lib/sessionProof'
+import { readProofBlob, verifySessionProof, newSessionToken } from '@/lib/sessionProof'
+import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from '@/lib/loginThrottle'
 import { sha256Hex } from '@/lib/sha256'
 import {
   clearMicrosoftCache,
@@ -71,7 +73,7 @@ async function rememberLastEmail(email: string, provider?: LoginProvider) {
 async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicrosoftAccount>) {
   if (!account) return null
   const user = userFromMicrosoftAccount(account)
-  await storeSession(MSAL_TOKEN, user, await sha256Hex(user.email || user.id))
+  await storeSession(await newSessionToken(), user, await sha256Hex(user.email || user.id))
   await rememberLastEmail(user.email)
   return user
 }
@@ -95,6 +97,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (epoch !== epochRef.current || signingOutRef.current) return
       const account = getMicrosoftAccount()
       if (account) {
+        const msUser = userFromMicrosoftAccount(account)
+        const storedMs = getStoredSession()
+        const proofMs = readProofBlob()
+        if (storedMs?.user && proofMs) {
+          const sameEmail =
+            normalizeEmail(storedMs.user.email || '') === normalizeEmail(msUser.email || '')
+          const ok = sameEmail && (await verifySessionProof(storedMs.token, storedMs.user, proofMs))
+          if (epoch !== epochRef.current || signingOutRef.current) return
+          if (ok) {
+            await storeSession(storedMs.token, storedMs.user, proofMs.fingerprint)
+            if (epoch !== epochRef.current || signingOutRef.current) return
+            setUser(storedMs.user)
+            return
+          }
+        }
         const next = await sessionFromMicrosoftAccount(account)
         if (epoch !== epochRef.current || signingOutRef.current) return
         setUser(next)
@@ -134,24 +151,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [hydrate])
 
   const signInWithEmail = useCallback(async (raw: string, provider?: LoginProvider) => {
+    const gate = assertLoginAllowed()
+    if (!gate.ok) throw new Error(gate.error)
     const parsed = parseLoginEmail(raw)
-    if (!parsed.ok) throw new Error(parsed.error)
+    if (!parsed.ok) {
+      recordLoginFailure()
+      throw new Error(parsed.error)
+    }
     epochRef.current += 1
     signingOutRef.current = false
     const next = userFromEmailAddress(parsed.email)
     await clearMicrosoftCache().catch(() => undefined)
-    await storeSession(MSAL_TOKEN, next, await sha256Hex(parsed.email))
+    await storeSession(await newSessionToken(), next, await sha256Hex(parsed.email))
     await rememberLastEmail(parsed.email, provider)
+    recordLoginSuccess()
     setUser(next)
   }, [])
 
   const signInWithMicrosoft = useCallback(async (loginHint?: string) => {
+    const gate = assertLoginAllowed()
+    if (!gate.ok) throw new Error(gate.error)
     const result = await startMicrosoftLogin(loginHint)
     if (result.status === 'redirect') return
     epochRef.current += 1
     signingOutRef.current = false
-    await storeSession(MSAL_TOKEN, result.user, await sha256Hex(result.user.email || result.user.id))
+    await storeSession(
+      await newSessionToken(),
+      result.user,
+      await sha256Hex(result.user.email || result.user.id),
+    )
     await rememberLastEmail(result.user.email, 'microsoft')
+    recordLoginSuccess()
     setUser(result.user)
   }, [])
 
