@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
-import { isMicrosoftAuthCancelled } from '@/auth/msal'
+import { consumeMicrosoftReturnErrorMessage, isMicrosoftAuthCancelled } from '@/auth/msal'
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
@@ -110,7 +110,7 @@ export function LoginPage() {
   const { isAuthenticated, authReady, signInWithEmail, signInWithMicrosoft } = useAuth()
   const [provider, setProvider] = useState<LoginProvider>(lastProvider)
   const [email, setEmail] = useState(lastEmail)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => consumeMicrosoftReturnErrorMessage())
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const inFlightRef = useRef(false)
@@ -180,19 +180,25 @@ export function LoginPage() {
 
   const onMicrosoft365 = () => {
     if (inFlightRef.current) return
+    const parsed = parseLoginEmail(email)
+    if (!parsed.ok) {
+      setProvider('microsoft')
+      fail(parsed.error.replace('work email', 'Microsoft email'))
+      return
+    }
     inFlightRef.current = true
     setProvider('microsoft')
     setBusy(true)
     setError(null)
     void (async () => {
       try {
-        await signInWithMicrosoft(email.trim() || lastEmail() || undefined)
+        await signInWithMicrosoft(parsed.email)
       } catch (err) {
         if (isMicrosoftAuthCancelled(err)) {
-          fail('Microsoft 365 sign-in was cancelled. Try again.')
+          fail('Microsoft sign-in was cancelled. Try again.')
           return
         }
-        fail(err instanceof Error ? err.message : 'Enter a Microsoft 365 email to continue.')
+        fail(err instanceof Error ? err.message : 'Microsoft cloud sign-in failed.')
       }
     })()
   }
@@ -223,7 +229,7 @@ export function LoginPage() {
             Sign in with Microsoft
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Microsoft’s official cloud sign-in opens the dashboard. Outlook, Gmail, or other email sit underneath.
+            Type your Microsoft email, continue to Microsoft’s cloud, enter your password there, then return to the dashboard.
           </p>
 
           <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
@@ -243,10 +249,36 @@ export function LoginPage() {
                 </div>
               </div>
 
+              <label
+                htmlFor="microsoft-email"
+                className="mt-4 block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
+              >
+                Microsoft email
+              </label>
+              <input
+                ref={provider === 'microsoft' ? emailRef : undefined}
+                id="microsoft-email"
+                data-testid="login-microsoft-email"
+                type="email"
+                autoComplete="username"
+                inputMode="email"
+                value={email}
+                placeholder="you@outlook.com or you@company.com"
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  setProvider('microsoft')
+                  if (error) setError(null)
+                }}
+                className="mt-2 h-12 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+              <p className="mt-2 text-[11px] leading-snug text-ink-muted">
+                Microsoft 365, Outlook.com, Hotmail, Live, or MSN. You enter your password on login.microsoftonline.com.
+              </p>
+
               {provider === 'microsoft' && error && (
                 <p
                   data-testid="login-error"
-                  className="mt-4 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
+                  className="mt-3 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
                 >
                   {error}
                 </p>
@@ -260,7 +292,7 @@ export function LoginPage() {
                 className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 <MicrosoftMark className="h-7 w-7" />
-                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Sign in with Microsoft'}
+                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Continue to Microsoft'}
               </button>
             </div>
 

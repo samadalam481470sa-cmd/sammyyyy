@@ -25,6 +25,7 @@ import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from '@/li
 import { sha256Hex } from '@/lib/sha256'
 import {
   clearMicrosoftCache,
+  consumeMicrosoftRedirectError,
   ensureMsal,
   getMicrosoftAccount,
   hasEntraRedirectReturn,
@@ -100,6 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await ensureMsal()
       } catch {
         // Email sessions must still restore when Entra is not configured.
+      }
+      const redirectErr = consumeMicrosoftRedirectError()
+      if (redirectErr) {
+        if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
+        setUser(null)
+        return
       }
       if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
       const account = getMicrosoftAccount()
@@ -202,10 +209,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (signInLockRef.current) throw new Error('Sign-in already in progress.')
     const gate = assertLoginAllowed()
     if (!gate.ok) throw new Error(gate.error)
+    const hint = loginHint?.trim()
+    if (hint) {
+      const parsed = parseLoginEmail(hint)
+      if (!parsed.ok) {
+        recordLoginFailure()
+        throw new Error(parsed.error.replace('work email', 'Microsoft email'))
+      }
+    }
     signInLockRef.current = true
     try {
       await loadEntraConfig()
-      const result = await startMicrosoftLogin(loginHint)
+      if (hint) await rememberLastEmail(hint, 'microsoft')
+      const result = await startMicrosoftLogin(hint)
       if (result.status === 'redirect') return
       await establishSession(result.user, 'microsoft')
     } finally {

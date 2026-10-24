@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildMicrosoftLoginRequest,
+  entraReturnErrorFromLocation,
   hasEntraRedirectReturn,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
+  LOGIN_SCOPES,
   microsoftAuthErrorCode,
   MicrosoftAuthUnavailableError,
   spaRedirectUriFromLocation,
@@ -27,6 +30,29 @@ describe('Microsoft 365 SPA URLs', () => {
         'https://samadalam481470sa-cmd.github.io/sammyyyy/index.html',
       ),
     ).toBe('https://samadalam481470sa-cmd.github.io/sammyyyy/')
+  })
+
+  it('forces the hosted Microsoft password page and prefills the typed email', () => {
+    expect(buildMicrosoftLoginRequest('ada@outlook.com')).toEqual({
+      scopes: LOGIN_SCOPES,
+      prompt: 'login',
+      loginHint: 'ada@outlook.com',
+    })
+    expect(buildMicrosoftLoginRequest('  ')).toMatchObject({ prompt: 'login' })
+  })
+
+  it('turns Microsoft cloud return errors into a login message', () => {
+    expect(
+      entraReturnErrorFromLocation(
+        'https://example.com/?error=access_denied&error_description=the+user+cancelled',
+      ),
+    ).toMatch(/cancelled/i)
+    expect(
+      entraReturnErrorFromLocation(
+        'https://example.com/?error=invalid_request&error_description=AADSTS900144:+missing+code',
+      ),
+    ).toMatch(/AADSTS900144/)
+    expect(entraReturnErrorFromLocation('https://example.com/')).toBeNull()
   })
 
   it('detects the official Microsoft cloud return so the CRM can finish SSO', () => {

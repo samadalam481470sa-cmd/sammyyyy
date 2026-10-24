@@ -24,6 +24,7 @@ const AUTH_QUERY_KEYS = [
 
 let pca: PublicClientApplication | null = null
 let initPromise: Promise<PublicClientApplication | null> | null = null
+let lastRedirectError: Error | null = null
 
 export class MicrosoftAuthUnavailableError extends Error {
   constructor() {
@@ -101,13 +102,60 @@ export function stripAuthRedirectQuery(href: string): string {
   return `${url.pathname}${search ? `?${search}` : ''}${url.hash}`
 }
 
+const RETURN_ERROR_KEY = 'newport_msal_return_error'
+
+export function rememberMicrosoftReturnError(message: string): void {
+  try {
+    sessionStorage.setItem(RETURN_ERROR_KEY, message)
+  } catch {
+    // ignore
+  }
+}
+
+export function consumeMicrosoftReturnErrorMessage(): string | null {
+  try {
+    const msg = sessionStorage.getItem(RETURN_ERROR_KEY)
+    if (msg) sessionStorage.removeItem(RETURN_ERROR_KEY)
+    return msg
+  } catch {
+    return null
+  }
+}
+
 export function applyAuthRedirectCleanup(): void {
   if (typeof window === 'undefined') return
+  const fromUrl = entraReturnErrorFromLocation(window.location.href)
+  if (fromUrl) rememberMicrosoftReturnError(fromUrl)
   const next = stripAuthRedirectQuery(window.location.href)
   const current = `${window.location.pathname}${window.location.search}${window.location.hash}`
   if (next !== current) {
     window.history.replaceState({}, document.title, next)
   }
+}
+
+/** Microsoft cloud error on the return URL (password cancelled, AADSTS, etc.). */
+export function entraReturnErrorFromLocation(
+  href = typeof window === 'undefined' ? '' : window.location.href,
+): string | null {
+  try {
+    const url = new URL(href)
+    const error = url.searchParams.get('error')
+    if (!error) return null
+    const desc = (url.searchParams.get('error_description') ?? '').replace(/\+/g, ' ')
+    if (error === 'access_denied' || /cancel/i.test(desc)) {
+      return 'Microsoft sign-in was cancelled. Try again.'
+    }
+    const first = desc.split('\n')[0].trim()
+    return first.slice(0, 280) || 'Microsoft could not complete sign-in.'
+  } catch {
+    return null
+  }
+}
+
+export function consumeMicrosoftRedirectError(): Error | null {
+  const err = lastRedirectError
+  lastRedirectError = null
+  return err
 }
 
 const CANCELLED_CODES = new Set(['user_cancelled', 'user_canceled'])
@@ -191,11 +239,16 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
       },
     })
     await instance.initialize()
-    const result: AuthenticationResult | null = await instance.handleRedirectPromise()
-    if (result?.account) instance.setActiveAccount(result.account)
-    else {
-      const existing = instance.getAllAccounts()[0]
-      if (existing) instance.setActiveAccount(existing)
+    try {
+      const result: AuthenticationResult | null = await instance.handleRedirectPromise()
+      if (result?.account) instance.setActiveAccount(result.account)
+      else {
+        const existing = instance.getAllAccounts()[0]
+        if (existing) instance.setActiveAccount(existing)
+      }
+    } catch (err) {
+      lastRedirectError = err instanceof Error ? err : new Error(String(err))
+      rememberMicrosoftReturnError(lastRedirectError.message)
     }
     applyAuthRedirectCleanup()
     pca = instance
@@ -215,11 +268,12 @@ export function getMicrosoftAccount(): AccountInfo | null {
   return pca.getActiveAccount() ?? pca.getAllAccounts()[0] ?? null
 }
 
-function loginRequest(loginHint?: string): PopupRequest & RedirectRequest {
+export function buildMicrosoftLoginRequest(loginHint?: string): PopupRequest & RedirectRequest {
   const hint = loginHint?.trim()
   return {
     scopes: LOGIN_SCOPES,
-    ...(hint ? { loginHint: hint } : { prompt: 'select_account' }),
+    prompt: 'login',
+    ...(hint ? { loginHint: hint } : {}),
   }
 }
 
@@ -252,13 +306,15 @@ export async function startMicrosoftLogin(loginHint?: string): Promise<Microsoft
   const instance = await ensureMsal()
   if (!instance) throw new MicrosoftAuthUnavailableError()
 
-  const existing = getMicrosoftAccount()
-  if (existing) {
-    return { status: 'signed_in', user: userFromMicrosoftAccount(existing) }
+  const hint = loginHint?.trim()
+  if (hint && typeof sessionStorage !== 'undefined') {
+    try {
+      sessionStorage.setItem('newport_msal_login_hint', hint)
+    } catch {
+      // ignore
+    }
   }
-
-  // Official Microsoft cloud SSO: the hosted login.microsoftonline.com page.
-  await instance.loginRedirect(loginRequest(loginHint))
+  await instance.loginRedirect(buildMicrosoftLoginRequest(hint))
   return { status: 'redirect' }
 }
 
