@@ -37,7 +37,11 @@ export class MicrosoftAuthUnavailableError extends Error {
 
 const COMMON_AUTHORITY = 'https://login.microsoftonline.com/common'
 
-let resolvedClientId = (import.meta.env.VITE_MSAL_CLIENT_ID ?? '').trim()
+/** Public SPA client ID. Not a secret. Work + personal Microsoft accounts. */
+export const ENTRA_SPA_CLIENT_ID = '2e296364-cbf0-4742-ba8f-3e0615a4e777'
+
+let resolvedClientId =
+  (import.meta.env.VITE_MSAL_CLIENT_ID ?? '').trim() || ENTRA_SPA_CLIENT_ID
 
 export function msalClientId(): string {
   return resolvedClientId

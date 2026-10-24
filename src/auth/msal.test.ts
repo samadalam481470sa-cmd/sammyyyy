@@ -5,8 +5,10 @@ import {
   hasEntraRedirectReturn,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
+  ENTRA_SPA_CLIENT_ID,
   LOGIN_SCOPES,
   msalAuthority,
+  msalClientId,
   microsoftAuthErrorCode,
   MicrosoftAuthUnavailableError,
   spaRedirectUriFromLocation,
@@ -35,6 +37,11 @@ describe('Microsoft 365 SPA URLs', () => {
 
   it('uses the common Microsoft cloud authority so work and personal accounts both work', () => {
     expect(msalAuthority()).toBe('https://login.microsoftonline.com/common')
+  })
+
+  it('ships the registered Entra SPA client ID so Microsoft cloud sign-in is connected', () => {
+    expect(ENTRA_SPA_CLIENT_ID).toBe('2e296364-cbf0-4742-ba8f-3e0615a4e777')
+    expect(msalClientId()).toBe(ENTRA_SPA_CLIENT_ID)
   })
 
   it('forces the hosted Microsoft password page and prefills the typed email', () => {

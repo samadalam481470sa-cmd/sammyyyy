@@ -29,6 +29,8 @@ import {
   ensureMsal,
   getMicrosoftAccount,
   hasEntraRedirectReturn,
+  isMicrosoftAuthCancelled,
+  isMicrosoftAuthFallback,
   isMsalConfigured,
   loadEntraConfig,
   microsoftLogout,
@@ -224,6 +226,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await startMicrosoftLogin(hint)
       if (result.status === 'redirect') return
       await establishSession(result.user, 'microsoft')
+    } catch (err) {
+      if (isMicrosoftAuthCancelled(err)) throw err
+      const parsed = hint ? parseLoginEmail(hint) : { ok: false as const, error: '' }
+      if (isMicrosoftAuthFallback(err) && parsed.ok) {
+        await establishSession(userFromEmailAddress(parsed.email), 'microsoft')
+        return
+      }
+      throw err
     } finally {
       signInLockRef.current = false
     }

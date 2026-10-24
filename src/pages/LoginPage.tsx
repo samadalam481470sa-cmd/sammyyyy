@@ -2,7 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
-import { consumeMicrosoftReturnErrorMessage, isMicrosoftAuthCancelled } from '@/auth/msal'
+import {
+  consumeMicrosoftReturnErrorMessage,
+  isMicrosoftAuthCancelled,
+  isMicrosoftAuthFallback,
+} from '@/auth/msal'
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
@@ -196,6 +200,14 @@ export function LoginPage() {
       } catch (err) {
         if (isMicrosoftAuthCancelled(err)) {
           fail('Microsoft sign-in was cancelled. Try again.')
+          return
+        }
+        if (isMicrosoftAuthFallback(err)) {
+          const ok = await finishEmailSignIn('microsoft')
+          if (!ok) {
+            inFlightRef.current = false
+            setBusy(false)
+          }
           return
         }
         fail(err instanceof Error ? err.message : 'Microsoft cloud sign-in failed.')
