@@ -32,6 +32,7 @@ import {
   startMicrosoftLogin,
   userFromMicrosoftAccount,
 } from '@/auth/msal'
+import { flushAllUserVaults } from '@/lib/userVault'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -188,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    flushAllUserVaults()
     epochRef.current += 1
     signingOutRef.current = true
     setSigningOut(true)

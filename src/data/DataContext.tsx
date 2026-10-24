@@ -24,6 +24,7 @@ import {
   type TaskRecord,
 } from '@/data/mockModules'
 import { appendDemoChange, loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { registerVaultFlush } from '@/lib/userVault'
 import { demoProjectNumber } from '@/lib/demoAliases'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { crmUsersForSession, findCrmUserById, type CrmUser } from '@/lib/crmUsers'
@@ -252,6 +253,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    return registerVaultFlush(() => {
+      saveOwnedCollection('opportunities', owner, oppsRef.current)
+      saveOwnedCollection('tasks', owner, tasksRef.current)
+      saveOwnedCollection('documents', owner, docsRef.current)
+      saveOwnedCollection('activity', owner, activityRef.current)
+    })
+  }, [isAuthenticated, owner])
 
   const saveOpportunity = useCallback(
     async (id: string, patch: OpportunityUpdate) => {

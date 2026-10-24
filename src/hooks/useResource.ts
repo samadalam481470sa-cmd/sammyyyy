@@ -8,6 +8,7 @@ import {
   saveOwnedCollection,
 } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
+import { registerVaultFlush } from '@/lib/userVault'
 
 const API_BASE = '/api/resources'
 
@@ -107,6 +108,10 @@ export function useResource<T extends { id: string }>(
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    return registerVaultFlush(() => writeLocal(itemsRef.current))
+  }, [writeLocal])
 
   const changeMeta = () => ({
     actorName: user?.name || 'Newport user',

@@ -7,7 +7,8 @@ import {
   type NotificationItem,
 } from '@/lib/api'
 import { isLocalPersistence } from '@/lib/persistenceMode'
-import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
+import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { sessionOwnerKey } from '@/lib/ownerKey'
 import { useAuth } from '@/auth/AuthContext'
 import {
   loadCalendarEvents,
@@ -63,17 +64,18 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
     if (!open) return
     void (async () => {
       const owner = calendarOwnerKey(user)
+      const vault = sessionOwnerKey(user)
       pushCalendarReminders(user, loadCalendarEvents(owner))
       const reminders = loadKeyCalendarNotifications(user)
       if (isLocalPersistence()) {
-        setItems([...reminders, ...loadDemoCollection('notifications', SEED)])
+        setItems([...reminders, ...loadOwnedCollection('notifications', vault, SEED)])
         return
       }
       try {
         const data = await fetchNotifications()
         setItems([...reminders, ...data.notifications])
       } catch {
-        setItems([...reminders, ...loadDemoCollection('notifications', SEED)])
+        setItems([...reminders, ...loadOwnedCollection('notifications', vault, SEED)])
       }
     })()
   }, [open, user])
@@ -91,8 +93,9 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
           next.filter((n) => n.id.startsWith('cal-reminder-')),
         )
       } else if (isLocalPersistence()) {
-        saveDemoCollection(
+        saveOwnedCollection(
           'notifications',
+          sessionOwnerKey(user),
           next.filter((n) => !n.id.startsWith('cal-reminder-')),
         )
       } else {
@@ -123,7 +126,7 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
           createdAt: new Date().toISOString(),
         }
         const next = [created, ...items]
-        saveDemoCollection('notifications', next)
+        saveOwnedCollection('notifications', sessionOwnerKey(user), next)
         setItems(next)
         window.open(
           `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,

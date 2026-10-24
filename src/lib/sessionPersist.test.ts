@@ -4,6 +4,7 @@ import { clearSession, getStoredSession, storeSession } from '@/lib/api'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { emailOwnerKey } from '@/lib/emailIdentity'
 import { TOKEN_KEY, USER_KEY, PROOF_KEY, DEVICE_SECRET_KEY } from '@/lib/sessionProof'
+import { flushAllUserVaults, registerVaultFlush } from '@/lib/userVault'
 
 function memoryStorage() {
   const store: Record<string, string> = {}
@@ -82,5 +83,31 @@ describe('logout keeps CRM edits', () => {
     expect(loadOwnedCollection('opportunities', emailOwnerKey('b@gmail.com'), [])[0]).toMatchObject(
       { projectName: 'B vault' },
     )
+  })
+
+  it('binds seed records to the email on first login', () => {
+    const owner = emailOwnerKey('first@outlook.com')
+    const first = loadOwnedCollection('opportunities', owner, [
+      { id: 'opp-a', projectName: 'Seed Deal' },
+    ])
+    expect(first[0]).toMatchObject({ projectName: 'Seed Deal' })
+    expect(
+      loadOwnedCollection('opportunities', owner, [{ id: 'opp-a', projectName: 'Different seed' }])[0],
+    ).toMatchObject({ projectName: 'Seed Deal' })
+  })
+
+  it('flushes in-memory edits into the login vault before the session is cleared', () => {
+    const owner = emailOwnerKey('mary@outlook.com')
+    const stop = registerVaultFlush(() => {
+      saveOwnedCollection('opportunities', owner, [{ id: 'opp-a', projectName: 'Flushed on logout' }])
+      saveOwnedCollection('tasks', owner, [{ id: 'task-1', action: 'Call counsel' }])
+    })
+    flushAllUserVaults()
+    clearSession()
+    expect(loadOwnedCollection('opportunities', owner, [])[0]).toMatchObject({
+      projectName: 'Flushed on logout',
+    })
+    expect(loadOwnedCollection('tasks', owner, [])[0]).toMatchObject({ action: 'Call counsel' })
+    stop()
   })
 })

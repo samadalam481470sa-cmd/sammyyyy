@@ -98,6 +98,10 @@ export function loadOwnedCollection<T>(resource: string, ownerKey: string, fallb
         return parsed as T[]
       }
     }
+    // First visit for this login: bind the seed to this email so logout keeps it.
+    if (fallback.length > 0) {
+      saveDemoCollection(scoped, fallback)
+    }
   } catch {
     // ignore
   }
