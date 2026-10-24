@@ -32,6 +32,7 @@ import {
   isMsalConfigured,
   loadEntraConfig,
   microsoftLogout,
+  rememberMicrosoftReturnError,
   startMicrosoftLogin,
   userFromMicrosoftAccount,
 } from '@/auth/msal'
@@ -115,13 +116,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         return
       }
-      if (returned.kind === 'unknown' && returned.hint) {
-        const next = userFromEmailAddress(returned.hint)
-        await storeSession(await newSessionToken(), next, await sha256Hex(next.email))
-        await rememberLastEmail(next.email, 'microsoft')
+      if (returned.kind === 'unknown') {
+        rememberMicrosoftReturnError(
+          'Microsoft did not finish sign-in. Try again and enter your password on Microsoft’s page.',
+        )
         if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
-        recordLoginSuccess()
-        setUser(next)
+        setUser(null)
         return
       }
       if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
@@ -236,7 +236,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signInLockRef.current = true
     try {
       await loadEntraConfig()
-      if (hint) await rememberLastEmail(hint, 'microsoft')
       const result = await startMicrosoftLogin(hint)
       if (result.status === 'redirect') return
       await establishSession(result.user, 'microsoft')

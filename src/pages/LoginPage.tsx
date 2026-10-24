@@ -5,41 +5,11 @@ import { dashboardPathAfterLogin } from '@/lib/loginDestination'
 import {
   consumeMicrosoftReturnErrorMessage,
   isMicrosoftAuthCancelled,
-  isMicrosoftAuthFallback,
   isMicrosoftCredentialDenied,
 } from '@/auth/msal'
-import {
-  LAST_EMAIL_KEY,
-  LAST_PROVIDER_KEY,
-  loginProviderFromEmail,
-  parseLoginEmail,
-  type LoginProvider,
-} from '@/lib/emailIdentity'
+import { LAST_EMAIL_KEY, LAST_PROVIDER_KEY, parseLoginEmail, type LoginProvider } from '@/lib/emailIdentity'
 import { attachLoginShield } from '@/lib/loginGuard'
-import { recordLoginFailure } from '@/lib/loginThrottle'
 import newportLogo from '@/assets/newport-logo.png'
-
-function lastEmail(): string {
-  try {
-    return localStorage.getItem(LAST_EMAIL_KEY) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function lastProvider(): LoginProvider {
-  try {
-    const stored = localStorage.getItem(LAST_PROVIDER_KEY)
-    if (stored === 'microsoft' || stored === 'outlook' || stored === 'gmail' || stored === 'other') {
-      return stored
-    }
-    const email = lastEmail()
-    if (email) return loginProviderFromEmail(email)
-  } catch {
-    // ignore
-  }
-  return 'microsoft'
-}
 
 const PROVIDERS: Record<
   LoginProvider,
@@ -59,13 +29,13 @@ const PROVIDERS: Record<
   },
   gmail: {
     title: 'Gmail',
-    hint: 'Gmail and Google Workspace addresses.',
+    hint: 'Newport does not take a Google password. If this address is a Microsoft work account, Microsoft verifies it.',
     placeholder: 'you@gmail.com',
     accounts: '@gmail.com · Google Workspace',
   },
   other: {
     title: 'Other email',
-    hint: 'Any other work or personal email. We check that it is valid, then open the dashboard.',
+    hint: 'Any firm that uses Microsoft 365. Microsoft verifies the account. Newport does not store the password.',
     placeholder: 'you@company.com',
     accounts: 'company or personal email',
   },
@@ -112,9 +82,10 @@ function OtherMark({ className }: { className?: string }) {
 }
 
 export function LoginPage() {
-  const { isAuthenticated, authReady, signInWithEmail, signInWithMicrosoft } = useAuth()
-  const [provider, setProvider] = useState<LoginProvider>(lastProvider)
-  const [email, setEmail] = useState(lastEmail)
+  const { isAuthenticated, authReady, signInWithMicrosoft } = useAuth()
+  const [provider, setProvider] = useState<LoginProvider>('microsoft')
+  const [email, setEmail] = useState('')
+  const [allowTyping, setAllowTyping] = useState(false)
   const [error, setError] = useState<string | null>(() => consumeMicrosoftReturnErrorMessage())
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -125,6 +96,15 @@ export function LoginPage() {
     const root = document.getElementById('root')
     if (!root) return
     return attachLoginShield(root)
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LAST_EMAIL_KEY)
+      localStorage.removeItem(LAST_PROVIDER_KEY)
+    } catch {
+      // shared browsers must not keep the previous person's address
+    }
   }, [])
 
   useEffect(() => {
@@ -152,41 +132,9 @@ export function LoginPage() {
     }, 0)
   }
 
-  const finishEmailSignIn = async (nextProvider: LoginProvider) => {
-    const parsed = parseLoginEmail(email)
-    if (!parsed.ok) {
-      recordLoginFailure()
-      setError(
-        nextProvider === 'microsoft'
-          ? parsed.error.replace('work email', 'Microsoft 365 email')
-          : parsed.error,
-      )
-      emailRef.current?.focus()
-      return false
-    }
-    await signInWithEmail(parsed.email, nextProvider)
-    return true
-  }
-
-  const onEmailSignIn = async (event: FormEvent) => {
+  const onEmailSignIn = (event: FormEvent) => {
     event.preventDefault()
-    if (provider === 'microsoft') {
-      onMicrosoft365()
-      return
-    }
-    if (inFlightRef.current) return
-    inFlightRef.current = true
-    setBusy(true)
-    setError(null)
-    try {
-      const ok = await finishEmailSignIn(provider)
-      if (!ok) {
-        inFlightRef.current = false
-        setBusy(false)
-      }
-    } catch (err) {
-      fail(err instanceof Error ? err.message : 'Sign-in failed')
-    }
+    onMicrosoft365()
   }
 
   const onMicrosoft365 = () => {
@@ -196,48 +144,26 @@ export function LoginPage() {
     if (typed) {
       const parsed = parseLoginEmail(typed)
       if (!parsed.ok) {
-        setProvider('microsoft')
         fail(parsed.error.replace('work email', 'Microsoft email'))
         return
       }
       hint = parsed.email
+    } else if (provider !== 'microsoft') {
+      fail('Enter the work email for this sign-in. The field starts blank on purpose.')
+      return
     }
     inFlightRef.current = true
-    setProvider('microsoft')
     setBusy(true)
     setError(null)
-    const here = window.location.href
-    const demoTimer = window.setTimeout(() => {
-      if (!inFlightRef.current || window.location.href !== here) return
-      if (!hint) {
-        fail('Microsoft’s sign-in page did not open. Try again.')
-        return
-      }
-      void finishEmailSignIn('microsoft').then((ok) => {
-        if (!ok) {
-          inFlightRef.current = false
-          setBusy(false)
-        }
-      })
-    }, 4500)
     void (async () => {
       try {
         await signInWithMicrosoft(hint)
       } catch (err) {
-        window.clearTimeout(demoTimer)
         if (isMicrosoftCredentialDenied(err) || isMicrosoftAuthCancelled(err)) {
           fail('Microsoft did not accept this sign-in. Enter your username and password on Microsoft’s page and try again.')
           return
         }
-        if (hint && isMicrosoftAuthFallback(err)) {
-          const ok = await finishEmailSignIn('microsoft')
-          if (!ok) {
-            inFlightRef.current = false
-            setBusy(false)
-          }
-          return
-        }
-        fail(err instanceof Error ? err.message : 'Microsoft cloud sign-in failed.')
+        fail(err instanceof Error ? err.message : 'Microsoft cloud sign-in did not open. Try again.')
       }
     })()
   }
@@ -271,7 +197,7 @@ export function LoginPage() {
             Continue to Microsoft and enter your real username and password there. Microsoft checks them, then this dashboard opens.
           </p>
 
-          <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
+          <form autoComplete="off" noValidate onSubmit={onEmailSignIn}>
             <div
               data-testid="login-microsoft-card"
               className="mt-5 rounded-2xl border-2 border-navy-900 bg-[#f4f7fb] px-5 py-5 shadow-sm"
@@ -283,7 +209,7 @@ export function LoginPage() {
                 <div className="min-w-0">
                   <p className="font-brand text-xl font-bold text-navy-900">Microsoft SSO</p>
                   <p className="text-xs leading-snug text-ink-muted">
-                    Official Microsoft cloud login (login.microsoftonline.com)
+                    Microsoft Entra ID · any firm, Outlook.com, or work account
                   </p>
                 </div>
               </div>
@@ -299,10 +225,16 @@ export function LoginPage() {
                 id="microsoft-email"
                 data-testid="login-microsoft-email"
                 type="email"
-                autoComplete="username"
+                name="newport-sign-in-email"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                readOnly={!allowTyping}
                 inputMode="email"
                 value={email}
-                placeholder="you@outlook.com or you@company.com"
+                placeholder="Work or Outlook email — left blank"
+                onFocus={() => setAllowTyping(true)}
                 onChange={(e) => {
                   setEmail(e.target.value)
                   setProvider('microsoft')
@@ -311,7 +243,7 @@ export function LoginPage() {
                 className="mt-2 h-12 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               />
               <p className="mt-2 text-[11px] leading-snug text-ink-muted">
-                Optional. Leave this blank to type your username and password on Microsoft’s page. We never see your password.
+                Leave this blank. Each person types their own account on Microsoft’s page. Newport never sees or stores the password.
               </p>
 
               {provider === 'microsoft' && error && (
@@ -405,9 +337,15 @@ export function LoginPage() {
                   id="work-email"
                   data-testid="login-email"
                   type="email"
-                  autoComplete="username"
+                  name="newport-sign-in-email-alt"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  readOnly={!allowTyping}
                   inputMode="email"
                   value={email}
+                  onFocus={() => setAllowTyping(true)}
                   placeholder={copy.placeholder}
                   onChange={(e) => {
                     setEmail(e.target.value)
@@ -432,15 +370,15 @@ export function LoginPage() {
                   data-testid="login-continue"
                   className="flex h-12 w-full items-center justify-center rounded-xl bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
                 >
-                  {busy ? 'Signing in…' : `Continue with ${copy.title}`}
+                  {busy ? 'Opening Microsoft…' : `Continue on Microsoft`}
                 </button>
               </div>
             )}
           </form>
         </div>
       </div>
-      <p className="relative mt-3 max-w-[28rem] text-center text-[10px] leading-snug text-white/50">
-        © 2026 Newport Specialty Partners. Authorized users only.
+      <p className="relative mt-3 max-w-[28rem] text-center text-[10px] leading-snug text-white/70">
+        Secured by Microsoft. Password entry stays on login.microsoftonline.com. This screen does not remember the last account.
       </p>
     </div>
   )
