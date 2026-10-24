@@ -78,6 +78,23 @@ export function applyAuthRedirectCleanup(): void {
   }
 }
 
+const CANCELLED_CODES = new Set(['user_cancelled', 'user_canceled'])
+const FALLBACK_CODES = new Set([
+  'popup_window_error',
+  'empty_window_error',
+  'monitor_window_timeout',
+  'popup_window_closed',
+  'interaction_in_progress',
+  'hash_empty_error',
+  'uninitialized_public_client_application',
+  'no_token_request_cache_error',
+  'endpoints_resolution_error',
+  'network_error',
+  'pkce_not_created',
+  'crypto_nonexistent',
+  'block_iframe_reload',
+])
+
 export function microsoftAuthErrorCode(err: unknown): string {
   if (err instanceof BrowserAuthError) return err.errorCode
   if (typeof err === 'object' && err && 'errorCode' in err) {
@@ -87,16 +104,29 @@ export function microsoftAuthErrorCode(err: unknown): string {
 }
 
 export function isMicrosoftAuthCancelled(err: unknown): boolean {
-  return microsoftAuthErrorCode(err) === 'user_cancelled'
+  return CANCELLED_CODES.has(microsoftAuthErrorCode(err))
+}
+
+/** Popup blocked, timed out, or Entra unavailable — continue with a valid email. */
+export function isMicrosoftAuthFallback(err: unknown): boolean {
+  if (err instanceof MicrosoftAuthUnavailableError) return true
+  if (isMicrosoftAuthCancelled(err)) return false
+  const code = microsoftAuthErrorCode(err)
+  if (code && FALLBACK_CODES.has(code)) return true
+  return true
 }
 
 export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
-  const name = account.name?.trim() || account.username || 'Microsoft user'
+  const email = (account.username || '').trim()
+  if (!email.includes('@')) {
+    throw new Error('Microsoft 365 did not return an email address.')
+  }
+  const name = account.name?.trim() || email.split('@')[0] || 'Microsoft user'
   const parts = name.split(/\s+/).filter(Boolean)
   const initials = `${parts[0]?.[0] ?? 'M'}${parts[1]?.[0] ?? ''}`.toUpperCase()
   return {
-    id: account.localAccountId || account.homeAccountId,
-    email: account.username || '',
+    id: account.localAccountId || account.homeAccountId || email,
+    email,
     name,
     role: 'partner',
     initials: initials.slice(0, 2),
@@ -156,43 +186,99 @@ function loginRequest(loginHint?: string): PopupRequest & RedirectRequest {
   const hint = loginHint?.trim()
   return {
     scopes: LOGIN_SCOPES,
-    prompt: 'select_account',
-    ...(hint ? { loginHint: hint } : {}),
+    ...(hint ? { loginHint: hint } : { prompt: 'select_account' }),
   }
 }
 
-export type MicrosoftLoginResult =
-  | { status: 'signed_in'; user: AuthUser }
-  | { status: 'redirect' }
+export type MicrosoftLoginResult = { status: 'signed_in'; user: AuthUser }
+
+const POPUP_TIMEOUT_MS = 25_000
+
+function withPopupTimeout<T>(work: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(Object.assign(new Error('Microsoft 365 sign-in timed out.'), { errorCode: 'monitor_window_timeout' }))
+    }, POPUP_TIMEOUT_MS)
+    work.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
+
+export function purgeMicrosoftAuthStorage(): void {
+  const wipe = (store: Storage) => {
+    const keys: string[] = []
+    for (let i = 0; i < store.length; i += 1) {
+      const key = store.key(i)
+      if (key && (key.startsWith('msal.') || key.startsWith('msal-'))) keys.push(key)
+    }
+    for (const key of keys) store.removeItem(key)
+  }
+  try {
+    if (typeof localStorage !== 'undefined') wipe(localStorage)
+  } catch {
+    // ignore
+  }
+  try {
+    if (typeof sessionStorage !== 'undefined') wipe(sessionStorage)
+  } catch {
+    // ignore
+  }
+}
+
+async function resetMicrosoftInteraction(instance: PublicClientApplication): Promise<void> {
+  await instance.handleRedirectPromise().catch(() => undefined)
+  purgeMicrosoftAuthStorage()
+}
 
 export async function startMicrosoftLogin(loginHint?: string): Promise<MicrosoftLoginResult> {
   const instance = await ensureMsal()
   if (!instance) throw new MicrosoftAuthUnavailableError()
 
   const request = loginRequest(loginHint)
-  try {
-    const popup = await instance.loginPopup(request)
+  const runPopup = async () => {
+    const popup = await withPopupTimeout(instance.loginPopup(request))
     if (!popup.account) throw new Error('Microsoft 365 did not return an account.')
     instance.setActiveAccount(popup.account)
-    return { status: 'signed_in', user: userFromMicrosoftAccount(popup.account) }
+    return { status: 'signed_in' as const, user: userFromMicrosoftAccount(popup.account) }
+  }
+
+  try {
+    return await runPopup()
   } catch (err) {
     if (isMicrosoftAuthCancelled(err)) throw err
-    const code = microsoftAuthErrorCode(err)
-    if (code === 'interaction_in_progress') {
-      await instance.handleRedirectPromise().catch(() => undefined)
+    if (microsoftAuthErrorCode(err) === 'interaction_in_progress') {
+      await resetMicrosoftInteraction(instance)
+      try {
+        return await runPopup()
+      } catch (retryErr) {
+        if (isMicrosoftAuthCancelled(retryErr)) throw retryErr
+        throw retryErr
+      }
     }
-    // Do not loginRedirect here — a full-page bounce away from the CRM is the
-    // main login glitch when the popup is blocked. The login page falls back
-    // to a valid email and opens the dashboard in place.
+    // Never loginRedirect — a full-page bounce is the main Microsoft login fault.
     throw err
   }
 }
 
 export async function clearMicrosoftCache(): Promise<void> {
-  const instance = await ensureMsal()
-  if (!instance) return
-  instance.setActiveAccount(null)
-  await instance.clearCache()
+  try {
+    const instance = await ensureMsal()
+    if (instance) {
+      instance.setActiveAccount(null)
+      await instance.clearCache()
+    }
+  } catch {
+    // still wipe leftover Entra keys below
+  }
+  purgeMicrosoftAuthStorage()
 }
 
 export async function microsoftLogout(): Promise<void> {

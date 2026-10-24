@@ -2,11 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
-import {
-  isMicrosoftAuthCancelled,
-  isMsalConfigured,
-  MicrosoftAuthUnavailableError,
-} from '@/auth/msal'
+import { isMicrosoftAuthCancelled } from '@/auth/msal'
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
@@ -118,7 +114,6 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const inFlightRef = useRef(false)
-  const configured = isMsalConfigured()
   const copy = PROVIDERS[provider]
 
   useEffect(() => {
@@ -190,39 +185,14 @@ export function LoginPage() {
     setBusy(true)
     setError(null)
     void (async () => {
-      if (configured) {
-        try {
-          await signInWithMicrosoft(email.trim() || undefined)
-          return
-        } catch (err) {
-          if (isMicrosoftAuthCancelled(err)) {
-            fail('Microsoft 365 sign-in was cancelled. Try again.')
-            return
-          }
-          if (!(err instanceof MicrosoftAuthUnavailableError)) {
-            const parsed = parseLoginEmail(email)
-            if (parsed.ok) {
-              try {
-                await signInWithEmail(parsed.email, 'microsoft')
-                return
-              } catch (emailErr) {
-                fail(emailErr instanceof Error ? emailErr.message : 'Sign-in failed')
-                return
-              }
-            }
-            fail(err instanceof Error ? err.message : 'Enter a Microsoft 365 email to continue.')
-            return
-          }
-        }
-      }
       try {
-        const ok = await finishEmailSignIn('microsoft')
-        if (!ok) {
-          inFlightRef.current = false
-          setBusy(false)
-        }
+        await signInWithMicrosoft(email.trim() || undefined)
       } catch (err) {
-        fail(err instanceof Error ? err.message : 'Sign-in failed')
+        if (isMicrosoftAuthCancelled(err)) {
+          fail('Microsoft 365 sign-in was cancelled. Try again.')
+          return
+        }
+        fail(err instanceof Error ? err.message : 'Enter a Microsoft 365 email to continue.')
       }
     })()
   }
