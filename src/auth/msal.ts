@@ -27,13 +27,18 @@ let initPromise: Promise<PublicClientApplication | null> | null = null
 
 export class MicrosoftAuthUnavailableError extends Error {
   constructor() {
-    super('Microsoft 365 is not connected for this deployment.')
+    super(
+      'Microsoft cloud sign-in is not connected. Register a Single-page app in Microsoft Entra ID and set its Application (client) ID in entra.json or VITE_MSAL_CLIENT_ID.',
+    )
     this.name = 'MicrosoftAuthUnavailableError'
   }
 }
 
+let resolvedClientId = (import.meta.env.VITE_MSAL_CLIENT_ID ?? '').trim()
+let resolvedTenant = (import.meta.env.VITE_MSAL_TENANT ?? 'common').trim() || 'common'
+
 export function msalClientId(): string {
-  return (import.meta.env.VITE_MSAL_CLIENT_ID ?? '').trim()
+  return resolvedClientId
 }
 
 export function isMsalConfigured(): boolean {
@@ -41,8 +46,35 @@ export function isMsalConfigured(): boolean {
 }
 
 export function msalAuthority(): string {
-  const tenant = (import.meta.env.VITE_MSAL_TENANT ?? 'common').trim() || 'common'
-  return `https://login.microsoftonline.com/${tenant}`
+  return `https://login.microsoftonline.com/${resolvedTenant}`
+}
+
+export function hasEntraRedirectReturn(
+  href = typeof window === 'undefined' ? '' : window.location.href,
+): boolean {
+  try {
+    const url = new URL(href)
+    return url.searchParams.has('code') || url.searchParams.has('error') || url.searchParams.has('state')
+  } catch {
+    return false
+  }
+}
+
+/** Load the Entra SPA application ID from entra.json when env is empty. */
+export async function loadEntraConfig(): Promise<void> {
+  if (resolvedClientId) return
+  if (typeof fetch === 'undefined' || typeof document === 'undefined') return
+  try {
+    const res = await fetch(new URL('entra.json', document.baseURI).href, { cache: 'no-store' })
+    if (!res.ok) return
+    const json = (await res.json()) as { clientId?: string; tenant?: string }
+    const id = String(json.clientId ?? '').trim()
+    if (id) resolvedClientId = id
+    const tenant = String(json.tenant ?? '').trim()
+    if (tenant) resolvedTenant = tenant
+  } catch {
+    // keep compile-time env
+  }
 }
 
 const APP_ROUTE =
@@ -140,6 +172,7 @@ export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
 
 export async function ensureMsal(): Promise<PublicClientApplication | null> {
   if (pca) return pca
+  if (!msalClientId()) return null
   if (initPromise) return initPromise
   initPromise = (async () => {
     const clientId = msalClientId()
@@ -190,27 +223,9 @@ function loginRequest(loginHint?: string): PopupRequest & RedirectRequest {
   }
 }
 
-export type MicrosoftLoginResult = { status: 'signed_in'; user: AuthUser }
-
-const POPUP_TIMEOUT_MS = 25_000
-
-function withPopupTimeout<T>(work: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(Object.assign(new Error('Microsoft 365 sign-in timed out.'), { errorCode: 'monitor_window_timeout' }))
-    }, POPUP_TIMEOUT_MS)
-    work.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (err) => {
-        clearTimeout(timer)
-        reject(err)
-      },
-    )
-  })
-}
+export type MicrosoftLoginResult =
+  | { status: 'signed_in'; user: AuthUser }
+  | { status: 'redirect' }
 
 export function purgeMicrosoftAuthStorage(): void {
   const wipe = (store: Storage) => {
@@ -233,39 +248,18 @@ export function purgeMicrosoftAuthStorage(): void {
   }
 }
 
-async function resetMicrosoftInteraction(instance: PublicClientApplication): Promise<void> {
-  await instance.handleRedirectPromise().catch(() => undefined)
-  purgeMicrosoftAuthStorage()
-}
-
 export async function startMicrosoftLogin(loginHint?: string): Promise<MicrosoftLoginResult> {
   const instance = await ensureMsal()
   if (!instance) throw new MicrosoftAuthUnavailableError()
 
-  const request = loginRequest(loginHint)
-  const runPopup = async () => {
-    const popup = await withPopupTimeout(instance.loginPopup(request))
-    if (!popup.account) throw new Error('Microsoft 365 did not return an account.')
-    instance.setActiveAccount(popup.account)
-    return { status: 'signed_in' as const, user: userFromMicrosoftAccount(popup.account) }
+  const existing = getMicrosoftAccount()
+  if (existing) {
+    return { status: 'signed_in', user: userFromMicrosoftAccount(existing) }
   }
 
-  try {
-    return await runPopup()
-  } catch (err) {
-    if (isMicrosoftAuthCancelled(err)) throw err
-    if (microsoftAuthErrorCode(err) === 'interaction_in_progress') {
-      await resetMicrosoftInteraction(instance)
-      try {
-        return await runPopup()
-      } catch (retryErr) {
-        if (isMicrosoftAuthCancelled(retryErr)) throw retryErr
-        throw retryErr
-      }
-    }
-    // Never loginRedirect — a full-page bounce is the main Microsoft login fault.
-    throw err
-  }
+  // Official Microsoft cloud SSO: the hosted login.microsoftonline.com page.
+  await instance.loginRedirect(loginRequest(loginHint))
+  return { status: 'redirect' }
 }
 
 export async function clearMicrosoftCache(): Promise<void> {
@@ -282,9 +276,27 @@ export async function clearMicrosoftCache(): Promise<void> {
 }
 
 export async function microsoftLogout(): Promise<void> {
-  // Local cache only. logoutPopup / logoutRedirect bounce the CRM off the
-  // dashboard and back, which is the main sign-out glitch.
-  await clearMicrosoftCache()
+  const instance = await ensureMsal()
+  if (!instance) {
+    purgeMicrosoftAuthStorage()
+    return
+  }
+  const account = instance.getActiveAccount() ?? instance.getAllAccounts()[0]
+  if (!account) {
+    await instance.clearCache()
+    purgeMicrosoftAuthStorage()
+    return
+  }
+  try {
+    await instance.logoutRedirect({
+      account,
+      postLogoutRedirectUri: spaRedirectUri(),
+    })
+  } catch {
+    instance.setActiveAccount(null)
+    await instance.clearCache()
+    purgeMicrosoftAuthStorage()
+  }
 }
 
 export async function getGraphAccessToken(scopes: string[] = GRAPH_FILE_SCOPES): Promise<string | null> {

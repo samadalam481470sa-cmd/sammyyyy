@@ -27,9 +27,9 @@ import {
   clearMicrosoftCache,
   ensureMsal,
   getMicrosoftAccount,
-  isMicrosoftAuthCancelled,
-  isMicrosoftAuthFallback,
+  hasEntraRedirectReturn,
   isMsalConfigured,
+  loadEntraConfig,
   microsoftLogout,
   startMicrosoftLogin,
   userFromMicrosoftAccount,
@@ -83,7 +83,9 @@ async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicroso
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [authReady, setAuthReady] = useState(() => !getStoredSession())
+  const [authReady, setAuthReady] = useState(
+    () => !getStoredSession() && !hasEntraRedirectReturn(),
+  )
   const [signingOut, setSigningOut] = useState(false)
   const epochRef = useRef(0)
   const signingOutRef = useRef(false)
@@ -149,9 +151,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    void hydrate().finally(() => {
-      if (!cancelled) setAuthReady(true)
-    })
+    void loadEntraConfig()
+      .then(() => hydrate())
+      .finally(() => {
+        if (!cancelled) setAuthReady(true)
+      })
     const id = window.setInterval(() => {
       void hydrate()
     }, 60_000)
@@ -198,35 +202,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (signInLockRef.current) throw new Error('Sign-in already in progress.')
     const gate = assertLoginAllowed()
     if (!gate.ok) throw new Error(gate.error)
-
-    const continueWithEmail = async () => {
-      const parsed = parseLoginEmail(loginHint ?? '')
-      if (!parsed.ok) {
-        recordLoginFailure()
-        throw new Error(
-          (loginHint ?? '').trim()
-            ? parsed.error.replace('work email', 'Microsoft 365 email')
-            : 'Enter your Microsoft 365 email to continue.',
-        )
-      }
-      await clearMicrosoftCache().catch(() => undefined)
-      await establishSession(userFromEmailAddress(parsed.email), 'microsoft')
-    }
-
     signInLockRef.current = true
     try {
-      if (!isMsalConfigured()) {
-        await continueWithEmail()
-        return
-      }
-      try {
-        const result = await startMicrosoftLogin(loginHint)
-        await establishSession(result.user, 'microsoft')
-      } catch (err) {
-        if (isMicrosoftAuthCancelled(err)) throw err
-        if (!isMicrosoftAuthFallback(err)) throw err
-        await continueWithEmail()
-      }
+      await loadEntraConfig()
+      const result = await startMicrosoftLogin(loginHint)
+      if (result.status === 'redirect') return
+      await establishSession(result.user, 'microsoft')
     } finally {
       signInLockRef.current = false
     }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hasEntraRedirectReturn,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
   microsoftAuthErrorCode,
@@ -28,6 +29,17 @@ describe('Microsoft 365 SPA URLs', () => {
     ).toBe('https://samadalam481470sa-cmd.github.io/sammyyyy/')
   })
 
+  it('detects the official Microsoft cloud return so the CRM can finish SSO', () => {
+    expect(
+      hasEntraRedirectReturn(
+        'https://samadalam481470sa-cmd.github.io/sammyyyy/?code=abc&state=1',
+      ),
+    ).toBe(true)
+    expect(hasEntraRedirectReturn('https://samadalam481470sa-cmd.github.io/sammyyyy/#/login')).toBe(
+      false,
+    )
+  })
+
   it('keeps Entra return URLs on the static origin so login never bounces through a CRM route', () => {
     expect(
       stripAuthRedirectQuery(
@@ -47,7 +59,7 @@ describe('Microsoft 365 errors', () => {
     expect(isMicrosoftAuthCancelled({ errorCode: 'invalid_grant' })).toBe(false)
   })
 
-  it('falls back to the typed Microsoft email when Entra popup cannot finish', () => {
+  it('classifies Microsoft cloud errors without treating cancel as a hard fault', () => {
     expect(isMicrosoftAuthFallback(new MicrosoftAuthUnavailableError())).toBe(true)
     expect(isMicrosoftAuthFallback({ errorCode: 'popup_window_error' })).toBe(true)
     expect(isMicrosoftAuthFallback({ errorCode: 'monitor_window_timeout' })).toBe(true)

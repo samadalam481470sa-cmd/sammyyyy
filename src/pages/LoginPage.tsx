@@ -186,7 +186,7 @@ export function LoginPage() {
     setError(null)
     void (async () => {
       try {
-        await signInWithMicrosoft(email.trim() || undefined)
+        await signInWithMicrosoft(email.trim() || lastEmail() || undefined)
       } catch (err) {
         if (isMicrosoftAuthCancelled(err)) {
           fail('Microsoft 365 sign-in was cancelled. Try again.')
@@ -223,7 +223,7 @@ export function LoginPage() {
             Sign in with Microsoft
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Microsoft SSO opens the dashboard. Outlook, Gmail, or other email sit underneath.
+            Microsoft’s official cloud sign-in opens the dashboard. Outlook, Gmail, or other email sit underneath.
           </p>
 
           <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
@@ -238,45 +238,18 @@ export function LoginPage() {
                 <div className="min-w-0">
                   <p className="font-brand text-xl font-bold text-navy-900">Microsoft SSO</p>
                   <p className="text-xs leading-snug text-ink-muted">
-                    Single sign-on into the dashboard
+                    Official Microsoft cloud login (login.microsoftonline.com)
                   </p>
                 </div>
               </div>
 
-              {provider === 'microsoft' && (
-                <div className="mt-4 space-y-3">
-                  <label
-                    htmlFor="work-email"
-                    className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
-                  >
-                    Microsoft email
-                  </label>
-                  <input
-                    ref={emailRef}
-                    id="work-email"
-                    data-testid="login-email"
-                    type="email"
-                    autoComplete="username"
-                    inputMode="email"
-                    autoFocus
-                    value={email}
-                    placeholder={PROVIDERS.microsoft.placeholder}
-                    onChange={(e) => {
-                      setEmail(e.target.value)
-                      if (error) setError(null)
-                    }}
-                    className="h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                  />
-                  <p className="text-[11px] leading-snug text-ink-muted">{PROVIDERS.microsoft.hint}</p>
-                  {error && (
-                    <p
-                      data-testid="login-error"
-                      className="rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
-                    >
-                      {error}
-                    </p>
-                  )}
-                </div>
+              {provider === 'microsoft' && error && (
+                <p
+                  data-testid="login-error"
+                  className="mt-4 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
+                >
+                  {error}
+                </p>
               )}
 
               <button
@@ -287,19 +260,8 @@ export function LoginPage() {
                 className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 <MicrosoftMark className="h-7 w-7" />
-                {busy && provider === 'microsoft' ? 'Signing in…' : 'Sign in with Microsoft'}
+                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Sign in with Microsoft'}
               </button>
-              {provider === 'microsoft' && (
-                <button
-                  type="submit"
-                  className="hidden"
-                  data-testid="login-continue"
-                  tabIndex={-1}
-                  disabled={busy}
-                >
-                  Continue with Microsoft
-                </button>
-              )}
             </div>
 
             <p className="mt-6 text-center text-[11px] font-semibold tracking-[0.12em] text-ink-muted uppercase">
