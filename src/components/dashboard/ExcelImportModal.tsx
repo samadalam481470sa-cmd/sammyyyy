@@ -9,6 +9,7 @@ import {
   type ImportRow,
   type SpreadsheetAnalysis,
 } from '@/lib/excelImport'
+import { gridFromArrayBuffer, gridFromText, type SheetGrid } from '@/lib/dashboardSpreadsheets'
 import type { Opportunity } from '@/types'
 
 interface ExcelImportModalProps {
@@ -19,9 +20,10 @@ interface ExcelImportModalProps {
   onUpdateOpportunity: (id: string, patch: Partial<Opportunity>) => Promise<void>
   onImportTasks: (rows: ImportRow[]) => Promise<void>
   onImportContacts: (rows: ImportRow[]) => Promise<void>
+  onKeepAsColumn: (grid: SheetGrid, sourceName: string) => void
 }
 
-type Step = 'source' | 'preview' | 'destination' | 'done'
+type Step = 'source' | 'choose' | 'preview' | 'destination' | 'done'
 
 export function ExcelImportModal({
   open,
@@ -31,11 +33,13 @@ export function ExcelImportModal({
   onUpdateOpportunity,
   onImportTasks,
   onImportContacts,
+  onKeepAsColumn,
 }: ExcelImportModalProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<Step>('source')
   const [fileName, setFileName] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<SpreadsheetAnalysis | null>(null)
+  const [grid, setGrid] = useState<SheetGrid | null>(null)
   const [destination, setDestination] = useState<ImportDestination>('new-opportunity')
   const [targetOppId, setTargetOppId] = useState<string>('')
   const [busy, setBusy] = useState(false)
@@ -53,6 +57,7 @@ export function ExcelImportModal({
     setStep('source')
     setFileName(null)
     setAnalysis(null)
+    setGrid(null)
     setDestination('new-opportunity')
     setTargetOppId('')
     setError(null)
@@ -64,21 +69,23 @@ export function ExcelImportModal({
     onClose()
   }
 
-  const applyAnalysis = (parsed: SpreadsheetAnalysis, name: string) => {
-    if (parsed.rows.length === 0) {
+  const applyAnalysis = (parsed: SpreadsheetAnalysis, name: string, nextGrid: SheetGrid) => {
+    const hasCells = nextGrid.rows.some((row) => row.some((cell) => cell.trim()))
+    if (parsed.rows.length === 0 && !hasCells) {
       setError('No data rows found in that spreadsheet.')
       return
     }
     setFileName(name)
     setAnalysis(parsed)
-    setStep('preview')
+    setGrid(nextGrid)
+    setStep('choose')
   }
 
   const ingestFile = async (file: File) => {
     setError(null)
     try {
       const buf = await file.arrayBuffer()
-      applyAnalysis(parseSpreadsheet(buf), file.name)
+      applyAnalysis(parseSpreadsheet(buf), file.name, gridFromArrayBuffer(buf))
     } catch {
       setError('Could not read that file. Use .xlsx, .xls, or .csv.')
     }
@@ -92,7 +99,7 @@ export function ExcelImportModal({
         setError('Clipboard is empty. Copy cells from Excel first, then paste here.')
         return
       }
-      applyAnalysis(parseClipboardText(text), 'Clipboard paste')
+      applyAnalysis(parseClipboardText(text), 'Clipboard paste', gridFromText(text))
     } catch {
       setError('Could not read clipboard. Allow paste permission, or upload a file instead.')
     }
@@ -220,6 +227,40 @@ export function ExcelImportModal({
                 Headers like Project Name, Entity, Status, Stage, NWP, Net Revenue, PF EBITDA map into
                 matching CRM elements. Unknown columns stay red so you can rename them in Excel.
               </p>
+            </div>
+          )}
+
+          {step === 'choose' && (
+            <div className="space-y-3">
+              <p className="text-sm text-ink">
+                <strong>{fileName}</strong> is ready. Autofill the CRM, or keep this file as its own
+                spreadsheet column on the left.
+              </p>
+              <button
+                type="button"
+                onClick={() => setStep('preview')}
+                className="flex w-full flex-col items-start gap-1 rounded-xl border border-border bg-canvas px-4 py-3 text-left hover:bg-accent-soft"
+              >
+                <span className="text-sm font-semibold text-navy-900">Autofill data</span>
+                <span className="text-xs text-ink-muted">
+                  Map the columns into opportunities, tasks, or contacts. This is the existing import.
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={!grid}
+                onClick={() => {
+                  if (!grid || !fileName) return
+                  onKeepAsColumn(grid, fileName)
+                  handleClose()
+                }}
+                className="flex w-full flex-col items-start gap-1 rounded-xl border border-navy-800 bg-navy-900 px-4 py-3 text-left text-white hover:bg-navy-800 disabled:opacity-50"
+              >
+                <span className="text-sm font-semibold">Add spreadsheet as a column</span>
+                <span className="text-xs text-white/75">
+                  Open it on the left of this dashboard as Spreadsheet 1, 2, and so on. Every edit is saved.
+                </span>
+              </button>
             </div>
           )}
 
