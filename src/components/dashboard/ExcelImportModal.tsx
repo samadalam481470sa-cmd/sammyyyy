@@ -233,8 +233,8 @@ export function ExcelImportModal({
           {step === 'choose' && (
             <div className="space-y-3">
               <p className="text-sm text-ink">
-                <strong>{fileName}</strong> is ready. Autofill the CRM, or keep this file as its own
-                spreadsheet column on the left.
+                <strong>{fileName}</strong> is ready. Autofill only fills CRM records. The sidebar
+                spreadsheet appears only if you choose the second option.
               </p>
               <button
                 type="button"
@@ -258,7 +258,7 @@ export function ExcelImportModal({
               >
                 <span className="text-sm font-semibold">Add spreadsheet as a column</span>
                 <span className="text-xs text-white/75">
-                  Open it on the left of this dashboard as Spreadsheet 1, 2, and so on. Every edit is saved.
+                  Puts Spreadsheet 1 in the left sidebar. Autofill does not add this column. Every edit is saved.
                 </span>
               </button>
             </div>

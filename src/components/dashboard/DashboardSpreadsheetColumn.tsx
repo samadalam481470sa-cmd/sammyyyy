@@ -15,7 +15,7 @@ export function DashboardSpreadsheetColumn({
   onRemove,
 }: DashboardSpreadsheetColumnProps) {
   return (
-    <section className="flex max-h-[70vh] w-[min(100%,22rem)] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)">
+    <section className="flex h-full w-72 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-surface">
       <div className="flex items-start justify-between gap-2 border-b border-border px-3 py-3">
         <div className="min-w-0">
           <h2 className="font-brand text-base font-semibold text-navy-900">{sheet.title}</h2>

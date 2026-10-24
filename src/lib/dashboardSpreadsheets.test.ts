@@ -4,12 +4,21 @@ import {
   gridFromMatrix,
   gridFromText,
   nextSpreadsheetIndex,
+  sidebarOffset,
   spreadsheetTitle,
   updateSheetCell,
   updateSheetHeader,
 } from './dashboardSpreadsheets'
 
 describe('dashboard spreadsheet columns', () => {
+  it('reserves sidebar width for imported sheets only on the dashboard', () => {
+    expect(sidebarOffset(false, 0, true)).toBe(240)
+    expect(sidebarOffset(false, 1, true)).toBe(528)
+    expect(sidebarOffset(false, 3, true)).toBe(816)
+    expect(sidebarOffset(false, 2, false)).toBe(240)
+    expect(sidebarOffset(true, 2, true)).toBe(72)
+  })
+
   it('names the first imported sheet Spreadsheet 1', () => {
     expect(spreadsheetTitle(1)).toBe('Spreadsheet 1')
     expect(spreadsheetTitle(2)).toBe('Spreadsheet 2')

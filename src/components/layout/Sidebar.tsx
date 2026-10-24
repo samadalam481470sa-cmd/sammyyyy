@@ -5,7 +5,7 @@ import {
   useState,
   type DragEvent,
 } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Briefcase,
@@ -36,6 +36,9 @@ import {
 } from '@/lib/navOrder'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { useEditorGuard } from '@/components/shared/EditorGuardContext'
+import { DashboardSpreadsheetColumn } from '@/components/dashboard/DashboardSpreadsheetColumn'
+import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
+import { sidebarOffset } from '@/lib/dashboardSpreadsheets'
 import type { LucideIcon } from 'lucide-react'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -62,6 +65,9 @@ function visibleNavItems(): NavItem[] {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { signOut, signingOut, user } = useAuth()
+  const { sheets, editCell, editHeader, removeSheet } = useSpreadsheetColumns()
+  const onDashboard = useLocation().pathname === '/'
+  const showSheets = !collapsed && onDashboard && sheets.length > 0
   const navigate = useNavigate()
   const editorGuard = useEditorGuard()
   const owner = sessionOwnerKey(user)
@@ -161,10 +167,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-navy-800 bg-navy-900 text-white transition-[width] duration-200 ${
-        collapsed ? 'w-[72px]' : 'w-60'
-      }`}
+      className="fixed inset-y-0 left-0 z-40 flex border-r border-navy-800 bg-navy-900 text-white transition-[width] duration-200"
+      style={{ width: sidebarOffset(collapsed, sheets.length, onDashboard) }}
     >
+      <div className={`flex h-full shrink-0 flex-col ${collapsed ? 'w-[72px]' : 'w-60'}`}>
       <div className={`flex items-start gap-3 border-b border-navy-800 ${collapsed ? 'px-3 py-4' : 'px-4 py-5'}`}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-sm font-bold tracking-tight text-accent-soft">
           N
@@ -296,6 +302,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
         </button>
       </div>
+      </div>
+      {showSheets && (
+        <div className="flex h-full min-w-0 flex-1 overflow-x-auto border-l border-white/10 bg-[#07111f]">
+          {sheets.map((sheet) => (
+            <DashboardSpreadsheetColumn
+              key={sheet.id}
+              sheet={sheet}
+              onCell={(rowIndex, columnIndex, value) => editCell(sheet.id, rowIndex, columnIndex, value)}
+              onHeader={(columnIndex, value) => editHeader(sheet.id, columnIndex, value)}
+              onRemove={() => removeSheet(sheet.id)}
+            />
+          ))}
+        </div>
+      )}
     </aside>
   )
 }

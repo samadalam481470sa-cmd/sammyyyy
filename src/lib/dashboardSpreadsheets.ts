@@ -16,6 +16,12 @@ export interface DashboardSheet {
 
 const STORE = 'dashboard_sheets'
 
+export function sidebarOffset(collapsed: boolean, sheetCount: number, onDashboard: boolean): number {
+  if (collapsed) return 72
+  if (!onDashboard || sheetCount < 1) return 240
+  return 240 + Math.min(sheetCount, 2) * 288
+}
+
 export function spreadsheetTitle(index: number): string {
   return `Spreadsheet ${index}`
 }

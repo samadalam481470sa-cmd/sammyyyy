@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopHeader } from '@/components/layout/TopHeader'
 import { StatusFilter } from '@/components/dashboard/StatusFilter'
@@ -11,7 +11,7 @@ import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
 import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
-import { DashboardSpreadsheetColumn } from '@/components/dashboard/DashboardSpreadsheetColumn'
+import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
 import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
 import { DEMO_DISCLAIMER } from '@/data/constants'
@@ -19,16 +19,6 @@ import { useData } from '@/data/DataContext'
 import { useAuth } from '@/auth/AuthContext'
 import { isLocalPersistence } from '@/lib/persistenceMode'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
-import {
-  createDashboardSheet,
-  loadDashboardSheets,
-  nextSpreadsheetIndex,
-  saveDashboardSheets,
-  updateSheetCell,
-  updateSheetHeader,
-  type DashboardSheet,
-} from '@/lib/dashboardSpreadsheets'
-import { registerVaultFlush } from '@/lib/userVault'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { mockContacts } from '@/data/mockModules'
 import type { ImportRow } from '@/lib/excelImport'
@@ -77,22 +67,10 @@ export function Dashboard() {
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [excelOpen, setExcelOpen] = useState(false)
-  const [sheets, setSheets] = useState<DashboardSheet[]>(() => loadDashboardSheets(owner))
-  const sheetsRef = useRef(sheets)
-  sheetsRef.current = sheets
+  const { addSheet } = useSpreadsheetColumns()
   const [createOpen, setCreateOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityNotice, setActivityNotice] = useState<string | null>(null)
-
-  useEffect(() => {
-    setSheets(loadDashboardSheets(owner))
-  }, [owner])
-
-  useEffect(() => {
-    return registerVaultFlush(() => {
-      saveDashboardSheets(owner, sheetsRef.current)
-    })
-  }, [owner])
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -100,26 +78,11 @@ export function Dashboard() {
   }, [])
 
   const keepSpreadsheet = useCallback(
-    (grid: Parameters<typeof createDashboardSheet>[0], sourceName: string) => {
-      setSheets((prev) => {
-        const next = [...prev, createDashboardSheet(grid, nextSpreadsheetIndex(prev), sourceName)]
-        saveDashboardSheets(owner, next)
-        return next
-      })
-      showToast('Spreadsheet column added on the left')
+    (grid: Parameters<typeof addSheet>[0], sourceName: string) => {
+      addSheet(grid, sourceName)
+      showToast('Spreadsheet column added in the sidebar')
     },
-    [owner, showToast],
-  )
-
-  const editSheet = useCallback(
-    (id: string, recipe: (sheet: DashboardSheet) => DashboardSheet) => {
-      setSheets((prev) => {
-        const next = prev.map((sheet) => (sheet.id === id ? recipe(sheet) : sheet))
-        saveDashboardSheets(owner, next)
-        return next
-      })
-    },
-    [owner],
+    [addSheet, showToast],
   )
 
   const filtered = useMemo(
@@ -255,31 +218,7 @@ export function Dashboard() {
       />
 
       <main data-testid="crm-dashboard" className="flex-1 px-6 py-6 lg:px-8">
-        <div className="mx-auto flex max-w-[1600px] flex-col gap-4 lg:flex-row lg:items-start">
-          {sheets.length > 0 && (
-            <div className="flex w-full shrink-0 flex-col gap-3 lg:w-auto lg:flex-row">
-              {sheets.map((sheet) => (
-                <DashboardSpreadsheetColumn
-                  key={sheet.id}
-                  sheet={sheet}
-                  onCell={(rowIndex, columnIndex, value) =>
-                    editSheet(sheet.id, (current) => updateSheetCell(current, rowIndex, columnIndex, value))
-                  }
-                  onHeader={(columnIndex, value) =>
-                    editSheet(sheet.id, (current) => updateSheetHeader(current, columnIndex, value))
-                  }
-                  onRemove={() => {
-                    setSheets((prev) => {
-                      const next = prev.filter((item) => item.id !== sheet.id)
-                      saveDashboardSheets(owner, next)
-                      return next
-                    })
-                  }}
-                />
-              ))}
-            </div>
-          )}
-          <div className="flex min-w-0 flex-1 flex-col gap-5">
+        <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
           <StatusFilter
             filters={filters}
             onStatusChange={setStatus}
@@ -346,7 +285,6 @@ export function Dashboard() {
           </div>
 
           <p className="pb-4 text-center text-[11px] text-ink-subtle">{DEMO_DISCLAIMER}</p>
-          </div>
         </div>
       </main>
 
