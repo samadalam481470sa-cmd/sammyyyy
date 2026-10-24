@@ -25,6 +25,10 @@ const AUTH_QUERY_KEYS = [
 let pca: PublicClientApplication | null = null
 let initPromise: Promise<PublicClientApplication | null> | null = null
 let lastRedirectError: Error | null = null
+let redirectAccount: AccountInfo | null = null
+
+const MICROSOFT_AWAITING_KEY = 'newport_msal_awaiting'
+const MICROSOFT_HINT_KEY = 'newport_msal_login_hint'
 
 export class MicrosoftAuthUnavailableError extends Error {
   constructor() {
@@ -161,7 +165,86 @@ export function consumeMicrosoftRedirectError(): Error | null {
   return err
 }
 
-const CANCELLED_CODES = new Set(['user_cancelled', 'user_canceled'])
+export type MicrosoftCloudReturn =
+  | { kind: 'authenticated'; account: AccountInfo }
+  | { kind: 'denied'; message: string }
+  | { kind: 'unknown'; hint: string | null }
+  | { kind: 'none' }
+
+function readMicrosoftHint(): string | null {
+  try {
+    const hint = sessionStorage.getItem(MICROSOFT_HINT_KEY)?.trim() ?? ''
+    return hint.includes('@') ? hint : null
+  } catch {
+    return null
+  }
+}
+
+function clearMicrosoftAttempt(): void {
+  try {
+    sessionStorage.removeItem(MICROSOFT_AWAITING_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/** Microsoft accepted this browser return, refused it, or never gave a clear result. */
+export function consumeMicrosoftCloudReturn(): MicrosoftCloudReturn {
+  const account = redirectAccount
+  redirectAccount = null
+  const err = consumeMicrosoftRedirectError()
+  const urlMessage = consumeMicrosoftReturnErrorMessage()
+  let awaiting = false
+  try {
+    awaiting = sessionStorage.getItem(MICROSOFT_AWAITING_KEY) === '1'
+  } catch {
+    awaiting = false
+  }
+  const hint = readMicrosoftHint()
+
+  if (account) {
+    clearMicrosoftAttempt()
+    return { kind: 'authenticated', account }
+  }
+  if ((err && isMicrosoftCredentialDenied(err)) || (urlMessage && /cancelled|access_denied/i.test(urlMessage))) {
+    clearMicrosoftAttempt()
+    const message =
+      'Microsoft did not accept this sign-in. Enter your username and password on Microsoft’s page and try again.'
+    rememberMicrosoftReturnError(message)
+    return { kind: 'denied', message }
+  }
+  if (err || urlMessage || awaiting) {
+    clearMicrosoftAttempt()
+    return { kind: 'unknown', hint }
+  }
+  return { kind: 'none' }
+}
+
+export function markMicrosoftLoginStarted(loginHint?: string): void {
+  try {
+    sessionStorage.setItem(MICROSOFT_AWAITING_KEY, '1')
+    const hint = loginHint?.trim()
+    if (hint) sessionStorage.setItem(MICROSOFT_HINT_KEY, hint)
+    else sessionStorage.removeItem(MICROSOFT_HINT_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function clearStuckMicrosoftInteraction(): void {
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i)
+      if (key && key.includes('interaction.status')) keys.push(key)
+    }
+    for (const key of keys) sessionStorage.removeItem(key)
+  } catch {
+    // ignore
+  }
+}
+
+const CANCELLED_CODES = new Set(['user_cancelled', 'user_canceled', 'access_denied'])
 const FALLBACK_CODES = new Set([
   'popup_window_error',
   'empty_window_error',
@@ -187,7 +270,14 @@ export function microsoftAuthErrorCode(err: unknown): string {
 }
 
 export function isMicrosoftAuthCancelled(err: unknown): boolean {
-  return CANCELLED_CODES.has(microsoftAuthErrorCode(err))
+  if (CANCELLED_CODES.has(microsoftAuthErrorCode(err))) return true
+  const message = err instanceof Error ? err.message : ''
+  return /access_denied|user_cancel/i.test(message)
+}
+
+/** Microsoft explicitly refused or the user backed out. Wrong passwords stay on Microsoft's page. */
+export function isMicrosoftCredentialDenied(err: unknown): boolean {
+  return isMicrosoftAuthCancelled(err)
 }
 
 /** Popup blocked, timed out, or Entra unavailable — continue with a valid email. */
@@ -244,8 +334,10 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
     await instance.initialize()
     try {
       const result: AuthenticationResult | null = await instance.handleRedirectPromise()
-      if (result?.account) instance.setActiveAccount(result.account)
-      else {
+      if (result?.account) {
+        redirectAccount = result.account
+        instance.setActiveAccount(result.account)
+      } else {
         const existing = instance.getAllAccounts()[0]
         if (existing) instance.setActiveAccount(existing)
       }
@@ -310,14 +402,15 @@ export async function startMicrosoftLogin(loginHint?: string): Promise<Microsoft
   if (!instance) throw new MicrosoftAuthUnavailableError()
 
   const hint = loginHint?.trim()
-  if (hint && typeof sessionStorage !== 'undefined') {
-    try {
-      sessionStorage.setItem('newport_msal_login_hint', hint)
-    } catch {
-      // ignore
-    }
+  markMicrosoftLoginStarted(hint)
+  const request = buildMicrosoftLoginRequest(hint)
+  try {
+    await instance.loginRedirect(request)
+  } catch (err) {
+    if (microsoftAuthErrorCode(err) !== 'interaction_in_progress') throw err
+    clearStuckMicrosoftInteraction()
+    await instance.loginRedirect(request)
   }
-  await instance.loginRedirect(buildMicrosoftLoginRequest(hint))
   return { status: 'redirect' }
 }
 

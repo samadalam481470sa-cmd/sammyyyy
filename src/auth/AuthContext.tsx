@@ -25,12 +25,10 @@ import { assertLoginAllowed, recordLoginFailure, recordLoginSuccess } from '@/li
 import { sha256Hex } from '@/lib/sha256'
 import {
   clearMicrosoftCache,
-  consumeMicrosoftRedirectError,
+  consumeMicrosoftCloudReturn,
   ensureMsal,
   getMicrosoftAccount,
   hasEntraRedirectReturn,
-  isMicrosoftAuthCancelled,
-  isMicrosoftAuthFallback,
   isMsalConfigured,
   loadEntraConfig,
   microsoftLogout,
@@ -104,10 +102,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // Email sessions must still restore when Entra is not configured.
       }
-      const redirectErr = consumeMicrosoftRedirectError()
-      if (redirectErr) {
+      const returned = consumeMicrosoftCloudReturn()
+      if (returned.kind === 'authenticated') {
+        const next = await sessionFromMicrosoftAccount(returned.account)
+        if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
+        recordLoginSuccess()
+        setUser(next)
+        return
+      }
+      if (returned.kind === 'denied') {
         if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
         setUser(null)
+        return
+      }
+      if (returned.kind === 'unknown' && returned.hint) {
+        const next = userFromEmailAddress(returned.hint)
+        await storeSession(await newSessionToken(), next, await sha256Hex(next.email))
+        await rememberLastEmail(next.email, 'microsoft')
+        if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
+        recordLoginSuccess()
+        setUser(next)
         return
       }
       if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
@@ -226,14 +240,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await startMicrosoftLogin(hint)
       if (result.status === 'redirect') return
       await establishSession(result.user, 'microsoft')
-    } catch (err) {
-      if (isMicrosoftAuthCancelled(err)) throw err
-      const parsed = hint ? parseLoginEmail(hint) : { ok: false as const, error: '' }
-      if (isMicrosoftAuthFallback(err) && parsed.ok) {
-        await establishSession(userFromEmailAddress(parsed.email), 'microsoft')
-        return
-      }
-      throw err
     } finally {
       signInLockRef.current = false
     }

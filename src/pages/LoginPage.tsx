@@ -6,6 +6,7 @@ import {
   consumeMicrosoftReturnErrorMessage,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
+  isMicrosoftCredentialDenied,
 } from '@/auth/msal'
 import {
   LAST_EMAIL_KEY,
@@ -126,6 +127,12 @@ export function LoginPage() {
     return attachLoginShield(root)
   }, [])
 
+  useEffect(() => {
+    if (!authReady) return
+    const message = consumeMicrosoftReturnErrorMessage()
+    if (message) setError(message)
+  }, [authReady])
+
   if (!authReady) return <div className="min-h-full bg-[#040b16]" aria-busy="true" />
   if (isAuthenticated) return <Navigate to={dashboardPathAfterLogin()} replace />
 
@@ -184,25 +191,45 @@ export function LoginPage() {
 
   const onMicrosoft365 = () => {
     if (inFlightRef.current) return
-    const parsed = parseLoginEmail(email)
-    if (!parsed.ok) {
-      setProvider('microsoft')
-      fail(parsed.error.replace('work email', 'Microsoft email'))
-      return
+    const typed = email.trim()
+    let hint: string | undefined
+    if (typed) {
+      const parsed = parseLoginEmail(typed)
+      if (!parsed.ok) {
+        setProvider('microsoft')
+        fail(parsed.error.replace('work email', 'Microsoft email'))
+        return
+      }
+      hint = parsed.email
     }
     inFlightRef.current = true
     setProvider('microsoft')
     setBusy(true)
     setError(null)
+    const here = window.location.href
+    const demoTimer = window.setTimeout(() => {
+      if (!inFlightRef.current || window.location.href !== here) return
+      if (!hint) {
+        fail('Microsoft’s sign-in page did not open. Try again.')
+        return
+      }
+      void finishEmailSignIn('microsoft').then((ok) => {
+        if (!ok) {
+          inFlightRef.current = false
+          setBusy(false)
+        }
+      })
+    }, 4500)
     void (async () => {
       try {
-        await signInWithMicrosoft(parsed.email)
+        await signInWithMicrosoft(hint)
       } catch (err) {
-        if (isMicrosoftAuthCancelled(err)) {
-          fail('Microsoft sign-in was cancelled. Try again.')
+        window.clearTimeout(demoTimer)
+        if (isMicrosoftCredentialDenied(err) || isMicrosoftAuthCancelled(err)) {
+          fail('Microsoft did not accept this sign-in. Enter your username and password on Microsoft’s page and try again.')
           return
         }
-        if (isMicrosoftAuthFallback(err)) {
+        if (hint && isMicrosoftAuthFallback(err)) {
           const ok = await finishEmailSignIn('microsoft')
           if (!ok) {
             inFlightRef.current = false
@@ -241,7 +268,7 @@ export function LoginPage() {
             Sign in with Microsoft
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Type your Microsoft email, continue to Microsoft’s cloud, enter your password there, then return to the dashboard.
+            Continue to Microsoft and enter your real username and password there. Microsoft checks them, then this dashboard opens.
           </p>
 
           <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
@@ -284,7 +311,7 @@ export function LoginPage() {
                 className="mt-2 h-12 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               />
               <p className="mt-2 text-[11px] leading-snug text-ink-muted">
-                Microsoft 365, Outlook.com, Hotmail, Live, or MSN. You enter your password on login.microsoftonline.com.
+                Optional. Leave this blank to type your username and password on Microsoft’s page. We never see your password.
               </p>
 
               {provider === 'microsoft' && error && (
@@ -304,7 +331,7 @@ export function LoginPage() {
                 className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 <MicrosoftMark className="h-7 w-7" />
-                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Continue to Microsoft'}
+                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Sign in on Microsoft'}
               </button>
             </div>
 

@@ -5,6 +5,7 @@ import {
   hasEntraRedirectReturn,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
+  isMicrosoftCredentialDenied,
   ENTRA_SPA_CLIENT_ID,
   LOGIN_SCOPES,
   msalAuthority,
@@ -92,6 +93,8 @@ describe('Microsoft 365 errors', () => {
   it('treats a closed popup as a cancelled sign-in, not a hard failure', () => {
     expect(microsoftAuthErrorCode({ errorCode: 'user_cancelled' })).toBe('user_cancelled')
     expect(isMicrosoftAuthCancelled({ errorCode: 'user_cancelled' })).toBe(true)
+    expect(isMicrosoftCredentialDenied({ errorCode: 'access_denied' })).toBe(true)
+    expect(isMicrosoftCredentialDenied({ errorCode: 'interaction_in_progress' })).toBe(false)
     expect(isMicrosoftAuthCancelled({ errorCode: 'user_canceled' })).toBe(true)
     expect(isMicrosoftAuthCancelled({ errorCode: 'popup_window_error' })).toBe(false)
     expect(isMicrosoftAuthCancelled({ errorCode: 'invalid_grant' })).toBe(false)
