@@ -14,6 +14,7 @@ describe('sessionOwnerKey', () => {
       'key:manager',
     )
     expect(sessionOwnerKey({ id: 'user-dennis', authMethod: 'demo' })).toBe('key:demo')
+    expect(sessionOwnerKey({ id: 'oid-mary', authMethod: 'microsoft' })).toBe('ms:oid-mary')
     expect(ownerKeyFromAuth({ userId: 'user-dennis', apiKeySlot: 3, authMethod: 'api_key' })).toBe(
       'key:slot-3',
     )

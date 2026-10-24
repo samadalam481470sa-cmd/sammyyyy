@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Sparkles, Send, Loader2 } from 'lucide-react'
-import { askNewportAi, getStoredSession } from '@/lib/api'
+import { askNewportAi } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import { answerFromKnowledge, type AiAnswer } from '@/lib/aiAssistant'
 import { useData } from '@/data/DataContext'
 import { loadOwnedCollection } from '@/lib/demoStore'
@@ -60,7 +61,7 @@ export function NewportAI() {
     setBusy(true)
     setError(null)
     try {
-      if (getStoredSession()?.token === 'local-demo') {
+      if (isLocalPersistence()) {
         setAnswer(runLocal(trimmed))
       } else {
         try {

@@ -124,7 +124,7 @@ export interface AuthUser {
   role: string
   initials: string
   /** How the session was established */
-  authMethod?: 'demo' | 'api_key' | 'manager_key' | 'password'
+  authMethod?: 'demo' | 'api_key' | 'manager_key' | 'password' | 'microsoft'
   apiKeyId?: string | null
   apiKeySlot?: number | null
   apiKeyLabel?: string | null

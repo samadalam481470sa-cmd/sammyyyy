@@ -16,8 +16,6 @@ import {
   FileText,
   BarChart3,
   ShieldCheck,
-  Ban,
-  KeyRound,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,7 +25,8 @@ import {
 } from 'lucide-react'
 import { NAV_ITEMS, type NavItem } from '@/data/constants'
 import { useAuth } from '@/auth/AuthContext'
-import { fetchNavOrder, getStoredSession, saveNavOrder } from '@/lib/api'
+import { fetchNavOrder, saveNavOrder } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import {
   applyNavOrder,
   loadLocalNavOrder,
@@ -50,8 +49,6 @@ const ICONS: Record<string, LucideIcon> = {
   reports: BarChart3,
   meetings: Video,
   security: ShieldCheck,
-  'key-control': Ban,
-  'key-provision': KeyRound,
 }
 
 interface SidebarProps {
@@ -59,13 +56,8 @@ interface SidebarProps {
   onToggle: () => void
 }
 
-function visibleNavItems(isManager: boolean | undefined): NavItem[] {
-  return NAV_ITEMS.filter((item) => {
-    if (item.id === 'key-control' || item.id === 'key-provision') {
-      return Boolean(isManager)
-    }
-    return item.enabled
-  })
+function visibleNavItems(): NavItem[] {
+  return NAV_ITEMS.filter((item) => item.enabled)
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -74,18 +66,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const editorGuard = useEditorGuard()
   const owner = sessionOwnerKey(user)
   const [orderIds, setOrderIds] = useState<string[]>(() =>
-    visibleNavItems(user?.isManager).map((item) => item.id),
+    visibleNavItems().map((item) => item.id),
   )
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
   const didDragRef = useRef(false)
 
-  const baseItems = useMemo(() => visibleNavItems(user?.isManager), [user?.isManager])
+  const baseItems = useMemo(() => visibleNavItems(), [])
 
   // Load this user's saved order (local first, then server when available)
   useEffect(() => {
     if (!user?.id) return
-    const defaults = visibleNavItems(user.isManager).map((item) => item.id)
+    const defaults = visibleNavItems().map((item) => item.id)
     const local = loadLocalNavOrder(owner)
     const initial = mergeNavOrderWithDefaults(defaults, local)
     setOrderIds(initial)
@@ -93,8 +85,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       saveLocalNavOrder(owner, initial)
     }
 
-    const localDemo = getStoredSession()?.token === 'local-demo'
-    if (localDemo) return
+    if (isLocalPersistence()) return
 
     void fetchNavOrder()
       .then((data) => {
@@ -110,7 +101,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       .catch(() => {
         // offline / unauthorized — keep local order
       })
-  }, [user?.id, user?.isManager, owner])
+  }, [user?.id, owner])
 
   const items = useMemo(
     () => applyNavOrder(baseItems, orderIds),
@@ -121,7 +112,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     setOrderIds(nextIds)
     if (!user?.id) return
     saveLocalNavOrder(owner, nextIds)
-    if (getStoredSession()?.token === 'local-demo') return
+    if (isLocalPersistence()) return
     void saveNavOrder(nextIds).catch(() => {
       // local already saved
     })

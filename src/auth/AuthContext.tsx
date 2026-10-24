@@ -8,45 +8,59 @@ import {
   type ReactNode,
 } from 'react'
 import type { AuthUser } from '@/types'
+import { clearSession, getStoredSession, signOut as apiSignOut, storeSession } from '@/lib/api'
+import { readProofBlob, verifySessionProof, MSAL_TOKEN } from '@/lib/sessionProof'
+import { sha256Hex } from '@/lib/sha256'
 import {
-  apiKeySignIn,
-  clearSession,
-  demoSignIn,
-  getStoredSession,
-  storeSession,
-  signOut as apiSignOut,
-} from '@/lib/api'
-import { DEMO_FINGERPRINT } from '@/lib/credentialHashes'
-import { LOCAL_TOKEN, readProofBlob, verifySessionProof } from '@/lib/sessionProof'
+  ensureMsal,
+  getMicrosoftAccount,
+  isMsalConfigured,
+  microsoftLogout,
+  startMicrosoftLogin,
+  userFromMicrosoftAccount,
+} from '@/auth/msal'
 
 interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
   authReady: boolean
-  signInDemo: () => Promise<void>
-  signInWithApiKey: (apiKey: string) => Promise<void>
+  signInWithMicrosoft: () => Promise<void>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicrosoftAccount>) {
+  if (!account) return null
+  const user = userFromMicrosoftAccount(account)
+  await storeSession(MSAL_TOKEN, user, await sha256Hex(user.id))
+  return user
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [authReady, setAuthReady] = useState(false)
 
   const hydrate = useCallback(async () => {
+    await ensureMsal()
+    const account = getMicrosoftAccount()
+    if (account) {
+      const next = await sessionFromMicrosoftAccount(account)
+      setUser(next)
+      return
+    }
+
     const stored = getStoredSession()
-    if (!stored) {
-      setUser(null)
-      return
+    if (import.meta.env.DEV && stored?.user.authMethod === 'microsoft') {
+      const ok = await verifySessionProof(stored.token, stored.user, readProofBlob())
+      if (ok) {
+        setUser(stored.user)
+        return
+      }
     }
-    const ok = await verifySessionProof(stored.token, stored.user, readProofBlob())
-    if (!ok) {
-      clearSession()
-      setUser(null)
-      return
-    }
-    setUser(stored.user)
+
+    if (stored) clearSession()
+    setUser(null)
   }, [])
 
   useEffect(() => {
@@ -63,37 +77,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [hydrate])
 
-  const signInDemo = useCallback(async () => {
-    try {
-      const data = await demoSignIn()
-      setUser(data.user)
-    } catch {
-      const demoUser: AuthUser = {
-        id: 'user-dennis',
-        email: 'dennis@newportspecialty.demo',
-        name: 'Dennis DiCapua',
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const w = window as Window & { __newportDevMicrosoftLogin?: () => Promise<void> }
+    w.__newportDevMicrosoftLogin = async () => {
+      const devUser: AuthUser = {
+        id: 'ms-oid-mary-dev',
+        email: 'mary@outlook.com',
+        name: 'Mary Sbaschnig',
         role: 'partner',
-        initials: 'DD',
-        authMethod: 'demo',
+        initials: 'MS',
+        authMethod: 'microsoft',
         isManager: false,
         apiKeyId: null,
         apiKeySlot: null,
         apiKeyLabel: null,
       }
-      await storeSession(LOCAL_TOKEN, demoUser, DEMO_FINGERPRINT)
-      setUser(demoUser)
+      await storeSession(MSAL_TOKEN, devUser, await sha256Hex(devUser.id))
+      setUser(devUser)
+    }
+    return () => {
+      delete w.__newportDevMicrosoftLogin
     }
   }, [])
 
-  const signInWithApiKey = useCallback(async (apiKey: string) => {
-    const data = await apiKeySignIn(apiKey.trim())
-    setUser(data.user)
+  const signInWithMicrosoft = useCallback(async () => {
+    await startMicrosoftLogin()
   }, [])
 
   const signOut = useCallback(async () => {
     await apiSignOut()
     clearSession()
     setUser(null)
+    if (isMsalConfigured()) {
+      await microsoftLogout()
+    }
   }, [])
 
   const value = useMemo(
@@ -101,11 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated: Boolean(user),
       authReady,
-      signInDemo,
-      signInWithApiKey,
+      signInWithMicrosoft,
       signOut,
     }),
-    [user, authReady, signInDemo, signInWithApiKey, signOut],
+    [user, authReady, signInWithMicrosoft, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -9,7 +9,7 @@ Enterprise M&A / acquisition deal-management app for Newport Specialty Partners.
 - React 19 + TypeScript + Vite + Tailwind CSS
 - Express API + SQLite (`better-sqlite3`) database
 - Lucide icons, Recharts, Zod validation
-- Helmet, rate limiting, hashed sessions & API keys, audit logging + permanent change history
+- Helmet, rate limiting, Microsoft 365 (MSAL) sign-in, audit logging + change history
 
 ## Run locally
 
@@ -23,11 +23,10 @@ npm run dev
 
 ## Sign in
 
-1. **Sign in — Demo access** enters the dashboard (Dennis session).
-2. Or authenticate with the local demo API key (slot 1 only):
-   `nwp_demo_key_slot1_replace_me_by_security_team`
+The CRM opens Microsoft 365 sign-in immediately (work or @outlook.com). After Microsoft
+authenticates the user, the dashboard loads. Managerial keys and API-key login are retired.
 
-Production will use **five API key slots** provisioned by the security team. This app stores **hashes only**.
+Set `VITE_MSAL_CLIENT_ID` to the Entra SPA app ID (see `.env.example`). SPA client IDs are public.
 
 ## 24/7 static demo (GitHub Pages)
 

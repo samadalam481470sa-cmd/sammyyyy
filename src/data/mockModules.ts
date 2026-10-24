@@ -90,6 +90,11 @@ export interface DocumentRecord {
   notes: string
   fileType?: string
   createdAt?: string
+  fileName?: string
+  fileSize?: number
+  storage?: 'none' | 'url' | 'local' | 'onedrive'
+  webUrl?: string
+  driveItemId?: string
 }
 
 export const CONTACT_CATEGORIES = [
@@ -111,9 +116,10 @@ export const DOCUMENT_STATUSES = ['Draft', 'In Review', 'Executed', 'Archived'] 
 export const DOCUMENT_TYPES = [
   'NDA',
   'CIM',
-  'Teaser / CIM',
-  'IOI',
   'LOI',
+  'IOI',
+  'Draft Agreement',
+  'Finalized Agreement',
   'Financials',
   'Diligence Report',
   'Legal',

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { fetchKeyCalendar, getStoredSession, saveKeyCalendar } from '@/lib/api'
+import { fetchKeyCalendar, saveKeyCalendar } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import {
   calendarOwnerKey,
   calendarOwnerLabel,
@@ -43,7 +44,7 @@ export function MeetingCalendar() {
   useEffect(() => {
     const local = loadCalendarEvents(owner)
     setEvents(local)
-    if (getStoredSession()?.token === 'local-demo') {
+    if (isLocalPersistence()) {
       pushCalendarReminders(user, local)
       return
     }
@@ -66,7 +67,7 @@ export function MeetingCalendar() {
     setEvents(next)
     saveCalendarEvents(owner, next)
     pushCalendarReminders(user, next)
-    if (getStoredSession()?.token === 'local-demo') return
+    if (isLocalPersistence()) return
     void saveKeyCalendar(next).catch(() => undefined)
   }
 

@@ -10,7 +10,14 @@ export function ProtectedRoute() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    if (location.pathname !== '/login') {
+      try {
+        sessionStorage.setItem('newport_post_login_path', `${location.pathname}${location.search}`)
+      } catch {
+        // ignore
+      }
+    }
+    return <Navigate to="/login" replace />
   }
 
   return <Outlet />

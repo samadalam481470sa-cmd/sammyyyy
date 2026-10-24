@@ -7,9 +7,13 @@ export interface OwnerAuth {
   isManager?: boolean
 }
 
-/** Stable owner for a session key — slot 1, slot 2, manager never share meetings or calendars. */
+/** Stable owner for a session key — Microsoft accounts never share meetings or calendars. */
 export function ownerKeyFromAuth(auth: OwnerAuth | null | undefined): string {
   if (!auth) return 'anonymous'
+  if (auth.authMethod === 'microsoft') {
+    const id = auth.userId ?? auth.id
+    return id ? `ms:${id}` : 'anonymous'
+  }
   if (auth.isManager || auth.authMethod === 'manager_key') return 'key:manager'
   if (auth.apiKeySlot != null) return `key:slot-${auth.apiKeySlot}`
   if (auth.apiKeyId) return `key:${auth.apiKeyId}`

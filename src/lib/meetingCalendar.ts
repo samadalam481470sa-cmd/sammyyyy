@@ -26,6 +26,7 @@ export function calendarOwnerKey(user: AuthUser | null | undefined): string {
 
 export function calendarOwnerLabel(user: AuthUser | null | undefined): string {
   if (!user) return 'This session'
+  if (user.authMethod === 'microsoft') return `${user.name}'s Microsoft 365 calendar`
   if (user.isManager || user.authMethod === 'manager_key') return 'Managerial key calendar'
   if (user.apiKeySlot != null) return `Slot ${user.apiKeySlot} calendar`
   return `${user.name}'s calendar`

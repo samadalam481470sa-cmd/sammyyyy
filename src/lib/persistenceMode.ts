@@ -5,9 +5,21 @@ import { getStoredSession } from '@/lib/api'
  * Chrome and Safari (and different profiles) each keep a separate copy.
  * Cross-browser sync is deferred until an approved hosted backend exists.
  */
+export const MSAL_SESSION_TOKEN = 'msal'
+
+export function isStaticDemoBuild(): boolean {
+  const flag = import.meta.env?.VITE_STATIC_DEMO
+  return flag === '1' || flag === 'true'
+}
+
 export function isLocalPersistence(): boolean {
+  if (isStaticDemoBuild()) return true
   try {
-    return getStoredSession()?.token === 'local-demo'
+    const session = getStoredSession()
+    if (!session) return true
+    if (session.token === 'local-demo' || session.token === MSAL_SESSION_TOKEN) return true
+    if (session.user?.authMethod === 'microsoft') return true
+    return false
   } catch {
     return true
   }

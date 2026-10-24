@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from '@/auth/AuthContext'
-import { LogOut, Shield } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 
 interface ProfileMenuProps {
   open: boolean
@@ -29,18 +29,9 @@ export function ProfileMenu({ open, onClose }: ProfileMenuProps) {
     >
       <div className="border-b border-border bg-gradient-to-br from-navy-900 to-navy-800 px-4 py-4 text-white">
         <p className="font-brand text-lg font-bold tracking-tight">{user.name}</p>
-        <p className="mt-0.5 text-xs tracking-[0.08em] text-white/70 uppercase">
-          {user.role}
-          {user.isManager ? ' · Managerial' : ''}
-        </p>
+        <p className="mt-0.5 text-xs tracking-[0.08em] text-white/70 uppercase">{user.role}</p>
       </div>
       <dl className="space-y-2.5 px-4 py-3 text-sm">
-        <div>
-          <dt className="text-[10px] font-semibold tracking-[0.1em] text-ink-subtle uppercase">
-            User ID
-          </dt>
-          <dd className="mt-0.5 font-mono text-xs text-ink">{user.id}</dd>
-        </div>
         <div>
           <dt className="text-[10px] font-semibold tracking-[0.1em] text-ink-subtle uppercase">
             Work email
@@ -51,29 +42,9 @@ export function ProfileMenu({ open, onClose }: ProfileMenuProps) {
           <dt className="text-[10px] font-semibold tracking-[0.1em] text-ink-subtle uppercase">
             Auth method
           </dt>
-          <dd className="mt-0.5 text-ink">{user.authMethod ?? 'session'}</dd>
+          <dd className="mt-0.5 text-ink">Microsoft 365</dd>
         </div>
-        {(user.apiKeyId || user.apiKeySlot) && (
-          <div>
-            <dt className="text-[10px] font-semibold tracking-[0.1em] text-ink-subtle uppercase">
-              API key
-            </dt>
-            <dd className="mt-0.5 text-ink">
-              {user.apiKeySlot != null ? `Slot ${user.apiKeySlot}` : 'Managerial'}
-              {user.apiKeyLabel ? ` — ${user.apiKeyLabel}` : ''}
-            </dd>
-            {user.apiKeyId && (
-              <dd className="mt-0.5 font-mono text-[11px] text-ink-muted">{user.apiKeyId}</dd>
-            )}
-          </div>
-        )}
       </dl>
-      {user.isManager && (
-        <p className="mx-4 mb-2 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
-          <Shield className="h-3.5 w-3.5" />
-          Managerial master key — can revoke and provision access slots
-        </p>
-      )}
       <div className="border-t border-border p-2">
         <button
           type="button"

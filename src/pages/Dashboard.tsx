@@ -16,7 +16,7 @@ import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
 import { useAuth } from '@/auth/AuthContext'
-import { getStoredSession } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { mockContacts } from '@/data/mockModules'
@@ -312,7 +312,7 @@ export function Dashboard() {
           }
         }}
         onImportContacts={async (rows: ImportRow[]) => {
-          if (getStoredSession()?.token === 'local-demo') {
+          if (isLocalPersistence()) {
             const existing = loadOwnedCollection('contacts', owner, mockContacts)
             const mapped = rows.map((r, i) => ({
               id: `con_import_${Date.now()}_${i}`,

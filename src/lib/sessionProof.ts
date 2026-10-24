@@ -9,6 +9,7 @@ const TOKEN_KEY = 'newport_crm_session_token'
 const USER_KEY = 'newport_crm_session_user'
 
 const LOCAL_TOKEN = 'local-demo'
+const MSAL_TOKEN = 'msal'
 const SESSION_MS = 8 * 60 * 60 * 1000
 
 export interface SessionProof {
@@ -46,7 +47,9 @@ export function ownerKeyFromProofFields(input: {
   isManager: boolean
   apiKeySlot: number | null
   authMethod?: AuthUser['authMethod']
+  userId?: string | null
 }): string {
+  if (input.authMethod === 'microsoft') return input.userId ? `ms:${input.userId}` : 'anonymous'
   if (input.isManager || input.authMethod === 'manager_key') return 'key:manager'
   if (input.apiKeySlot != null) return `key:slot-${input.apiKeySlot}`
   if (input.authMethod === 'demo') return 'key:demo'
@@ -74,6 +77,7 @@ export async function createSessionProof(input: {
       isManager,
       apiKeySlot,
       authMethod: input.user.authMethod,
+      userId: input.user.id,
     }),
     isManager,
     apiKeySlot,
@@ -150,4 +154,4 @@ export function hasProofEnvelope(): boolean {
   return Boolean(sessionStorage.getItem(PROOF_KEY))
 }
 
-export { TOKEN_KEY, USER_KEY, LOCAL_TOKEN, PROOF_KEY }
+export { TOKEN_KEY, USER_KEY, LOCAL_TOKEN, MSAL_TOKEN, PROOF_KEY }

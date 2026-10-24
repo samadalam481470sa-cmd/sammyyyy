@@ -5,10 +5,11 @@ import { useData } from '@/data/DataContext'
 import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import {
-  DEFAULT_DOCUMENT_SLOTS,
+  DOCUMENT_SLOT_META,
+  hasAttachedFile,
   slotDocument,
 } from '@/lib/documentSlots'
-import { FileKindIcon, iconKindForDocument } from '@/components/documents/FileKindIcon'
+import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
 import { DocumentWorkspace } from '@/components/documents/DocumentWorkspace'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
@@ -75,7 +76,7 @@ export function DocumentsPage() {
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Documents</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Project cards with NDA, CIM, and LOI slots. References only — no files are hosted here.
+            Checkmarks mean the file is in the CRM. X means that slot is still missing.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -156,7 +157,11 @@ export function DocumentsPage() {
       >
         <div className={`custom-scroll min-h-0 flex-1 overflow-auto p-6 ${selected ? 'border-r border-border' : ''}`}>
           {loading && <p className="text-sm text-ink-muted">Loading records…</p>}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div
+            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+              selected ? 'lg:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-5'
+            }`}
+          >
             {filtered.map((opp) => {
               const active = selected?.id === opp.id
               return (
@@ -171,13 +176,24 @@ export function DocumentsPage() {
                   <p className="font-brand text-xl font-bold text-navy-900">{opp.projectName}</p>
                   <p className="mt-1 text-sm font-semibold text-ink">{dealIdFromOpportunity(opp)}</p>
                   <p className="text-sm text-ink-muted">{opp.entityName}</p>
-                  <div className="mt-4 flex items-center gap-2">
-                    {DEFAULT_DOCUMENT_SLOTS.map((slot) => {
-                      const doc = slotDocument(documents, opp.id, slot)
-                      const icon = iconKindForDocument(doc)
+                  <div className="mt-4 flex flex-wrap gap-x-2 gap-y-1.5">
+                    {DOCUMENT_SLOT_META.map((slot) => {
+                      const record = slotDocument(documents, opp.id, slot.id)
+                      const available = hasAttachedFile(record)
                       return (
-                        <span key={slot} title={doc ? `${slot}: ${doc.name}` : `${slot}: No document attached`}>
-                          <FileKindIcon missing={icon.missing} kind={icon.kind} />
+                        <span
+                          key={slot.id}
+                          className="inline-flex items-center gap-1 whitespace-nowrap"
+                          title={
+                            available
+                              ? `${slot.label}: ${record?.name ?? 'Available'}`
+                              : `${slot.label}: Missing`
+                          }
+                        >
+                          <SlotPresenceIcon available={available} size="sm" />
+                          <span className="text-[10px] font-semibold tracking-wide text-ink-muted">
+                            {slot.abbr}
+                          </span>
                         </span>
                       )
                     })}

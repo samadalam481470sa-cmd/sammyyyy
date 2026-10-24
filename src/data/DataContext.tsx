@@ -30,6 +30,7 @@ import { crmUsersForSession, findCrmUserById, type CrmUser } from '@/lib/crmUser
 import { nextProjectNumber } from '@/lib/dealId'
 import { nowIso } from '@/lib/calendarDate'
 import { isLocalPersistence } from '@/lib/persistenceMode'
+import { deleteDocumentBlob } from '@/lib/documentFileStore'
 import {
   applyTaskArchiveRules,
   applyTaskStatusTransition,
@@ -201,7 +202,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       persistDocs(rawDocs)
       persistActivity(rawActivity)
     }
-    if (getStoredSession()?.token === 'local-demo') {
+    if (isLocalPersistence()) {
       loadLocal()
       setLoading(false)
       return
@@ -249,7 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const mergedBase = { ...existing, ...nextPatch }
       const merged = decorateOpportunities([mergedBase], taskList)[0]
-      if (getStoredSession()?.token === 'local-demo') {
+      if (isLocalPersistence()) {
         persistOpps(oppsRef.current.map((row) => (row.id === id ? merged : row)))
         logChange('opportunity', id, 'update', Object.keys(patch))
         pushActivity(opportunityUpdateActivity(user?.name ?? null, existing, patch))
@@ -272,7 +273,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         throw new Error('Project name and entity are required')
       }
       const projectNumber = nextProjectNumber(oppsRef.current)
-      if (getStoredSession()?.token === 'local-demo') {
+      if (isLocalPersistence()) {
         const id = `opp_local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
         const createdBase: Opportunity = {
           id,
@@ -338,7 +339,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const existing = oppsRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Opportunity not found')
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         await resourceRequest(`/opportunities/${id}`, { method: 'DELETE' }).catch(() => undefined)
       }
       persistTasks(
@@ -346,8 +347,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
           row.opportunityId === id ? { ...row, opportunityId: null, updatedAt: nowIso() } : row,
         ),
       )
+      const removedDocs = docsRef.current.filter((row) => row.opportunityId === id)
       persistDocs(docsRef.current.filter((row) => row.opportunityId !== id))
       persistOpps(oppsRef.current.filter((row) => row.id !== id))
+      for (const doc of removedDocs) {
+        void deleteDocumentBlob(owner, doc.id).catch(() => undefined)
+      }
       logChange('opportunity', id, 'delete', ['id'])
       pushActivity(opportunityDeleteActivity(user?.name ?? null, existing))
     },
@@ -388,7 +393,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const ownerRow = findCrmUserById(patch.ownerId, users)
         if (ownerRow) merged = { ...merged, owner: ownerRow.name, ownerId: ownerRow.id }
       }
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         await resourceRequest<TaskRecord>(`/tasks/${id}`, {
           method: 'PATCH',
           body: JSON.stringify(merged),
@@ -433,7 +438,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         createdAt: nowIso(),
         updatedAt: nowIso(),
       }
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         const created = await resourceRequest<TaskRecord>('/tasks', {
           method: 'POST',
           body: JSON.stringify(record),
@@ -467,7 +472,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const existing = tasksRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Task not found')
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         await resourceRequest(`/tasks/${id}`, { method: 'DELETE' }).catch(() => undefined)
       }
       persistTasks(
@@ -497,7 +502,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...patch,
         projectName: linked?.projectName ?? patch.projectName ?? existing.projectName,
       }
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         await resourceRequest<DocumentRecord>(`/documents/${id}`, {
           method: 'PATCH',
           body: JSON.stringify(merged),
@@ -530,8 +535,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notes: draft.notes ?? '',
         fileType: draft.fileType ?? '',
         createdAt: nowIso(),
+        fileName: draft.fileName ?? '',
+        fileSize: draft.fileSize ?? 0,
+        storage: draft.storage ?? (draft.link ? 'url' : 'none'),
+        webUrl: draft.webUrl ?? '',
+        driveItemId: draft.driveItemId ?? '',
       }
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         const created = await resourceRequest<DocumentRecord>('/documents', {
           method: 'POST',
           body: JSON.stringify(record),
@@ -550,10 +560,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const existing = docsRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Document not found')
-      if (getStoredSession()?.token !== 'local-demo') {
+      if (!isLocalPersistence()) {
         await resourceRequest(`/documents/${id}`, { method: 'DELETE' }).catch(() => undefined)
       }
       persistDocs(docsRef.current.filter((row) => row.id !== id))
+      void deleteDocumentBlob(owner, id).catch(() => undefined)
       logChange('document', id, 'delete', ['id'])
       pushActivity(documentActivity(user?.name ?? null, existing, 'removed'))
     },

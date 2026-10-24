@@ -1,6 +1,6 @@
 import { FileSpreadsheet, FileText, FileType, FileX } from 'lucide-react'
 import type { DocumentRecord } from '@/data/mockModules'
-import { inferFileType } from '@/lib/documentSlots'
+import { hasAttachedFile, inferFileType } from '@/lib/documentSlots'
 
 interface FileKindIconProps {
   kind?: string
@@ -44,7 +44,6 @@ export function FileKindIcon({ kind, missing }: FileKindIconProps) {
 }
 
 export function iconKindForDocument(doc: DocumentRecord | null): { missing: boolean; kind: string } {
-  if (!doc) return { missing: true, kind: '' }
-  const kind = inferFileType(doc) || 'pdf'
-  return { missing: false, kind }
+  if (!doc || !hasAttachedFile(doc)) return { missing: true, kind: '' }
+  return { missing: false, kind: inferFileType(doc) || 'file' }
 }

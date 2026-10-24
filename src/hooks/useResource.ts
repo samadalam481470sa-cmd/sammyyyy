@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import { getStoredSession } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import {
   appendDemoChange,
   loadOwnedCollection,
@@ -11,7 +12,7 @@ import { sessionOwnerKey } from '@/lib/ownerKey'
 const API_BASE = '/api/resources'
 
 function isLocalDemo() {
-  return getStoredSession()?.token === 'local-demo'
+  return isLocalPersistence()
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

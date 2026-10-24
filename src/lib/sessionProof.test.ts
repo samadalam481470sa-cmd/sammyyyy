@@ -60,6 +60,25 @@ describe('sessionProof', () => {
     expect(await verifySessionProof('local-demo', escalated, proof)).toBe(false)
   })
 
+  it('accepts a Microsoft 365 session proof', async () => {
+    const mary: AuthUser = {
+      id: 'oid-mary',
+      email: 'mary@outlook.com',
+      name: 'Mary Sbaschnig',
+      role: 'partner',
+      initials: 'MS',
+      authMethod: 'microsoft',
+      isManager: false,
+    }
+    const proof = await createSessionProof({
+      token: 'msal',
+      user: mary,
+      fingerprint: 'oid-hash',
+    })
+    expect(proof.ownerKey).toBe('ms:oid-mary')
+    expect(await verifySessionProof('msal', mary, proof)).toBe(true)
+  })
+
   it('rejects a tampered signature', async () => {
     const proof = await createSessionProof({
       token: 'local-demo',

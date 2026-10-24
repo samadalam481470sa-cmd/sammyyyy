@@ -13,8 +13,6 @@ import { SourcesPage } from '@/pages/SourcesPage'
 import { CarriersPage } from '@/pages/CarriersPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
-import { KeyControlPage } from '@/pages/KeyControlPage'
-import { KeyProvisionPage } from '@/pages/KeyProvisionPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
@@ -48,8 +46,8 @@ export default function App() {
               <Route path="meetings" element={<MeetingsPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="security" element={<SecurityPage />} />
-              <Route path="security/keys" element={<KeyControlPage />} />
-              <Route path="security/provision" element={<KeyProvisionPage />} />
+              <Route path="security/keys" element={<Navigate to="/security" replace />} />
+              <Route path="security/provision" element={<Navigate to="/security" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Route>

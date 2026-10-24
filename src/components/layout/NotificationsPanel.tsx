@@ -6,7 +6,7 @@ import {
   sendNotification,
   type NotificationItem,
 } from '@/lib/api'
-import { getStoredSession } from '@/lib/api'
+import { isLocalPersistence } from '@/lib/persistenceMode'
 import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
 import { useAuth } from '@/auth/AuthContext'
 import {
@@ -65,7 +65,7 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
       const owner = calendarOwnerKey(user)
       pushCalendarReminders(user, loadCalendarEvents(owner))
       const reminders = loadKeyCalendarNotifications(user)
-      if (getStoredSession()?.token === 'local-demo') {
+      if (isLocalPersistence()) {
         setItems([...reminders, ...loadDemoCollection('notifications', SEED)])
         return
       }
@@ -90,7 +90,7 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
           user,
           next.filter((n) => n.id.startsWith('cal-reminder-')),
         )
-      } else if (getStoredSession()?.token === 'local-demo') {
+      } else if (isLocalPersistence()) {
         saveDemoCollection(
           'notifications',
           next.filter((n) => !n.id.startsWith('cal-reminder-')),
@@ -110,7 +110,7 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
     setBusy(true)
     setMessage(null)
     try {
-      if (getStoredSession()?.token === 'local-demo') {
+      if (isLocalPersistence()) {
         const created: NotificationItem = {
           id: `local_${Date.now()}`,
           direction: 'outbound',
