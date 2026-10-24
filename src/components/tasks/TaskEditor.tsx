@@ -8,6 +8,7 @@ import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { useEditorGuard, type OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
+import { registerPendingCommit } from '@/lib/userVault'
 import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react'
 
 export type TaskDraft = {
@@ -150,6 +151,17 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
         setSaving(false)
       }
     }
+
+    const persistRef = useRef(persist)
+    persistRef.current = persist
+    const taskDirtyRef = useRef(dirty)
+    taskDirtyRef.current = dirty
+    useEffect(() => {
+      return registerPendingCommit(async () => {
+        if (!taskDirtyRef.current) return
+        await persistRef.current()
+      })
+    }, [])
 
     const handleDelete = async () => {
       if (mode === 'draft' || !task) {

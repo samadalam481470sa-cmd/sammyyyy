@@ -268,11 +268,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           disabled={signingOut}
           data-testid="sidebar-sign-out"
           onClick={() => {
-            const leave = () => {
-              void signOut().finally(() => navigate('/login'))
-            }
-            if (editorGuard) editorGuard.guardAction(leave)
-            else leave()
+            void signOut().finally(() => navigate('/login'))
           }}
           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-white/55 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50 ${
             collapsed ? 'justify-center px-2' : ''

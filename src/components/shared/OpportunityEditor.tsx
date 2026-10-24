@@ -13,6 +13,7 @@ import {
   useEditorGuard,
   type OpportunityEditorHandle,
 } from '@/components/shared/EditorGuardContext'
+import { registerPendingCommit } from '@/lib/userVault'
 import {
   ACQUISITION_STAGES,
   OPPORTUNITY_STATUSES,
@@ -105,6 +106,17 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         setSaving(false)
       }
     }, [saved, draft, onSave])
+
+    const persistRef = useRef(persist)
+    persistRef.current = persist
+    const dirtyRef = useRef(dirty)
+    dirtyRef.current = dirty
+    useEffect(() => {
+      return registerPendingCommit(async () => {
+        if (!dirtyRef.current) return
+        await persistRef.current()
+      })
+    }, [])
 
     const discard = useCallback(() => {
       setDraft(saved)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { fetchKeyCalendar, saveKeyCalendar } from '@/lib/api'
@@ -14,6 +14,7 @@ import {
   type CalendarEvent,
 } from '@/lib/meetingCalendar'
 import { pushCalendarReminders } from '@/lib/calendarReminders'
+import { registerVaultFlush } from '@/lib/userVault'
 import { FIELD_LIMITS, sanitizeCalendarEvent } from '@/lib/meetingSecurity'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -70,6 +71,14 @@ export function MeetingCalendar() {
     if (isLocalPersistence()) return
     void saveKeyCalendar(next).catch(() => undefined)
   }
+
+  const eventsRef = useRef(events)
+  eventsRef.current = events
+  useEffect(() => {
+    return registerVaultFlush(() => {
+      saveCalendarEvents(owner, eventsRef.current)
+    })
+  }, [owner])
 
   const cells = useMemo(
     () => monthGrid(cursor.year, cursor.month),

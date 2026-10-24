@@ -32,7 +32,7 @@ import {
   startMicrosoftLogin,
   userFromMicrosoftAccount,
 } from '@/auth/msal'
-import { flushAllUserVaults } from '@/lib/userVault'
+import { attachVaultUnloadFlush, commitAllPendingEdits, flushAllUserVaults } from '@/lib/userVault'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -147,9 +147,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const id = window.setInterval(() => {
       void hydrate()
     }, 60_000)
+    const detachUnload = attachVaultUnloadFlush()
     return () => {
       cancelled = true
       window.clearInterval(id)
+      detachUnload()
     }
   }, [hydrate])
 
@@ -189,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    await commitAllPendingEdits()
     flushAllUserVaults()
     epochRef.current += 1
     signingOutRef.current = true

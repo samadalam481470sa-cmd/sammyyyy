@@ -41,6 +41,7 @@ import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 import { nowIso } from '@/lib/calendarDate'
 import { useEditorGuard, type OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
+import { registerPendingCommit } from '@/lib/userVault'
 
 interface DocumentWorkspaceProps {
   opportunity: Opportunity
@@ -258,6 +259,15 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         setSaving(false)
       }
     }
+
+    const persistRef = useRef(persist)
+    persistRef.current = persist
+    useEffect(() => {
+      return registerPendingCommit(async () => {
+        if (!dirtyRef.current) return
+        await persistRef.current()
+      })
+    }, [])
 
     const startNew = () => {
       const go = () => {

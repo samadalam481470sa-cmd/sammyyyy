@@ -4,7 +4,7 @@ import { clearSession, getStoredSession, storeSession } from '@/lib/api'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { emailOwnerKey } from '@/lib/emailIdentity'
 import { TOKEN_KEY, USER_KEY, PROOF_KEY, DEVICE_SECRET_KEY } from '@/lib/sessionProof'
-import { flushAllUserVaults, registerVaultFlush } from '@/lib/userVault'
+import { commitAllPendingEdits, flushAllUserVaults, registerPendingCommit, registerVaultFlush } from '@/lib/userVault'
 
 function memoryStorage() {
   const store: Record<string, string> = {}
@@ -108,6 +108,20 @@ describe('logout keeps CRM edits', () => {
       projectName: 'Flushed on logout',
     })
     expect(loadOwnedCollection('tasks', owner, [])[0]).toMatchObject({ action: 'Call counsel' })
+    stop()
+  })
+
+  it('commits open editor changes for that login before logout', async () => {
+    const owner = emailOwnerKey('pat@gmail.com')
+    const stop = registerPendingCommit(() => {
+      saveOwnedCollection('opportunities', owner, [{ id: 'opp-a', projectName: 'Auto-saved on log off' }])
+    })
+    await commitAllPendingEdits()
+    flushAllUserVaults()
+    clearSession()
+    expect(loadOwnedCollection('opportunities', owner, [])[0]).toMatchObject({
+      projectName: 'Auto-saved on log off',
+    })
     stop()
   })
 })
