@@ -56,12 +56,12 @@ export function ProfileMenu({ open, onClose }: ProfileMenuProps) {
           disabled={signingOut}
           data-testid="profile-sign-out"
           onClick={() => {
-            void signOut().finally(() => navigate('/login'))
+            void signOut().finally(() => navigate('/login', { replace: true }))
           }}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50"
         >
           <LogOut className="h-4 w-4" />
-          Sign out
+          {signingOut ? 'Saving…' : 'Sign out'}
         </button>
       </div>
     </div>

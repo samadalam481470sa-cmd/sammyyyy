@@ -196,22 +196,9 @@ export async function clearMicrosoftCache(): Promise<void> {
 }
 
 export async function microsoftLogout(): Promise<void> {
-  const instance = await ensureMsal()
-  if (!instance) return
-  const account = instance.getActiveAccount() ?? instance.getAllAccounts()[0]
-  if (!account) {
-    await instance.clearCache()
-    return
-  }
-  try {
-    await instance.logoutPopup({
-      account,
-      postLogoutRedirectUri: spaRedirectUri(),
-    })
-  } catch {
-    instance.setActiveAccount(null)
-    await instance.clearCache()
-  }
+  // Local cache only. logoutPopup / logoutRedirect bounce the CRM off the
+  // dashboard and back, which is the main sign-out glitch.
+  await clearMicrosoftCache()
 }
 
 export async function getGraphAccessToken(scopes: string[] = GRAPH_FILE_SCOPES): Promise<string | null> {

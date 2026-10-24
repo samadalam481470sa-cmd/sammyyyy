@@ -25,7 +25,7 @@ describe('Microsoft 365 SPA URLs', () => {
     ).toBe('https://samadalam481470sa-cmd.github.io/sammyyyy/')
   })
 
-  it('strips Entra query params so HashRouter can open the dashboard', () => {
+  it('keeps Entra return URLs on the static origin so login never bounces through a CRM route', () => {
     expect(
       stripAuthRedirectQuery(
         'https://samadalam481470sa-cmd.github.io/sammyyyy/?code=abc&state=1&client_info=x',

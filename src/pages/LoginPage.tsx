@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
 import {
@@ -112,7 +112,6 @@ function OtherMark({ className }: { className?: string }) {
 
 export function LoginPage() {
   const { isAuthenticated, authReady, signInWithEmail, signInWithMicrosoft } = useAuth()
-  const navigate = useNavigate()
   const [provider, setProvider] = useState<LoginProvider>(lastProvider)
   const [email, setEmail] = useState(lastEmail)
   const [error, setError] = useState<string | null>(null)
@@ -130,11 +129,6 @@ export function LoginPage() {
 
   if (!authReady) return <div className="min-h-full bg-[#040b16]" aria-busy="true" />
   if (isAuthenticated) return <Navigate to={dashboardPathAfterLogin()} replace />
-
-  const openDashboard = () => {
-    inFlightRef.current = false
-    navigate(dashboardPathAfterLogin(), { replace: true })
-  }
 
   const fail = (message: string) => {
     inFlightRef.current = false
@@ -165,7 +159,6 @@ export function LoginPage() {
       return false
     }
     await signInWithEmail(parsed.email, nextProvider)
-    openDashboard()
     return true
   }
 
@@ -200,7 +193,6 @@ export function LoginPage() {
       if (configured) {
         try {
           await signInWithMicrosoft(email.trim() || undefined)
-          openDashboard()
           return
         } catch (err) {
           if (isMicrosoftAuthCancelled(err)) {
@@ -212,7 +204,6 @@ export function LoginPage() {
             if (parsed.ok) {
               try {
                 await signInWithEmail(parsed.email, 'microsoft')
-                openDashboard()
                 return
               } catch (emailErr) {
                 fail(emailErr instanceof Error ? emailErr.message : 'Sign-in failed')
@@ -238,6 +229,7 @@ export function LoginPage() {
 
   return (
     <div
+      data-testid="login-page"
       className="relative flex min-h-full flex-col items-center justify-center overflow-hidden px-4 py-5"
       style={{
         background:

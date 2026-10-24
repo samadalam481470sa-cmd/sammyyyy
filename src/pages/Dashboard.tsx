@@ -207,7 +207,7 @@ export function Dashboard() {
         onNewOpportunity={() => setCreateOpen(true)}
       />
 
-      <main className="flex-1 px-6 py-6 lg:px-8">
+      <main data-testid="crm-dashboard" className="flex-1 px-6 py-6 lg:px-8">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
           <StatusFilter
             filters={filters}

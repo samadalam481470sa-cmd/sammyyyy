@@ -81,23 +81,23 @@ async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicroso
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [authReady, setAuthReady] = useState(
-    () => !isMsalConfigured() && !getStoredSession(),
-  )
+  const [authReady, setAuthReady] = useState(() => !getStoredSession())
   const [signingOut, setSigningOut] = useState(false)
   const epochRef = useRef(0)
   const signingOutRef = useRef(false)
+  const hydrateEnabledRef = useRef(true)
+  const signInLockRef = useRef(false)
 
   const hydrate = useCallback(async () => {
     const epoch = epochRef.current
-    if (signingOutRef.current) return
+    if (signingOutRef.current || !hydrateEnabledRef.current) return
     if (isMsalConfigured()) {
       try {
         await ensureMsal()
       } catch {
         // Email sessions must still restore when Entra is not configured.
       }
-      if (epoch !== epochRef.current || signingOutRef.current) return
+      if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
       const account = getMicrosoftAccount()
       if (account) {
         const msUser = userFromMicrosoftAccount(account)
@@ -107,18 +107,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const sameEmail =
             normalizeEmail(storedMs.user.email || '') === normalizeEmail(msUser.email || '')
           const ok = sameEmail && (await verifySessionProof(storedMs.token, storedMs.user, proofMs))
-          if (epoch !== epochRef.current || signingOutRef.current) return
+          if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
           if (ok) {
             await storeSession(storedMs.token, storedMs.user, proofMs.fingerprint)
-            if (epoch !== epochRef.current || signingOutRef.current) return
+            if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
             setUser(storedMs.user)
             return
           }
+          // A leftover Entra account must not replace a different email session.
+        } else {
+          const next = await sessionFromMicrosoftAccount(account)
+          if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
+          setUser(next)
+          return
         }
-        const next = await sessionFromMicrosoftAccount(account)
-        if (epoch !== epochRef.current || signingOutRef.current) return
-        setUser(next)
-        return
       }
     }
 
@@ -126,16 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const proof = readProofBlob()
     if (stored?.user && proof) {
       const ok = await verifySessionProof(stored.token, stored.user, proof)
-      if (epoch !== epochRef.current || signingOutRef.current) return
+      if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
       if (ok) {
         await storeSession(stored.token, stored.user, proof.fingerprint)
-        if (epoch !== epochRef.current || signingOutRef.current) return
+        if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
         setUser(stored.user)
         return
       }
       clearSession()
     }
-    if (epoch !== epochRef.current || signingOutRef.current) return
+    if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
     setUser(null)
   }, [])
 
@@ -156,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [hydrate])
 
   const signInWithEmail = useCallback(async (raw: string, provider?: LoginProvider) => {
+    if (signInLockRef.current) return
     const gate = assertLoginAllowed()
     if (!gate.ok) throw new Error(gate.error)
     const parsed = parseLoginEmail(raw)
@@ -163,60 +166,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       recordLoginFailure()
       throw new Error(parsed.error)
     }
+    signInLockRef.current = true
     epochRef.current += 1
     signingOutRef.current = false
-    const next = userFromEmailAddress(parsed.email)
-    await clearMicrosoftCache().catch(() => undefined)
-    await storeSession(await newSessionToken(), next, await sha256Hex(parsed.email))
-    await rememberLastEmail(parsed.email, provider)
-    recordLoginSuccess()
-    setUser(next)
+    hydrateEnabledRef.current = true
+    try {
+      const next = userFromEmailAddress(parsed.email)
+      await clearMicrosoftCache().catch(() => undefined)
+      await storeSession(await newSessionToken(), next, await sha256Hex(parsed.email))
+      await rememberLastEmail(parsed.email, provider)
+      recordLoginSuccess()
+      setUser(next)
+      setSigningOut(false)
+    } finally {
+      signInLockRef.current = false
+    }
   }, [])
 
   const signInWithMicrosoft = useCallback(async (loginHint?: string) => {
+    if (signInLockRef.current) return
     const gate = assertLoginAllowed()
     if (!gate.ok) throw new Error(gate.error)
-    const result = await startMicrosoftLogin(loginHint)
-    if (result.status === 'redirect') return
-    epochRef.current += 1
-    signingOutRef.current = false
-    await storeSession(
-      await newSessionToken(),
-      result.user,
-      await sha256Hex(result.user.email || result.user.id),
-    )
-    await rememberLastEmail(result.user.email, 'microsoft')
-    recordLoginSuccess()
-    setUser(result.user)
+    signInLockRef.current = true
+    try {
+      const result = await startMicrosoftLogin(loginHint)
+      if (result.status === 'redirect') return
+      epochRef.current += 1
+      signingOutRef.current = false
+      hydrateEnabledRef.current = true
+      await storeSession(
+        await newSessionToken(),
+        result.user,
+        await sha256Hex(result.user.email || result.user.id),
+      )
+      await rememberLastEmail(result.user.email, 'microsoft')
+      recordLoginSuccess()
+      setUser(result.user)
+      setSigningOut(false)
+    } finally {
+      signInLockRef.current = false
+    }
   }, [])
 
   const signOut = useCallback(async () => {
-    await commitAllPendingEdits()
-    flushAllUserVaults()
-    epochRef.current += 1
+    if (signingOutRef.current) return
     signingOutRef.current = true
+    hydrateEnabledRef.current = false
     setSigningOut(true)
-    const hadMsalAccount = Boolean(isMsalConfigured() && getMicrosoftAccount())
     try {
-      await apiSignOut()
-    } catch {
-      // Static demo has no auth API.
-    }
-    clearSession()
-    setUser(null)
-    try {
-      sessionStorage.removeItem('newport_post_login_path')
-    } catch {
-      // ignore
-    }
-    try {
-      if (hadMsalAccount) {
-        await microsoftLogout()
-      } else {
-        await clearMicrosoftCache()
+      await commitAllPendingEdits()
+      flushAllUserVaults()
+      epochRef.current += 1
+      try {
+        await apiSignOut()
+      } catch {
+        // Static demo has no auth API.
       }
-    } catch {
-      await clearMicrosoftCache().catch(() => undefined)
+      clearSession()
+      setUser(null)
+      try {
+        sessionStorage.removeItem('newport_post_login_path')
+      } catch {
+        // ignore
+      }
+      try {
+        await microsoftLogout()
+      } catch {
+        await clearMicrosoftCache().catch(() => undefined)
+      }
     } finally {
       signingOutRef.current = false
       setSigningOut(false)
