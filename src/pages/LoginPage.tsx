@@ -220,10 +220,10 @@ export function LoginPage() {
             Acquisition Management Platform
           </p>
           <h1 className="mt-2 text-center font-brand text-xl font-bold text-navy-900">
-            Sign in with Microsoft 365
+            Sign in with Microsoft
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Four ways in: Microsoft 365 on top, then Outlook, Gmail, or other email.
+            Microsoft SSO opens the dashboard. Outlook, Gmail, or other email sit underneath.
           </p>
 
           <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
@@ -236,9 +236,9 @@ export function LoginPage() {
                   <MicrosoftMark className="h-8 w-8" />
                 </span>
                 <div className="min-w-0">
-                  <p className="font-brand text-xl font-bold text-navy-900">Microsoft 365</p>
+                  <p className="font-brand text-xl font-bold text-navy-900">Microsoft SSO</p>
                   <p className="text-xs leading-snug text-ink-muted">
-                    {PROVIDERS.microsoft.accounts}
+                    Single sign-on into the dashboard
                   </p>
                 </div>
               </div>
@@ -287,7 +287,7 @@ export function LoginPage() {
                 className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 <MicrosoftMark className="h-7 w-7" />
-                {busy && provider === 'microsoft' ? 'Signing in…' : 'Continue with Microsoft 365'}
+                {busy && provider === 'microsoft' ? 'Signing in…' : 'Sign in with Microsoft'}
               </button>
               {provider === 'microsoft' && (
                 <button
