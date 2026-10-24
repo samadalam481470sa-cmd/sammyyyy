@@ -42,27 +42,31 @@ function lastProvider(): LoginProvider {
 
 const PROVIDERS: Record<
   LoginProvider,
-  { title: string; hint: string; placeholder: string }
+  { title: string; hint: string; placeholder: string; accounts: string }
 > = {
   microsoft: {
-    title: 'Microsoft',
-    hint: 'Microsoft 365, Outlook.com, Hotmail, or any Microsoft account.',
+    title: 'Microsoft 365',
+    hint: 'Work Microsoft 365, Outlook.com, Hotmail, Live, or MSN.',
     placeholder: 'you@outlook.com',
+    accounts: 'Microsoft 365 work · Outlook.com · Hotmail · Live · MSN',
   },
   outlook: {
     title: 'Outlook',
-    hint: 'Outlook, Hotmail, or Live email. Any valid address works for now.',
+    hint: 'Outlook.com, Hotmail, Live, and MSN inboxes.',
     placeholder: 'you@outlook.com',
+    accounts: '@outlook.com · @hotmail.com · @live.com',
   },
   gmail: {
     title: 'Gmail',
-    hint: 'Gmail or Google Workspace. Any valid address works for now.',
+    hint: 'Gmail and Google Workspace addresses.',
     placeholder: 'you@gmail.com',
+    accounts: '@gmail.com · Google Workspace',
   },
   other: {
     title: 'Other email',
-    hint: 'Work or personal email. We check that it is valid, then open the dashboard.',
+    hint: 'Any other work or personal email. We check that it is valid, then open the dashboard.',
     placeholder: 'you@company.com',
+    accounts: 'company or personal email',
   },
 }
 
@@ -257,76 +261,72 @@ export function LoginPage() {
             Sign in with Microsoft 365
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Continue with Microsoft 365 on top. Outlook, Gmail, or any valid email still works.
-            A valid address opens the dashboard immediately.
+            Four ways in: Microsoft 365 on top, then Outlook, Gmail, or other email.
           </p>
 
-          <div
-            data-testid="login-microsoft-card"
-            className="mt-5 rounded-2xl border-2 border-navy-900/80 bg-canvas px-4 py-4 shadow-sm"
-          >
-            <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-border">
-                <MicrosoftMark className="h-7 w-7" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-brand text-lg font-bold text-navy-900">Microsoft</p>
-                <p className="text-xs text-ink-muted">Microsoft 365 and Microsoft accounts</p>
+          <form noValidate onSubmit={(e) => void onEmailSignIn(e)}>
+            <div
+              data-testid="login-microsoft-card"
+              className="mt-5 rounded-2xl border-2 border-navy-900 bg-[#f4f7fb] px-5 py-5 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-border">
+                  <MicrosoftMark className="h-8 w-8" />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-brand text-xl font-bold text-navy-900">Microsoft 365</p>
+                  <p className="text-xs leading-snug text-ink-muted">
+                    {PROVIDERS.microsoft.accounts}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <form className="mt-4 space-y-3" noValidate onSubmit={(e) => void onEmailSignIn(e)}>
-              <label
-                htmlFor="work-email"
-                className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
-              >
-                {copy.title} email
-              </label>
-              <input
-                ref={emailRef}
-                id="work-email"
-                data-testid="login-email"
-                type="email"
-                autoComplete="username"
-                inputMode="email"
-                autoFocus
-                value={email}
-                placeholder={copy.placeholder}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  if (error) setError(null)
-                }}
-                className="h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-              />
-              <p className="text-[11px] leading-snug text-ink-muted">{copy.hint}</p>
-              {error && (
-                <p
-                  data-testid="login-error"
-                  className="rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
-                >
-                  {error}
-                </p>
+              {provider === 'microsoft' && (
+                <div className="mt-4 space-y-3">
+                  <label
+                    htmlFor="work-email"
+                    className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
+                  >
+                    Microsoft email
+                  </label>
+                  <input
+                    ref={emailRef}
+                    id="work-email"
+                    data-testid="login-email"
+                    type="email"
+                    autoComplete="username"
+                    inputMode="email"
+                    autoFocus
+                    value={email}
+                    placeholder={PROVIDERS.microsoft.placeholder}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      if (error) setError(null)
+                    }}
+                    className="h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+                  />
+                  <p className="text-[11px] leading-snug text-ink-muted">{PROVIDERS.microsoft.hint}</p>
+                  {error && (
+                    <p
+                      data-testid="login-error"
+                      className="rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
+                    >
+                      {error}
+                    </p>
+                  )}
+                </div>
               )}
+
               <button
                 type="button"
                 disabled={busy}
                 onClick={onMicrosoft365}
                 data-testid="login-microsoft-365"
-                className="flex h-16 w-full items-center justify-center gap-3 rounded-xl bg-[#2f2f2f] text-base font-semibold text-white hover:bg-black disabled:opacity-60"
+                className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                <MicrosoftMark className="h-6 w-6" />
+                <MicrosoftMark className="h-7 w-7" />
                 {busy && provider === 'microsoft' ? 'Signing in…' : 'Continue with Microsoft 365'}
               </button>
-              {provider !== 'microsoft' && (
-                <button
-                  type="submit"
-                  disabled={busy}
-                  data-testid="login-continue"
-                  className="flex h-12 w-full items-center justify-center rounded-xl bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
-                >
-                  {busy ? 'Signing in…' : `Continue with ${copy.title}`}
-                </button>
-              )}
               {provider === 'microsoft' && (
                 <button
                   type="submit"
@@ -338,56 +338,110 @@ export function LoginPage() {
                   Continue with Microsoft
                 </button>
               )}
-            </form>
-          </div>
+            </div>
 
-          <p className="mt-5 text-center text-[11px] font-semibold tracking-[0.12em] text-ink-muted uppercase">
-            Other accounts
-          </p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="login-outlook"
-              onClick={() => pickProvider('outlook')}
-              className={`flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                provider === 'outlook'
-                  ? 'border-navy-900 bg-navy-900 text-white'
-                  : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-              }`}
-            >
-              <OutlookMark className="h-6 w-6" />
-              Outlook
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="login-gmail"
-              onClick={() => pickProvider('gmail')}
-              className={`flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                provider === 'gmail'
-                  ? 'border-navy-900 bg-navy-900 text-white'
-                  : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-              }`}
-            >
-              <GmailMark className="h-6 w-6" />
-              Gmail
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="login-other"
-              onClick={() => pickProvider('other')}
-              className={`flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                provider === 'other'
-                  ? 'border-navy-900 bg-navy-900 text-white'
-                  : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-              }`}
-            >
-              <OtherMark className="h-6 w-6" />
-              Other email
-            </button>
-          </div>
+            <p className="mt-6 text-center text-[11px] font-semibold tracking-[0.12em] text-ink-muted uppercase">
+              Or continue with
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                data-testid="login-outlook"
+                onClick={() => pickProvider('outlook')}
+                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                  provider === 'outlook'
+                    ? 'border-navy-900 bg-navy-900 text-white'
+                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
+                }`}
+              >
+                <OutlookMark className="h-7 w-7" />
+                Outlook
+                <span className={`text-[9px] font-normal leading-tight ${provider === 'outlook' ? 'text-white/80' : 'text-ink-muted'}`}>
+                  Outlook.com
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                data-testid="login-gmail"
+                onClick={() => pickProvider('gmail')}
+                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                  provider === 'gmail'
+                    ? 'border-navy-900 bg-navy-900 text-white'
+                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
+                }`}
+              >
+                <GmailMark className="h-7 w-7" />
+                Gmail
+                <span className={`text-[9px] font-normal leading-tight ${provider === 'gmail' ? 'text-white/80' : 'text-ink-muted'}`}>
+                  @gmail.com
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                data-testid="login-other"
+                onClick={() => pickProvider('other')}
+                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                  provider === 'other'
+                    ? 'border-navy-900 bg-navy-900 text-white'
+                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
+                }`}
+              >
+                <OtherMark className="h-7 w-7" />
+                Other email
+                <span className={`text-[9px] font-normal leading-tight ${provider === 'other' ? 'text-white/80' : 'text-ink-muted'}`}>
+                  work / personal
+                </span>
+              </button>
+            </div>
+
+            {provider !== 'microsoft' && (
+              <div className="mt-4 space-y-3 rounded-xl border border-border bg-canvas px-4 py-4">
+                <label
+                  htmlFor="work-email"
+                  className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
+                >
+                  {copy.title} email
+                </label>
+                <input
+                  ref={emailRef}
+                  id="work-email"
+                  data-testid="login-email"
+                  type="email"
+                  autoComplete="username"
+                  inputMode="email"
+                  value={email}
+                  placeholder={copy.placeholder}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    if (error) setError(null)
+                  }}
+                  className="h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+                />
+                <p className="text-[11px] leading-snug text-ink-muted">
+                  {copy.hint} Connect {copy.accounts}.
+                </p>
+                {error && (
+                  <p
+                    data-testid="login-error"
+                    className="rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
+                  >
+                    {error}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={busy}
+                  data-testid="login-continue"
+                  className="flex h-12 w-full items-center justify-center rounded-xl bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+                >
+                  {busy ? 'Signing in…' : `Continue with ${copy.title}`}
+                </button>
+              </div>
+            )}
+          </form>
         </div>
       </div>
       <p className="relative mt-3 max-w-[28rem] text-center text-[10px] leading-snug text-white/50">
