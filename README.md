@@ -23,11 +23,9 @@ npm run dev
 
 ## Sign in
 
-The home screen offers four ways in: **Microsoft** (large, on top), then **Outlook**, **Gmail**, and **other email**.
-Any valid address is checked immediately and opens the dashboard. Sign out ends that session only —
-CRM edits stay in this browser and come back with the same email.
-
-When `VITE_MSAL_CLIENT_ID` is set, Continue with Microsoft 365 still redirects to Entra.
+The home screen offers four ways in: **Microsoft 365** (large, on top), then **Outlook**, **Gmail**, and **other email**.
+Continue with Microsoft 365 opens Microsoft when `VITE_MSAL_CLIENT_ID` is set (popup first, redirect only if the popup is blocked). Without that client ID, a valid Microsoft / work / personal email is checked immediately and opens the dashboard.
+Sign out ends that session only — CRM edits stay in this browser and come back with the same email.
 
 ## 24/7 static demo (GitHub Pages)
 

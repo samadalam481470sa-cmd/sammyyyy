@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
-import { isMsalConfigured } from '@/auth/msal'
+import {
+  isMicrosoftAuthCancelled,
+  isMsalConfigured,
+  MicrosoftAuthUnavailableError,
+} from '@/auth/msal'
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
@@ -137,18 +141,32 @@ export function LoginPage() {
     }, 0)
   }
 
-  const onEmailSignIn = async (event: FormEvent) => {
-    event.preventDefault()
+  const finishEmailSignIn = async (nextProvider: LoginProvider) => {
     const parsed = parseLoginEmail(email)
     if (!parsed.ok) {
-      setError(parsed.error)
+      setError(
+        nextProvider === 'microsoft'
+          ? parsed.error.replace('work email', 'Microsoft 365 email')
+          : parsed.error,
+      )
       emailRef.current?.focus()
+      return false
+    }
+    await signInWithEmail(parsed.email, nextProvider)
+    return true
+  }
+
+  const onEmailSignIn = async (event: FormEvent) => {
+    event.preventDefault()
+    if (provider === 'microsoft') {
+      onMicrosoft365()
       return
     }
     setBusy(true)
     setError(null)
     try {
-      await signInWithEmail(parsed.email, provider)
+      const ok = await finishEmailSignIn(provider)
+      if (!ok) setBusy(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed')
       setBusy(false)
@@ -156,17 +174,47 @@ export function LoginPage() {
   }
 
   const onMicrosoft365 = () => {
-    if (!configured) {
-      pickProvider('microsoft')
-      return
-    }
+    pickProvider('microsoft')
     setBusy(true)
     setError(null)
-    void signInWithMicrosoft().catch((err) => {
-      setBusy(false)
-      setError(err instanceof Error ? err.message : 'Microsoft sign-in failed')
-      pickProvider('microsoft')
-    })
+    void (async () => {
+      if (configured) {
+        try {
+          await signInWithMicrosoft(email.trim() || undefined)
+          return
+        } catch (err) {
+          if (isMicrosoftAuthCancelled(err)) {
+            setError('Microsoft 365 sign-in was cancelled. Try again.')
+            setBusy(false)
+            return
+          }
+          if (!(err instanceof MicrosoftAuthUnavailableError)) {
+            const parsed = parseLoginEmail(email)
+            if (parsed.ok) {
+              try {
+                await signInWithEmail(parsed.email, 'microsoft')
+                return
+              } catch (emailErr) {
+                setError(emailErr instanceof Error ? emailErr.message : 'Sign-in failed')
+                setBusy(false)
+                return
+              }
+            }
+            setError(err instanceof Error ? err.message : 'Microsoft 365 sign-in failed')
+            setBusy(false)
+            emailRef.current?.focus()
+            return
+          }
+        }
+      }
+      try {
+        const ok = await finishEmailSignIn('microsoft')
+        if (!ok) setBusy(false)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Sign-in failed')
+        setBusy(false)
+      }
+    })()
   }
 
   return (
@@ -191,11 +239,11 @@ export function LoginPage() {
             Acquisition Management Platform
           </p>
           <h1 className="mt-2 text-center font-brand text-xl font-bold text-navy-900">
-            Sign in
+            Sign in with Microsoft 365
           </h1>
           <p className="mt-2 text-center text-sm text-ink-muted">
-            Microsoft, Outlook, Gmail, or any valid email. We check the address and open the
-            dashboard immediately.
+            Continue with Microsoft 365 on top. Outlook, Gmail, or any valid email still works.
+            A valid address opens the dashboard immediately.
           </p>
 
           <div
@@ -211,19 +259,6 @@ export function LoginPage() {
                 <p className="text-xs text-ink-muted">Microsoft 365 and Microsoft accounts</p>
               </div>
             </div>
-
-            {configured && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onMicrosoft365}
-                data-testid="login-microsoft-365"
-                className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-[#2f2f2f] text-base font-semibold text-white hover:bg-black disabled:opacity-60"
-              >
-                <MicrosoftMark className="h-5 w-5" />
-                Continue with Microsoft 365
-              </button>
-            )}
 
             <form className="mt-4 space-y-3" noValidate onSubmit={(e) => void onEmailSignIn(e)}>
               <label
@@ -258,13 +293,30 @@ export function LoginPage() {
                 </p>
               )}
               <button
-                type="submit"
+                type="button"
                 disabled={busy}
-                data-testid="login-continue"
-                className="flex h-14 w-full items-center justify-center rounded-xl bg-navy-900 text-base font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+                onClick={onMicrosoft365}
+                data-testid="login-microsoft-365"
+                className="flex h-16 w-full items-center justify-center gap-3 rounded-xl bg-[#2f2f2f] text-base font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {busy ? 'Signing in…' : `Continue with ${copy.title}`}
+                <MicrosoftMark className="h-6 w-6" />
+                {busy && provider === 'microsoft' ? 'Signing in…' : 'Continue with Microsoft 365'}
               </button>
+              {provider !== 'microsoft' && (
+                <button
+                  type="submit"
+                  disabled={busy}
+                  data-testid="login-continue"
+                  className="flex h-12 w-full items-center justify-center rounded-xl bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+                >
+                  {busy ? 'Signing in…' : `Continue with ${copy.title}`}
+                </button>
+              )}
+              {provider === 'microsoft' && (
+                <button type="submit" className="hidden" data-testid="login-continue" tabIndex={-1}>
+                  Continue with Microsoft
+                </button>
+              )}
             </form>
           </div>
 

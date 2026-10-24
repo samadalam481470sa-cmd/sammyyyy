@@ -37,7 +37,7 @@ interface AuthContextValue {
   authReady: boolean
   signingOut: boolean
   signInWithEmail: (email: string, provider?: LoginProvider) => Promise<void>
-  signInWithMicrosoft: () => Promise<void>
+  signInWithMicrosoft: (loginHint?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -145,11 +145,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(next)
   }, [])
 
-  const signInWithMicrosoft = useCallback(async () => {
-    if (!isMsalConfigured()) {
-      throw new Error('Microsoft 365 redirect is not connected. Use any valid email to continue.')
-    }
-    await startMicrosoftLogin()
+  const signInWithMicrosoft = useCallback(async (loginHint?: string) => {
+    const result = await startMicrosoftLogin(loginHint)
+    if (result.status === 'redirect') return
+    epochRef.current += 1
+    signingOutRef.current = false
+    await storeSession(MSAL_TOKEN, result.user, await sha256Hex(result.user.email || result.user.id))
+    await rememberLastEmail(result.user.email, 'microsoft')
+    setUser(result.user)
   }, [])
 
   const signOut = useCallback(async () => {
