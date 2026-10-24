@@ -35,8 +35,9 @@ export class MicrosoftAuthUnavailableError extends Error {
   }
 }
 
+const COMMON_AUTHORITY = 'https://login.microsoftonline.com/common'
+
 let resolvedClientId = (import.meta.env.VITE_MSAL_CLIENT_ID ?? '').trim()
-let resolvedTenant = (import.meta.env.VITE_MSAL_TENANT ?? 'common').trim() || 'common'
 
 export function msalClientId(): string {
   return resolvedClientId
@@ -47,7 +48,7 @@ export function isMsalConfigured(): boolean {
 }
 
 export function msalAuthority(): string {
-  return `https://login.microsoftonline.com/${resolvedTenant}`
+  return COMMON_AUTHORITY
 }
 
 export function hasEntraRedirectReturn(
@@ -68,11 +69,9 @@ export async function loadEntraConfig(): Promise<void> {
   try {
     const res = await fetch(new URL('entra.json', document.baseURI).href, { cache: 'no-store' })
     if (!res.ok) return
-    const json = (await res.json()) as { clientId?: string; tenant?: string }
+    const json = (await res.json()) as { clientId?: string }
     const id = String(json.clientId ?? '').trim()
     if (id) resolvedClientId = id
-    const tenant = String(json.tenant ?? '').trim()
-    if (tenant) resolvedTenant = tenant
   } catch {
     // keep compile-time env
   }

@@ -6,6 +6,7 @@ import {
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
   LOGIN_SCOPES,
+  msalAuthority,
   microsoftAuthErrorCode,
   MicrosoftAuthUnavailableError,
   spaRedirectUriFromLocation,
@@ -30,6 +31,10 @@ describe('Microsoft 365 SPA URLs', () => {
         'https://samadalam481470sa-cmd.github.io/sammyyyy/index.html',
       ),
     ).toBe('https://samadalam481470sa-cmd.github.io/sammyyyy/')
+  })
+
+  it('uses the common Microsoft cloud authority so work and personal accounts both work', () => {
+    expect(msalAuthority()).toBe('https://login.microsoftonline.com/common')
   })
 
   it('forces the hosted Microsoft password page and prefills the typed email', () => {
