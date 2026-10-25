@@ -30,13 +30,16 @@ No Windows `Setup.exe` and no Mac `.dmg` were produced. Those were not installed
 
 `VITE_APP_ENV` accepts `development`, `staging`, or `production`.
 
-## Install on Windows or Mac
+## Download
 
-1. Open https://samadalam481470sa-cmd.github.io/sammyyyy/ in Microsoft Edge or Chrome.
-2. Use the browser’s **Install app** / **Install Newport CRM** command.
-3. The app gets a desktop icon and opens without the browser tab strip.
+Anyone can download the launcher. Each person gets their own window and signs in with their own Microsoft account. Saved CRM edits stay on that computer.
 
-This step was not clicked on a Windows machine in the environment that added the packaging. Confirm the icon on a staff PC before calling the rollout done.
+- Windows: https://samadalam481470sa-cmd.github.io/sammyyyy/download/Install-Newport-CRM.cmd
+- Mac: https://samadalam481470sa-cmd.github.io/sammyyyy/download/Install-Newport-CRM.command
+
+The same links are on the sign-in screen. Windows creates a desktop shortcut named Newport CRM and opens Edge in its own window. Mac opens Edge, or Chrome if Edge is not installed. The shortcut always loads the live site, so a new GitHub Pages deploy is what employees get the next time they open the app while online.
+
+Edge and Chrome can also install the site with **Install app**. That path was not clicked on a Windows PC here. The downloadable launcher files are what this environment generated and can re-check over HTTPS.
 
 ## Updates and rollback
 

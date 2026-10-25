@@ -19,9 +19,18 @@ function render() {
 }
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  let refreshing = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return
+    refreshing = true
+    window.location.reload()
+  })
   window.addEventListener('load', () => {
     const base = import.meta.env.BASE_URL
-    void navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => undefined)
+    void navigator.serviceWorker
+      .register(`${base}sw.js`, { scope: base, updateViaCache: 'none' })
+      .then((registration) => registration.update())
+      .catch(() => undefined)
   })
 }
 

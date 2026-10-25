@@ -201,9 +201,23 @@ export function LoginPage() {
           </form>
         </div>
       </div>
-      <p className="relative mt-3 max-w-[28rem] text-center text-[10px] leading-snug text-white/70">
-        Secured by Microsoft. Password entry stays on login.microsoftonline.com. This screen does not remember the last account.
-      </p>
+      <div className="relative mt-3 flex max-w-[28rem] flex-col items-center gap-2 text-center">
+        <p className="text-[10px] leading-snug text-white/70">
+          Secured by Microsoft. Password entry stays on login.microsoftonline.com. This screen does not remember the last account.
+        </p>
+        <p className="text-[11px] text-white/80">
+          <a className="underline" download href={`${import.meta.env.BASE_URL}download/Install-Newport-CRM.cmd`}>
+            Download for Windows
+          </a>
+          <span className="px-2 text-white/40">·</span>
+          <a className="underline" download href={`${import.meta.env.BASE_URL}download/Install-Newport-CRM.command`}>
+            Download for Mac
+          </a>
+        </p>
+        <p className="max-w-sm text-[10px] leading-snug text-white/50">
+          Each person downloads once and signs in with their own Microsoft account. Later deploys open automatically the next time the app is online.
+        </p>
+      </div>
     </div>
   )
 }
