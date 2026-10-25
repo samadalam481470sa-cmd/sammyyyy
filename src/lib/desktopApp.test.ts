@@ -27,6 +27,7 @@ describe('desktop app packaging', () => {
     expect(source).toContain("url.origin !== self.location.origin")
     expect(source).not.toContain('login.microsoftonline.com')
     expect(source).toContain('entra.json')
+    expect(source).toContain("url.searchParams.has('code')")
   })
 })
 

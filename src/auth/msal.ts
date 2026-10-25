@@ -214,22 +214,35 @@ export function consumeMicrosoftCloudReturn(): MicrosoftCloudReturn {
   }
   const hint = readMicrosoftHint()
 
-  if (account) {
-    clearMicrosoftAttempt()
-    return { kind: 'authenticated', account }
-  }
-  if ((err && isMicrosoftCredentialDenied(err)) || (urlMessage && /cancelled|access_denied/i.test(urlMessage))) {
+  const denied =
+    (err && isMicrosoftCredentialDenied(err)) ||
+    Boolean(urlMessage && /cancelled|access_denied/i.test(urlMessage))
+  if (denied) {
     clearMicrosoftAttempt()
     const message =
       'Microsoft did not accept this sign-in. Enter your username and password on Microsoft’s page and try again.'
     rememberMicrosoftReturnError(message)
     return { kind: 'denied', message }
   }
+  const signedInAccount = account ?? (awaiting ? getMicrosoftAccount() : null)
+  if (signedInAccount) {
+    clearMicrosoftAttempt()
+    return { kind: 'authenticated', account: signedInAccount }
+  }
   if (err || urlMessage || awaiting) {
     clearMicrosoftAttempt()
     return { kind: 'unknown', hint }
   }
   return { kind: 'none' }
+}
+
+export function microsoftLoginInProgress(): boolean {
+  if (hasEntraRedirectReturn()) return true
+  try {
+    return sessionStorage.getItem(MICROSOFT_AWAITING_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 export function markMicrosoftLoginStarted(loginHint?: string): void {
@@ -302,7 +315,8 @@ export function isMicrosoftAuthFallback(err: unknown): boolean {
 }
 
 export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
-  const email = (account.username || '').trim()
+  const claims = account.idTokenClaims as { preferred_username?: string; email?: string; upn?: string } | undefined
+  const email = (account.username || claims?.preferred_username || claims?.email || claims?.upn || '').trim()
   if (!email.includes('@')) {
     throw new Error('Microsoft 365 did not return an email address.')
   }
@@ -344,11 +358,18 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
       },
     })
     await instance.initialize()
+    const returning = hasEntraRedirectReturn()
     try {
       const result: AuthenticationResult | null = await instance.handleRedirectPromise()
       if (result?.account) {
         redirectAccount = result.account
         instance.setActiveAccount(result.account)
+      } else if (returning) {
+        const existing = instance.getAllAccounts()[0]
+        if (existing) {
+          redirectAccount = existing
+          instance.setActiveAccount(existing)
+        }
       } else {
         const existing = instance.getAllAccounts()[0]
         if (existing) instance.setActiveAccount(existing)
