@@ -7,39 +7,9 @@ import {
   isMicrosoftAuthCancelled,
   isMicrosoftCredentialDenied,
 } from '@/auth/msal'
-import { LAST_EMAIL_KEY, LAST_PROVIDER_KEY, parseLoginEmail, type LoginProvider } from '@/lib/emailIdentity'
+import { LAST_EMAIL_KEY, LAST_PROVIDER_KEY, parseLoginEmail } from '@/lib/emailIdentity'
 import { attachLoginShield } from '@/lib/loginGuard'
 import newportLogo from '@/assets/newport-logo.png'
-
-const PROVIDERS: Record<
-  LoginProvider,
-  { title: string; hint: string; placeholder: string; accounts: string }
-> = {
-  microsoft: {
-    title: 'Microsoft 365',
-    hint: 'Work Microsoft 365, Outlook.com, Hotmail, Live, or MSN.',
-    placeholder: 'you@outlook.com',
-    accounts: 'Microsoft 365 work · Outlook.com · Hotmail · Live · MSN',
-  },
-  outlook: {
-    title: 'Outlook',
-    hint: 'Outlook.com, Hotmail, Live, and MSN inboxes.',
-    placeholder: 'you@outlook.com',
-    accounts: '@outlook.com · @hotmail.com · @live.com',
-  },
-  gmail: {
-    title: 'Gmail',
-    hint: 'Newport does not take a Google password. If this address is a Microsoft work account, Microsoft verifies it.',
-    placeholder: 'you@gmail.com',
-    accounts: '@gmail.com · Google Workspace',
-  },
-  other: {
-    title: 'Other email',
-    hint: 'Any firm that uses Microsoft 365. Microsoft verifies the account. Newport does not store the password.',
-    placeholder: 'you@company.com',
-    accounts: 'company or personal email',
-  },
-}
 
 function MicrosoftMark({ className }: { className?: string }) {
   return (
@@ -52,45 +22,14 @@ function MicrosoftMark({ className }: { className?: string }) {
   )
 }
 
-function OutlookMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden>
-      <rect x="3" y="5" width="18" height="14" rx="2" fill="#0078D4" />
-      <path d="M4 7.2 12 13l8-5.8V8L12 14 4 8V7.2Z" fill="#fff" />
-    </svg>
-  )
-}
-
-function GmailMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden>
-      <path fill="#EA4335" d="M3 6.5 12 13l9-6.5V6H3v.5Z" />
-      <path fill="#34A853" d="M21 6v12h-4V9.2L12 13 7 9.2V18H3V6l9 6.5L21 6Z" />
-      <path fill="#FBBC05" d="M3 6v12h4V9.2L3 6Z" />
-      <path fill="#4285F4" d="M21 6l-4 3.2V18h4V6Z" />
-    </svg>
-  )
-}
-
-function OtherMark({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.75" />
-      <path d="M4 7.5 12 13l8-5.5" stroke="currentColor" strokeWidth="1.75" />
-    </svg>
-  )
-}
-
 export function LoginPage() {
   const { isAuthenticated, authReady, signInWithMicrosoft } = useAuth()
-  const [provider, setProvider] = useState<LoginProvider>('microsoft')
   const [email, setEmail] = useState('')
   const [allowTyping, setAllowTyping] = useState(false)
   const [error, setError] = useState<string | null>(() => consumeMicrosoftReturnErrorMessage())
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const inFlightRef = useRef(false)
-  const copy = PROVIDERS[provider]
 
   useEffect(() => {
     const root = document.getElementById('root')
@@ -123,15 +62,6 @@ export function LoginPage() {
     emailRef.current?.focus()
   }
 
-  const pickProvider = (next: LoginProvider) => {
-    setProvider(next)
-    setError(null)
-    window.setTimeout(() => {
-      emailRef.current?.focus()
-      emailRef.current?.select()
-    }, 0)
-  }
-
   const onEmailSignIn = (event: FormEvent) => {
     event.preventDefault()
     onMicrosoft365()
@@ -148,17 +78,20 @@ export function LoginPage() {
         return
       }
       hint = parsed.email
-    } else if (provider !== 'microsoft') {
-      fail('Enter the work email for this sign-in. The field starts blank on purpose.')
-      return
     }
     inFlightRef.current = true
     setBusy(true)
     setError(null)
+    const here = window.location.href
+    const stuck = window.setTimeout(() => {
+      if (!inFlightRef.current || window.location.href !== here) return
+      fail('Microsoft’s sign-in page did not open. Check the connection and try again.')
+    }, 12000)
     void (async () => {
       try {
         await signInWithMicrosoft(hint)
       } catch (err) {
+        window.clearTimeout(stuck)
         if (isMicrosoftCredentialDenied(err) || isMicrosoftAuthCancelled(err)) {
           fail('Microsoft did not accept this sign-in. Enter your username and password on Microsoft’s page and try again.')
           return
@@ -221,7 +154,7 @@ export function LoginPage() {
                 Microsoft email
               </label>
               <input
-                ref={provider === 'microsoft' ? emailRef : undefined}
+                ref={emailRef}
                 id="microsoft-email"
                 data-testid="login-microsoft-email"
                 type="email"
@@ -237,7 +170,6 @@ export function LoginPage() {
                 onFocus={() => setAllowTyping(true)}
                 onChange={(e) => {
                   setEmail(e.target.value)
-                  setProvider('microsoft')
                   if (error) setError(null)
                 }}
                 className="mt-2 h-12 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
@@ -246,7 +178,7 @@ export function LoginPage() {
                 Leave this blank. Each person types their own account on Microsoft’s page. Newport never sees or stores the password.
               </p>
 
-              {provider === 'microsoft' && error && (
+              {error && (
                 <p
                   data-testid="login-error"
                   className="mt-3 rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
@@ -263,117 +195,9 @@ export function LoginPage() {
                 className="mt-4 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-[#2f2f2f] text-lg font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 <MicrosoftMark className="h-7 w-7" />
-                {busy && provider === 'microsoft' ? 'Opening Microsoft…' : 'Sign in on Microsoft'}
+                {busy ? 'Opening Microsoft…' : 'Sign in on Microsoft'}
               </button>
             </div>
-
-            <p className="mt-6 text-center text-[11px] font-semibold tracking-[0.12em] text-ink-muted uppercase">
-              Or continue with
-            </p>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                data-testid="login-outlook"
-                onClick={() => pickProvider('outlook')}
-                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                  provider === 'outlook'
-                    ? 'border-navy-900 bg-navy-900 text-white'
-                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-                }`}
-              >
-                <OutlookMark className="h-7 w-7" />
-                Outlook
-                <span className={`text-[9px] font-normal leading-tight ${provider === 'outlook' ? 'text-white/80' : 'text-ink-muted'}`}>
-                  Outlook.com
-                </span>
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                data-testid="login-gmail"
-                onClick={() => pickProvider('gmail')}
-                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                  provider === 'gmail'
-                    ? 'border-navy-900 bg-navy-900 text-white'
-                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-                }`}
-              >
-                <GmailMark className="h-7 w-7" />
-                Gmail
-                <span className={`text-[9px] font-normal leading-tight ${provider === 'gmail' ? 'text-white/80' : 'text-ink-muted'}`}>
-                  @gmail.com
-                </span>
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                data-testid="login-other"
-                onClick={() => pickProvider('other')}
-                className={`flex h-24 flex-col items-center justify-center gap-1 rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
-                  provider === 'other'
-                    ? 'border-navy-900 bg-navy-900 text-white'
-                    : 'border-border bg-canvas text-ink hover:bg-accent-soft'
-                }`}
-              >
-                <OtherMark className="h-7 w-7" />
-                Other email
-                <span className={`text-[9px] font-normal leading-tight ${provider === 'other' ? 'text-white/80' : 'text-ink-muted'}`}>
-                  work / personal
-                </span>
-              </button>
-            </div>
-
-            {provider !== 'microsoft' && (
-              <div className="mt-4 space-y-3 rounded-xl border border-border bg-canvas px-4 py-4">
-                <label
-                  htmlFor="work-email"
-                  className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase"
-                >
-                  {copy.title} email
-                </label>
-                <input
-                  ref={emailRef}
-                  id="work-email"
-                  data-testid="login-email"
-                  type="email"
-                  name="newport-sign-in-email-alt"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  readOnly={!allowTyping}
-                  inputMode="email"
-                  value={email}
-                  onFocus={() => setAllowTyping(true)}
-                  placeholder={copy.placeholder}
-                  onChange={(e) => {
-                    setEmail(e.target.value)
-                    if (error) setError(null)
-                  }}
-                  className="h-12 w-full rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-                />
-                <p className="text-[11px] leading-snug text-ink-muted">
-                  {copy.hint} Connect {copy.accounts}.
-                </p>
-                {error && (
-                  <p
-                    data-testid="login-error"
-                    className="rounded-lg border border-attention-border bg-attention-bg px-3 py-2 text-sm text-attention"
-                  >
-                    {error}
-                  </p>
-                )}
-                <button
-                  type="submit"
-                  disabled={busy}
-                  data-testid="login-continue"
-                  className="flex h-12 w-full items-center justify-center rounded-xl bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
-                >
-                  {busy ? 'Opening Microsoft…' : `Continue on Microsoft`}
-                </button>
-              </div>
-            )}
           </form>
         </div>
       </div>

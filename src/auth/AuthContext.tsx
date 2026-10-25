@@ -13,8 +13,6 @@ import { clearSession, getStoredSession, signOut as apiSignOut, storeSession } f
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
-  displayNameFromEmail,
-  initialsFromName,
   loginProviderFromEmail,
   normalizeEmail,
   parseLoginEmail,
@@ -43,28 +41,11 @@ interface AuthContextValue {
   isAuthenticated: boolean
   authReady: boolean
   signingOut: boolean
-  signInWithEmail: (email: string, provider?: LoginProvider) => Promise<void>
   signInWithMicrosoft: (loginHint?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
-
-export function userFromEmailAddress(email: string): AuthUser {
-  const name = displayNameFromEmail(email)
-  return {
-    id: email,
-    email,
-    name,
-    role: 'partner',
-    initials: initialsFromName(name),
-    authMethod: 'microsoft',
-    isManager: false,
-    apiKeyId: null,
-    apiKeySlot: null,
-    apiKeyLabel: null,
-  }
-}
 
 async function rememberLastEmail(email: string, provider?: LoginProvider) {
   try {
@@ -202,25 +183,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSigningOut(false)
   }, [])
 
-  const signInWithEmail = useCallback(async (raw: string, provider?: LoginProvider) => {
-    if (signInLockRef.current) throw new Error('Sign-in already in progress.')
-    const gate = assertLoginAllowed()
-    if (!gate.ok) throw new Error(gate.error)
-    const parsed = parseLoginEmail(raw)
-    if (!parsed.ok) {
-      recordLoginFailure()
-      throw new Error(parsed.error)
-    }
-    signInLockRef.current = true
-    try {
-      const next = userFromEmailAddress(parsed.email)
-      await clearMicrosoftCache().catch(() => undefined)
-      await establishSession(next, provider)
-    } finally {
-      signInLockRef.current = false
-    }
-  }, [establishSession])
-
   const signInWithMicrosoft = useCallback(async (loginHint?: string) => {
     if (signInLockRef.current) throw new Error('Sign-in already in progress.')
     const gate = assertLoginAllowed()
@@ -282,11 +244,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user),
       authReady,
       signingOut,
-      signInWithEmail,
       signInWithMicrosoft,
       signOut,
     }),
-    [user, authReady, signingOut, signInWithEmail, signInWithMicrosoft, signOut],
+    [user, authReady, signingOut, signInWithMicrosoft, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

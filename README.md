@@ -36,14 +36,9 @@ npm run dev
 
 ## Sign in
 
-The home screen has four sign-in methods and no API / managerial keys:
+Sign-in is Microsoft Entra ID only (`https://login.microsoftonline.com/common`). Work accounts from any firm, Outlook.com, Hotmail, Live, and MSN enter their username and password on Microsoft’s page. Newport does not store that password, and the sign-in field starts blank.
 
-1. **Microsoft 365** (large, on top) — Microsoft 365 work, Outlook.com, Hotmail, Live, MSN
-2. **Outlook** — @outlook.com, @hotmail.com, @live.com
-3. **Gmail** — @gmail.com and Google Workspace
-4. **Other email** — any other valid work or personal address
-
-A valid address opens the dashboard immediately. Sign out ends that session only — CRM edits stay in this browser and come back with the same email.
+The dashboard opens only after Microsoft accepts the account. Sign out ends that session only — CRM edits stay in this browser and come back with the same email.
 Sessions are device-signed with a random token; another email cannot open your vault. Failed sign-ins are throttled.
 
 ## 24/7 static demo (GitHub Pages)
