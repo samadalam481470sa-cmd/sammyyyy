@@ -15,6 +15,7 @@ import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { OfflineNotice } from '@/components/shared/OfflineNotice'
 
 // Hash routing keeps the static demo working from any CDN subpath
 const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
@@ -22,6 +23,7 @@ const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
 export default function App() {
   return (
     <AuthProvider>
+      <OfflineNotice />
       <Router basename={import.meta.env.VITE_STATIC_DEMO ? undefined : import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

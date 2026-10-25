@@ -1,7 +1,10 @@
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
+import { desktopManifest, desktopServiceWorkerSource } from './src/lib/desktopApp.js'
 
 function productionCsp(): Plugin {
   const csp = [
@@ -37,11 +40,29 @@ function productionCsp(): Plugin {
   }
 }
 
+function desktopPackage(): Plugin {
+  let base = '/'
+  let outDir = 'dist'
+  return {
+    name: 'newport-desktop-package',
+    apply: 'build',
+    configResolved(config) {
+      base = config.base
+      outDir = config.build.outDir
+    },
+    closeBundle() {
+      const dir = resolve(outDir)
+      writeFileSync(resolve(dir, 'manifest.webmanifest'), `${JSON.stringify(desktopManifest(base), null, 2)}\n`)
+      writeFileSync(resolve(dir, 'sw.js'), desktopServiceWorkerSource())
+    },
+  }
+}
+
 export default defineConfig({
-  // GH_PAGES: served from https://<user>.github.io/sammyyyy/
-  // STATIC_DEMO: path-agnostic build for CDN hosting (relative assets + hash routing)
-  base: process.env.STATIC_DEMO ? './' : process.env.GH_PAGES ? '/sammyyyy/' : '/',
-  plugins: [react(), tailwindcss(), productionCsp()],
+  // GH_PAGES wins so the installed window is scoped to /sammyyyy/ even when the static demo flag is also set.
+  // STATIC_DEMO alone stays path-agnostic for other CDNs.
+  base: process.env.GH_PAGES ? '/sammyyyy/' : process.env.STATIC_DEMO ? './' : '/',
+  plugins: [react(), tailwindcss(), productionCsp(), desktopPackage()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -52,7 +73,7 @@ export default defineConfig({
     minify: true,
     // Inline the Newport logo into the JS bundle so CDN demos don't rely on
     // relative image fetches (many raw CDNs serve HTML as text/plain or rate-limit assets).
-    assetsInlineLimit: process.env.STATIC_DEMO ? 200_000 : 4096,
+    assetsInlineLimit: process.env.STATIC_DEMO || process.env.GH_PAGES ? 200_000 : 4096,
   },
   server: {
     host: true,

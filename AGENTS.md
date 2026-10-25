@@ -11,7 +11,7 @@ Whenever you finish a code change for this CRM, **also update the live GitHub Pa
 
 Deploy steps (run after the feature is committed on the working branch):
 
-1. `STATIC_DEMO=1 VITE_STATIC_DEMO=1 npm run build`
+1. `npm run build:desktop` (GitHub Pages base `/sammyyyy/`, static hash routing, production env, installable manifest)
 2. `cp dist/index.html dist/404.html`
 3. Publish `dist/` to `origin/gh-pages` (worktree or orphan update), include `.nojekyll`
 4. Verify the live `index.html` references the new hashed assets and hard-refresh if CDN caches the old bundle

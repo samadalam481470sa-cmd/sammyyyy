@@ -3,13 +3,26 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ensureMsal, loadEntraConfig } from '@/auth/msal'
+import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
+import { installClientLogging } from '@/lib/clientLog'
+
+installClientLogging()
 
 function render() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App />
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
     </StrictMode>,
   )
+}
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    const base = import.meta.env.BASE_URL
+    void navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => undefined)
+  })
 }
 
 render()
