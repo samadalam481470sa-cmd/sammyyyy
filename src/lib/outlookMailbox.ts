@@ -8,7 +8,7 @@ export interface MailMessage {
   body: string
   at: string
   read: boolean
-  demo: true
+  demo: boolean
 }
 
 const KEY = 'newport_outlook_demo_mailbox_v1'

@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PenSquare, RefreshCw } from 'lucide-react'
-import { getGraphAccessToken } from '@/auth/msal'
-import {
-  OUTLOOK_SYNC_EVENT,
-  lastOutlookSync,
-  loadMailbox,
-  markOutlookSynced,
-  saveMailbox,
-  type MailMessage,
-} from '@/lib/outlookMailbox'
+import { lastOutlookSync, loadMailbox, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
+import { OUTLOOK_SYNCED_EVENT, deliverMail } from '@/lib/outlookSync'
+import { requestOutlookSync } from '@/lib/outlookMailbox'
 
 const FOLDERS = [
   ['inbox', 'Inbox'],
@@ -32,68 +26,22 @@ export function EmailPage() {
   )
   const selected = messages.find((message) => message.id === selectedId) ?? null
 
-  const sync = async () => {
+  const sync = () => {
     setSyncing(true)
-    setStatus('Checking Microsoft Graph for mailbox access…')
-    try {
-      const token = await getGraphAccessToken(['User.Read', 'Mail.Read'])
-      if (!token) {
-        setStatus('Outlook is not connected. Showing the fictional demo mailbox. No mail was sent or received.')
-        setSyncedAt(markOutlookSynced())
-        return
-      }
-      const res = await fetch('https://graph.microsoft.com/v1.0/me/messages?$top=15&$select=id,subject,from,bodyPreview,receivedDateTime,isRead', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) {
-        setStatus('Microsoft did not grant mailbox access. Showing the fictional demo mailbox.')
-        setSyncedAt(markOutlookSynced())
-        return
-      }
-      const json = (await res.json()) as {
-        value?: Array<{
-          id: string
-          subject?: string
-          bodyPreview?: string
-          receivedDateTime?: string
-          isRead?: boolean
-          from?: { emailAddress?: { address?: string } }
-        }>
-      }
-      const live: MailMessage[] = (json.value ?? []).map((row) => ({
-        id: row.id,
-        folder: 'inbox',
-        from: row.from?.emailAddress?.address || 'unknown',
-        to: '',
-        subject: row.subject || '(no subject)',
-        preview: row.bodyPreview || '',
-        body: row.bodyPreview || '',
-        at: row.receivedDateTime || new Date().toISOString(),
-        read: Boolean(row.isRead),
-        demo: true,
-      }))
-      if (live.length) {
-        setMessages(live)
-        saveMailbox(live)
-        setStatus('Inbox loaded from Microsoft Graph. Sending is not enabled in this sprint.')
-      } else {
-        setStatus('Graph returned no inbox messages. Demo samples remain available if you clear this mailbox.')
-      }
-      setSyncedAt(markOutlookSynced())
-    } catch {
-      setStatus('Outlook sync failed. The fictional demo mailbox is still on screen. Nothing was sent.')
-      setSyncedAt(markOutlookSynced())
-    } finally {
-      setSyncing(false)
-    }
+    setStatus('Checking Microsoft Graph…')
+    requestOutlookSync()
   }
 
   useEffect(() => {
-    const onSync = () => {
-      void sync()
+    const onSynced = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      setMessages(loadMailbox())
+      setSyncedAt(lastOutlookSync())
+      setStatus(detail || 'Outlook check finished.')
+      setSyncing(false)
     }
-    window.addEventListener(OUTLOOK_SYNC_EVENT, onSync)
-    return () => window.removeEventListener(OUTLOOK_SYNC_EVENT, onSync)
+    window.addEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
+    return () => window.removeEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
   }, [])
 
   const openMessage = (message: MailMessage) => {
@@ -106,30 +54,23 @@ export function EmailPage() {
     })
   }
 
-  const sendDemo = () => {
+  const sendMail = () => {
     if (!draft.subject.trim() && !draft.body.trim()) return
-    const message: MailMessage = {
-      id: `demo-local-${Date.now()}`,
-      folder: 'sent',
-      from: 'you@newport.example',
-      to: draft.to,
-      subject: draft.subject || '(no subject)',
-      preview: 'Demo only. This was not delivered.',
-      body: `${draft.body}\n\nThis message stayed in the fictional demo mailbox.`,
-      at: new Date().toISOString(),
-      read: true,
-      demo: true,
-    }
-    setMessages((prev) => {
-      const next = [message, ...prev]
-      saveMailbox(next)
-      return next
+    const replyToId = selected?.demo === false ? selected.id : undefined
+    void deliverMail({ to: draft.to, subject: draft.subject, body: draft.body, replyToId }).then((mode) => {
+      setComposing(false)
+      setDraft({ to: '', subject: '', body: '' })
+      if (mode === 'graph') {
+        setStatus('Sent through Microsoft Outlook.')
+        requestOutlookSync()
+        return
+      }
+      setMessages(loadMailbox())
+      setFolder('sent')
+      setStatus('Saved in the demo Sent folder. Microsoft did not deliver this message.')
+    }).catch((err) => {
+      setStatus(err instanceof Error ? err.message : 'Outlook send failed. Nothing was delivered.')
     })
-    setComposing(false)
-    setDraft({ to: '', subject: '', body: '' })
-    setFolder('sent')
-    setSelectedId(message.id)
-    setStatus('Saved in the demo Sent folder. Microsoft did not deliver this message.')
   }
 
   return (
@@ -198,17 +139,17 @@ export function EmailPage() {
         <section className="bg-surface p-5">
           {composing ? (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-attention">Demo compose. This will not be sent through Outlook.</p>
+              <p className="text-xs font-semibold text-ink-muted">Send uses Outlook when mailbox permission is granted. Otherwise it stays in the demo folder.</p>
               <input className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="To" value={draft.to} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} />
               <input className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="Subject" value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} />
               <textarea className="min-h-40 w-full rounded-lg border border-border px-3 py-2 text-sm" value={draft.body} onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))} />
-              <button type="button" onClick={sendDemo} disabled={!draft.subject.trim() && !draft.body.trim()} className="h-10 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white disabled:border disabled:border-border disabled:bg-white disabled:text-ink-muted">
-                Save demo reply
+              <button type="button" onClick={sendMail} disabled={!draft.subject.trim() && !draft.body.trim()} className="h-10 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white disabled:border disabled:border-border disabled:bg-white disabled:text-ink-muted">
+                Send
               </button>
             </div>
           ) : selected ? (
             <article>
-              <p className="text-xs font-semibold tracking-wide text-attention uppercase">Demo message</p>
+              <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{selected.demo ? 'Demo message — not from Outlook' : 'Outlook'}</p>
               <h2 className="mt-1 font-brand text-2xl font-bold text-navy-900">{selected.subject}</h2>
               <p className="mt-2 text-sm text-ink-muted">From {selected.from}</p>
               {selected.to && <p className="text-sm text-ink-muted">To {selected.to}</p>}
@@ -222,7 +163,7 @@ export function EmailPage() {
                   setDraft({ to: selected.from, subject: `Re: ${selected.subject}`, body: '' })
                 }}
               >
-                Reply in demo mailbox
+                Reply
               </button>
             </article>
           ) : (

@@ -44,6 +44,12 @@ export function MeetingCalendar() {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
+    const reload = () => setEvents(loadCalendarEvents(owner))
+    window.addEventListener('newport-calendar-updated', reload)
+    return () => window.removeEventListener('newport-calendar-updated', reload)
+  }, [owner])
+
+  useEffect(() => {
     const local = loadCalendarEvents(owner)
     setEvents(local)
     if (isLocalPersistence()) {

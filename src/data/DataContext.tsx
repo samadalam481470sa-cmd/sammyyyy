@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/auth/AuthContext'
 import { mockOpportunities } from '@/data/mockOpportunities'
 import { coverOpportunities, mergeMissingById, sprintExtraTasks } from '@/data/sprintSeed'
+import { pullCrmVault, pushCrmVault } from '@/lib/onedriveVault'
 import {
   mockContacts,
   mockDocuments,
@@ -161,21 +162,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     oppsRef.current = next
     saveOwnedCollection('opportunities', owner, next)
     setOpportunities(next)
+    pushCloud()
   }
   const persistTasks = (next: TaskRecord[]) => {
     tasksRef.current = next
     saveOwnedCollection('tasks', owner, next)
     setTasks(next)
+    pushCloud()
   }
   const persistDocs = (next: DocumentRecord[]) => {
     docsRef.current = next
     saveOwnedCollection('documents', owner, next)
     setDocuments(next)
+    pushCloud()
   }
   const persistActivity = (next: ActivityItem[]) => {
     activityRef.current = next
     saveOwnedCollection('activity', owner, next)
     setActivity(next)
+    pushCloud()
   }
 
   const changeMeta = () => ({
@@ -206,6 +211,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     persistActivity([item, ...activityRef.current].slice(0, 200))
   }
 
+  const cloudTimer = useRef<number | null>(null)
+  const allowCloudPush = useRef(false)
+  const pushCloud = () => {
+    if (!allowCloudPush.current || user?.authMethod !== 'microsoft') return
+    if (cloudTimer.current) window.clearTimeout(cloudTimer.current)
+    cloudTimer.current = window.setTimeout(() => {
+      const contacts = loadOwnedCollection('contacts', owner, mockContacts)
+      void pushCrmVault({
+        updatedAt: new Date().toISOString(),
+        opportunities: oppsRef.current,
+        tasks: tasksRef.current,
+        documents: docsRef.current.map(({ ...doc }) => doc),
+        contacts,
+        activity: activityRef.current,
+      })
+    }, 1200)
+  }
+
   const syncOpportunitySummaries = (opps: Opportunity[], taskList: TaskRecord[]) =>
     decorateOpportunities(opps, taskList)
 
@@ -232,6 +255,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (isLocalPersistence()) {
       loadLocal()
       setLoading(false)
+      if (user?.authMethod === 'microsoft') {
+        void pullCrmVault()
+          .then((vault) => {
+            if (vault && vault.updatedAt > (activityRef.current[0]?.timestamp ?? '')) {
+              allowCloudPush.current = false
+              persistOpps(vault.opportunities as Opportunity[])
+              persistTasks(vault.tasks as TaskRecord[])
+              persistDocs(vault.documents as DocumentRecord[])
+              persistActivity(vault.activity as ActivityItem[])
+              if (Array.isArray(vault.contacts)) saveOwnedCollection('contacts', owner, vault.contacts)
+            }
+          })
+          .finally(() => {
+            allowCloudPush.current = true
+          })
+      }
       return
     }
     setLoading(true)
