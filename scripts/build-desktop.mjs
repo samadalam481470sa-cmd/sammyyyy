@@ -1,5 +1,15 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+
+const seed = spawnSync(
+  process.execPath,
+  ['node_modules/tsx/dist/cli.mjs', '--tsconfig', 'tsconfig.app.json', 'scripts/write-portable-seed.ts'],
+  { stdio: 'inherit' },
+)
+if (seed.status !== 0) {
+  console.error('Could not write public/database/newport-crm.json')
+  process.exit(seed.status ?? 1)
+}
 
 const windows = readFileSync('public/download/Install-Newport-CRM.cmd', 'utf8')
 const mac = readFileSync('public/download/Install-Newport-CRM.command', 'utf8')

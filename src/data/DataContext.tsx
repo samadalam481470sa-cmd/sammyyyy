@@ -16,17 +16,33 @@ import {
   updateOpportunity,
 } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
+import { microsoftLoginInProgress } from '@/auth/msal'
 import { mockOpportunities } from '@/data/mockOpportunities'
-import { coverOpportunities, mergeMissingById, sprintExtraTasks } from '@/data/sprintSeed'
 import { pullCrmVault, pushCrmVault } from '@/lib/onedriveVault'
 import {
   mockContacts,
   mockDocuments,
   mockTasksDb,
+  type ContactRecord,
   type DocumentRecord,
   type TaskRecord,
 } from '@/data/mockModules'
 import { appendDemoChange, loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import {
+  buildPortableDatabase,
+  bundledSeedSnapshot,
+  DATABASE_FILE_ERROR,
+  downloadPortableDatabase,
+  fetchSeedSnapshot,
+  importPortableText,
+  mergeSeedRecords,
+  persistMigratedDatabase,
+  sameRecordIds,
+  SCHEMA_VERSION,
+  writeStoredSchemaVersion,
+  type PortableDatabase,
+  type SeedSnapshot,
+} from '@/lib/portableDatabase'
 import { registerVaultFlush } from '@/lib/userVault'
 import { demoProjectNumber } from '@/lib/demoAliases'
 import { sessionOwnerKey } from '@/lib/ownerKey'
@@ -76,6 +92,8 @@ interface DataContextValue {
   saveDocument: (id: string, patch: Partial<DocumentRecord>) => Promise<DocumentRecord>
   createDocument: (draft: Partial<DocumentRecord>) => Promise<DocumentRecord>
   deleteDocument: (id: string) => Promise<void>
+  downloadDatabase: () => void
+  importDatabase: (file: File) => Promise<string | null>
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -111,23 +129,23 @@ function decorateOpportunities(list: Opportunity[], tasks: TaskRecord[]): Opport
 }
 
 function snapshotLocalCrm(owner: string, users: CrmUser[]) {
-  const storedTasks = loadOwnedCollection('tasks', owner, mockTasksDb)
-  const mergedTasks = mergeMissingById(storedTasks, sprintExtraTasks())
-  if (mergedTasks.length !== storedTasks.length) saveOwnedCollection('tasks', owner, mergedTasks)
-  const rawTasks = applyTaskArchiveRules(mergedTasks.map((row) => migrateTaskRecord(row, users)))
-  const storedOpps = loadOwnedCollection('opportunities', owner, mockOpportunities)
-  const rawOpps = mergeMissingById(storedOpps, mockOpportunities)
-  if (rawOpps.length !== storedOpps.length) saveOwnedCollection('opportunities', owner, rawOpps)
-  const storedContacts = loadOwnedCollection('contacts', owner, mockContacts)
-  const coveredContacts = coverOpportunities(mergeMissingById(storedContacts, mockContacts), rawOpps)
-  if (coveredContacts.length !== storedContacts.length) saveOwnedCollection('contacts', owner, coveredContacts)
-  const rawDocs = loadOwnedCollection('documents', owner, mockDocuments)
-  const rawActivity = loadOwnedCollection<ActivityItem>('activity', owner, [])
+  const loaded = {
+    opportunities: loadOwnedCollection<Opportunity>('opportunities', owner, mockOpportunities),
+    tasks: loadOwnedCollection<TaskRecord>('tasks', owner, mockTasksDb),
+    contacts: loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts),
+    documents: loadOwnedCollection<DocumentRecord>('documents', owner, mockDocuments),
+    activity: loadOwnedCollection<ActivityItem>('activity', owner, []),
+  }
+  return presentDatabase(persistMigratedDatabase(owner, loaded), users)
+}
+
+function presentDatabase(database: PortableDatabase, users: CrmUser[]) {
+  const rawTasks = applyTaskArchiveRules(database.tasks.map((row) => migrateTaskRecord(row, users)))
   return {
     tasks: rawTasks.tasks,
-    opportunities: decorateOpportunities(rawOpps, rawTasks.tasks),
-    documents: rawDocs,
-    activity: rawActivity,
+    opportunities: decorateOpportunities(database.opportunities, rawTasks.tasks),
+    documents: database.documents,
+    activity: database.activity,
   }
 }
 
@@ -213,6 +231,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const cloudTimer = useRef<number | null>(null)
   const allowCloudPush = useRef(false)
+  const cloudEpoch = useRef(0)
+  const seedAddedOnPull = useRef(false)
+  const fetchedSeedRef = useRef<SeedSnapshot | null>(null)
   const pushCloud = () => {
     if (!allowCloudPush.current || user?.authMethod !== 'microsoft') return
     if (cloudTimer.current) window.clearTimeout(cloudTimer.current)
@@ -228,6 +249,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       })
     }, 1200)
   }
+
+  const writeDatabaseRef = useRef<(database: PortableDatabase, sync: boolean) => void>(() => undefined)
 
   const syncOpportunitySummaries = (opps: Opportunity[], taskList: TaskRecord[]) =>
     decorateOpportunities(opps, taskList)
@@ -256,19 +279,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
       loadLocal()
       setLoading(false)
       if (user?.authMethod === 'microsoft') {
+        const epoch = cloudEpoch.current
         void pullCrmVault()
           .then((vault) => {
-            if (vault && vault.updatedAt > (activityRef.current[0]?.timestamp ?? '')) {
-              allowCloudPush.current = false
-              persistOpps(vault.opportunities as Opportunity[])
-              persistTasks(vault.tasks as TaskRecord[])
-              persistDocs(vault.documents as DocumentRecord[])
-              persistActivity(vault.activity as ActivityItem[])
-              if (Array.isArray(vault.contacts)) saveOwnedCollection('contacts', owner, vault.contacts)
-            }
+            if (epoch !== cloudEpoch.current || !vault) return
+            if (!(vault.updatedAt > (activityRef.current[0]?.timestamp ?? ''))) return
+            allowCloudPush.current = false
+            const contacts = Array.isArray(vault.contacts)
+              ? (vault.contacts as ContactRecord[])
+              : loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts)
+            const merged = mergeSeedRecords(
+              buildPortableDatabase(
+                {
+                  opportunities: vault.opportunities as Opportunity[],
+                  tasks: vault.tasks as TaskRecord[],
+                  documents: vault.documents as DocumentRecord[],
+                  activity: vault.activity as ActivityItem[],
+                  contacts,
+                },
+                vault.updatedAt,
+              ),
+              bundledSeedSnapshot(),
+            )
+            seedAddedOnPull.current = !(
+              sameRecordIds(merged.opportunities, vault.opportunities as { id: string }[]) &&
+              sameRecordIds(merged.tasks, vault.tasks as { id: string }[]) &&
+              sameRecordIds(merged.contacts, contacts) &&
+              sameRecordIds(merged.documents, vault.documents as { id: string }[]) &&
+              sameRecordIds(merged.activity, vault.activity as { id: string }[])
+            )
+            writeDatabaseRef.current(merged, false)
           })
           .finally(() => {
+            if (epoch !== cloudEpoch.current) return
             allowCloudPush.current = true
+            if (!seedAddedOnPull.current) return
+            seedAddedOnPull.current = false
+            pushCloud()
           })
       }
       return
@@ -295,7 +342,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [isAuthenticated, owner, users])
+  }, [isAuthenticated, owner, users, user])
+
+  useEffect(() => {
+    writeDatabaseRef.current = (database, sync) => {
+      if (sync) {
+        cloudEpoch.current += 1
+        allowCloudPush.current = true
+      }
+      saveOwnedCollection('contacts', owner, database.contacts)
+      writeStoredSchemaVersion(owner, SCHEMA_VERSION)
+      const presented = presentDatabase(database, users)
+      persistTasks(presented.tasks)
+      persistOpps(presented.opportunities)
+      persistDocs(presented.documents)
+      persistActivity(presented.activity)
+    }
+  })
 
   useEffect(() => {
     void refresh()
@@ -310,6 +373,52 @@ export function DataProvider({ children }: { children: ReactNode }) {
       saveOwnedCollection('activity', owner, activityRef.current)
     })
   }, [isAuthenticated, owner])
+
+  useEffect(() => {
+    if (!local || !isAuthenticated) return
+    let cancelled = false
+    let timer = 0
+    const deadline = Date.now() + 12000
+    const run = () => {
+      if (cancelled) return
+      const waitingForLogin = microsoftLoginInProgress()
+      const waitingForVault = user?.authMethod === 'microsoft' && !allowCloudPush.current
+      if ((waitingForLogin || waitingForVault) && Date.now() < deadline) {
+        timer = window.setTimeout(run, waitingForLogin ? 400 : 200)
+        return
+      }
+      if (waitingForLogin) return
+      void fetchSeedSnapshot(document.baseURI).then((seed) => {
+        if (cancelled || !seed || microsoftLoginInProgress()) return
+        fetchedSeedRef.current = seed
+        const contacts = loadOwnedCollection<ContactRecord>('contacts', owner, [])
+        const current = buildPortableDatabase(
+          {
+            opportunities: oppsRef.current,
+            tasks: tasksRef.current,
+            documents: docsRef.current,
+            activity: activityRef.current,
+            contacts,
+          },
+          new Date().toISOString(),
+        )
+        const merged = mergeSeedRecords(current, seed)
+        const unchanged =
+          sameRecordIds(merged.opportunities, current.opportunities) &&
+          sameRecordIds(merged.tasks, current.tasks) &&
+          sameRecordIds(merged.contacts, current.contacts) &&
+          sameRecordIds(merged.documents, current.documents) &&
+          sameRecordIds(merged.activity, current.activity)
+        if (unchanged) return
+        writeDatabaseRef.current(merged, true)
+      })
+    }
+    run()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [local, isAuthenticated, owner, user])
 
   const saveOpportunity = useCallback(
     async (id: string, patch: OpportunityUpdate) => {
@@ -648,6 +757,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [owner, user],
   )
 
+  const downloadDatabase = useCallback(() => {
+    const contacts = loadOwnedCollection<ContactRecord>('contacts', owner, [])
+    downloadPortableDatabase(
+      buildPortableDatabase(
+        {
+          opportunities: oppsRef.current,
+          tasks: tasksRef.current,
+          documents: docsRef.current,
+          activity: activityRef.current,
+          contacts,
+        },
+        new Date().toISOString(),
+      ),
+    )
+  }, [owner])
+
+  const importDatabase = useCallback(async (file: File) => {
+    let raw = ''
+    try {
+      raw = await file.text()
+    } catch {
+      return DATABASE_FILE_ERROR
+    }
+    let result = importPortableText(raw, bundledSeedSnapshot())
+    if (!result.ok) return result.error
+    if (fetchedSeedRef.current) {
+      result = { ok: true, database: mergeSeedRecords(result.database, fetchedSeedRef.current) }
+    }
+    writeDatabaseRef.current(result.database, true)
+    return null
+  }, [])
+
   const value = useMemo(
     () => ({
       opportunities,
@@ -669,6 +810,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       saveDocument,
       createDocument,
       deleteDocument,
+      downloadDatabase,
+      importDatabase,
     }),
     [
       opportunities,
@@ -690,6 +833,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       saveDocument,
       createDocument,
       deleteDocument,
+      downloadDatabase,
+      importDatabase,
     ],
   )
 

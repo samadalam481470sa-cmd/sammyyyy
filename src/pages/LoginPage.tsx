@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
+import { launcherHref } from '@/lib/desktopApp'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
 import {
   consumeMicrosoftReturnErrorMessage,
@@ -206,11 +207,11 @@ export function LoginPage() {
           Secured by Microsoft. Password entry stays on login.microsoftonline.com. This screen does not remember the last account.
         </p>
         <p className="text-[11px] text-white/80">
-          <a className="underline" download href={`${import.meta.env.BASE_URL}download/Install-Newport-CRM.cmd`}>
+          <a className="underline" download href={launcherHref('windows', import.meta.env.BASE_URL)}>
             Download for Windows
           </a>
           <span className="px-2 text-white/40">·</span>
-          <a className="underline" download href={`${import.meta.env.BASE_URL}download/Install-Newport-CRM.command`}>
+          <a className="underline" download href={launcherHref('mac', import.meta.env.BASE_URL)}>
             Download for Mac
           </a>
         </p>

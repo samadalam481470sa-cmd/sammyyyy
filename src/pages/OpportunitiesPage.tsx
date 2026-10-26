@@ -48,7 +48,7 @@ export function OpportunitiesPage() {
     const names = new Set<string>()
     users.forEach((u) => names.add(u.name))
     opportunities.forEach((o) => {
-      if (o.dealLead.trim()) names.add(o.dealLead)
+      if (o.dealLead?.trim()) names.add(o.dealLead)
     })
     return [...names].sort()
   }, [users, opportunities])
@@ -127,7 +127,7 @@ export function OpportunitiesPage() {
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Opportunities</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Edit deal status, entity details, and the full acquisition record — one-stop view for
+            Edit deal status, company details, and the full acquisition record — one-stop view for
             Dennis and the team.
           </p>
         </div>

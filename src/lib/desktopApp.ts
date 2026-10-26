@@ -1,6 +1,15 @@
 export const DESKTOP_APP_NAME = 'Newport CRM'
 export const DESKTOP_CACHE = 'newport-crm-shell-v1'
 export const DESKTOP_APP_URL = 'https://samadalam481470sa-cmd.github.io/sammyyyy/'
+export const WINDOWS_LAUNCHER_FILE = 'download/Install-Newport-CRM.cmd'
+export const MAC_LAUNCHER_FILE = 'download/Install-Newport-CRM.command'
+
+/** Live-site launcher href for dev (`/`) and GitHub Pages (`/sammyyyy/`). */
+export function launcherHref(kind: 'windows' | 'mac', base: string): string {
+  const file = kind === 'windows' ? WINDOWS_LAUNCHER_FILE : MAC_LAUNCHER_FILE
+  const root = base.endsWith('/') ? base : `${base}/`
+  return `${root}${file}`
+}
 
 export interface DesktopManifest {
   name: string
@@ -56,6 +65,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (url.searchParams.has('code') || url.searchParams.has('state') || url.searchParams.has('error')) return
   if (url.pathname.endsWith('/entra.json')) return
+  if (url.pathname.endsWith('/database/newport-crm.json')) return
+  if (url.pathname.endsWith('/download/Install-Newport-CRM.cmd')) return
+  if (url.pathname.endsWith('/download/Install-Newport-CRM.command')) return
   event.respondWith(
     fetch(request).then((response) => {
       if (response.ok) {

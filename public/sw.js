@@ -1,4 +1,4 @@
-const CACHE = 'newport-crm-shell-v1'
+const CACHE = "newport-crm-shell-v1"
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(['./', './index.html', './favicon.svg'])).then(() => self.skipWaiting()).catch(() => self.skipWaiting()),
@@ -16,6 +16,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
   if (url.searchParams.has('code') || url.searchParams.has('state') || url.searchParams.has('error')) return
   if (url.pathname.endsWith('/entra.json')) return
+  if (url.pathname.endsWith('/database/newport-crm.json')) return
+  if (url.pathname.endsWith('/download/Install-Newport-CRM.cmd')) return
+  if (url.pathname.endsWith('/download/Install-Newport-CRM.command')) return
   event.respondWith(
     fetch(request).then((response) => {
       if (response.ok) {

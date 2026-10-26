@@ -1,5 +1,9 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { desktopManifest, desktopServiceWorkerSource, macInstallerScript, windowsInstallerScript, DESKTOP_APP_URL } from './desktopApp'
+import { desktopManifest, desktopServiceWorkerSource, launcherHref, macInstallerScript, windowsInstallerScript, DESKTOP_APP_URL } from './desktopApp'
 import { appEnvironment } from './appEnv'
 import { redactLogMessage } from './clientLog'
 
@@ -28,6 +32,29 @@ describe('desktop app packaging', () => {
     expect(source).not.toContain('login.microsoftonline.com')
     expect(source).toContain('entra.json')
     expect(source).toContain("url.searchParams.has('code')")
+  })
+
+  it('lets the seed database and desktop launchers bypass the cache', () => {
+    const source = desktopServiceWorkerSource()
+    const respondAt = source.indexOf('event.respondWith')
+    for (const marker of [
+      '/database/newport-crm.json',
+      '/download/Install-Newport-CRM.cmd',
+      '/download/Install-Newport-CRM.command',
+    ]) {
+      const at = source.indexOf(marker)
+      expect(at).toBeGreaterThan(0)
+      expect(at).toBeLessThan(respondAt)
+    }
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+    expect(readFileSync(resolve(root, 'public/sw.js'), 'utf8')).toBe(source)
+  })
+
+  it('builds Windows and Mac download links for Pages and local dev', () => {
+    expect(launcherHref('windows', '/sammyyyy/')).toBe('/sammyyyy/download/Install-Newport-CRM.cmd')
+    expect(launcherHref('mac', '/sammyyyy')).toBe('/sammyyyy/download/Install-Newport-CRM.command')
+    expect(launcherHref('windows', '/')).toBe('/download/Install-Newport-CRM.cmd')
+    expect(launcherHref('mac', './')).toBe('./download/Install-Newport-CRM.command')
   })
 })
 
