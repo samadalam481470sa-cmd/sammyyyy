@@ -133,15 +133,61 @@ export function msalAuthority(): string {
   return COMMON_AUTHORITY
 }
 
-export function hasEntraRedirectReturn(
-  href = typeof window === 'undefined' ? '' : window.location.href,
-): boolean {
+/** "code=…&state=…" (or "error=…&state=…") from Microsoft, in a query or a fragment. */
+export function isAuthResponseString(raw: string): boolean {
+  const body = raw.replace(/^[#?]/, '')
+  if (!body || body.startsWith('/')) return false
+  const params = new URLSearchParams(body)
+  return params.has('state') && (params.has('code') || params.has('error'))
+}
+
+/** True when this URL is Microsoft handing back a sign-in result. */
+export function urlCarriesAuthResponse(href: string): boolean {
   try {
     const url = new URL(href)
-    return url.searchParams.has('code') || url.searchParams.has('error') || url.searchParams.has('state')
+    if (url.searchParams.has('code') || url.searchParams.has('error') || url.searchParams.has('state')) return true
+    return isAuthResponseString(url.hash)
   } catch {
     return false
   }
+}
+
+/**
+ * True inside a window MSAL opened for itself: the Connect Outlook popup, or a hidden
+ * token-renewal iframe. The CRM must not render or touch the address there, because
+ * MSAL in the main window reads the sign-in result from that address.
+ */
+export function isMsalChildWindow(): boolean {
+  if (typeof window === 'undefined') return false
+  let framed = false
+  try {
+    framed = window.self !== window.top
+  } catch {
+    framed = true
+  }
+  if (framed) return urlCarriesAuthResponse(window.location.href)
+  return Boolean(window.opener) && String(window.name || '').startsWith('msal.')
+}
+
+/**
+ * MSAL 4 returns the sign-in result in the URL fragment (#code=…). The CRM uses hash
+ * routing, so the router would treat "#code=…" as a page and erase it before MSAL reads
+ * it ("Microsoft did not finish sign-in"). Capture it as soon as this module loads, which
+ * is before React renders, and hand it to MSAL directly.
+ */
+let pendingAuthResponse: string | null = null
+if (typeof window !== 'undefined' && !isMsalChildWindow() && isAuthResponseString(window.location.hash)) {
+  pendingAuthResponse = window.location.hash
+  window.history.replaceState(window.history.state, document.title, `${window.location.pathname}${window.location.search}`)
+}
+
+export function hasEntraRedirectReturn(href?: string): boolean {
+  if (href === undefined) {
+    if (pendingAuthResponse) return true
+    if (typeof window === 'undefined') return false
+    return urlCarriesAuthResponse(window.location.href)
+  }
+  return urlCarriesAuthResponse(href)
 }
 
 /** Future app registrations replace the client ID in entra.json. Empty keeps the built-in default. */
@@ -254,7 +300,7 @@ export function consumeMicrosoftRedirectError(): Error | null {
 export type MicrosoftCloudReturn =
   | { kind: 'authenticated'; account: AccountInfo }
   | { kind: 'denied'; message: string }
-  | { kind: 'unknown'; hint: string | null }
+  | { kind: 'unknown'; hint: string | null; detail: string | null }
   | { kind: 'none' }
 
 function readMicrosoftHint(): string | null {
@@ -305,9 +351,26 @@ export function consumeMicrosoftCloudReturn(): MicrosoftCloudReturn {
   }
   if (err || urlMessage || awaiting) {
     clearMicrosoftAttempt()
-    return { kind: 'unknown', hint }
+    return { kind: 'unknown', hint, detail: signInErrorDetail(err, urlMessage) }
   }
   return { kind: 'none' }
+}
+
+/** Plain-language reason from Microsoft's error, when it gave one. */
+export function signInErrorDetail(err: unknown, urlMessage?: string | null): string | null {
+  const text = `${err instanceof Error ? err.message : ''} ${urlMessage ?? ''}`.trim()
+  if (!text) return null
+  if (/AADSTS50020|AADSTS700016|not enabled for consumers|unauthorized_client/i.test(text)) {
+    return 'Microsoft blocked this account type for the Newport app registration. The app registration must allow accounts in any organization and personal Microsoft accounts.'
+  }
+  if (/AADSTS65001|AADSTS90094|AADSTS90095|admin/i.test(text)) {
+    return 'Your organization requires an IT admin to approve the Newport app before you can sign in. A personal Outlook.com account can sign in now.'
+  }
+  if (/AADSTS50011|redirect/i.test(text)) {
+    return 'Microsoft rejected the return address for this page. Open the official Newport link and sign in again.'
+  }
+  const first = text.split('\n')[0].replace(/\s+/g, ' ').trim()
+  return first ? first.slice(0, 220) : null
 }
 
 export function microsoftLoginInProgress(): boolean {
@@ -330,7 +393,7 @@ export function markMicrosoftLoginStarted(loginHint?: string): void {
   }
 }
 
-export function clearStuckMicrosoftInteraction(): void {
+function clearStuckMicrosoftInteraction(): void {
   try {
     const keys: string[] = []
     for (let i = 0; i < sessionStorage.length; i += 1) {
@@ -436,9 +499,20 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
     })
     await instance.initialize()
     const returning = hasEntraRedirectReturn()
+    const connect = takeOutlookConnect()
     try {
-      const result: AuthenticationResult | null = await instance.handleRedirectPromise()
-      if (result?.account) {
+      const captured = pendingAuthResponse
+      pendingAuthResponse = null
+      const result: AuthenticationResult | null = await instance.handleRedirectPromise(captured ?? undefined)
+      if (connect) {
+        // This trip was Connect Outlook, not a CRM sign-in. The CRM user stays as is.
+        if (result?.account && connect.owner) {
+          writeMailBinding(connect.owner, result.account.homeAccountId)
+          lastConnectError = null
+        } else if (!result?.account) {
+          lastConnectError = 'Microsoft did not finish connecting Outlook. Click Connect Outlook to try again.'
+        }
+      } else if (result?.account) {
         redirectAccount = result.account
         instance.setActiveAccount(result.account)
       } else if (returning) {
@@ -452,8 +526,17 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
         if (existing) instance.setActiveAccount(existing)
       }
     } catch (err) {
-      lastRedirectError = err instanceof Error ? err : new Error(String(err))
-      rememberMicrosoftReturnError(lastRedirectError.message)
+      if (connect) {
+        // A failed Outlook connection must not sign the CRM user out.
+        lastConnectError = describeGraphError(err)
+      } else {
+        lastRedirectError = err instanceof Error ? err : new Error(String(err))
+        rememberMicrosoftReturnError(lastRedirectError.message)
+      }
+    }
+    if (connect && returning) {
+      // Back to the page where Connect Outlook was clicked, before the router starts.
+      window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${connect.returnHash}`)
     }
     applyAuthRedirectCleanup()
     pca = instance
@@ -570,9 +653,12 @@ export function buildGraphTokenRequest<T extends object>(scopes: string[], accou
 
 export async function getGraphAccessToken(
   scopes: string[] = GRAPH_FILE_SCOPES,
-  options?: { interactive?: boolean; loginHint?: string },
+  options?: { interactive?: boolean; loginHint?: string; mode?: 'popup' | 'redirect' },
 ): Promise<string | null> {
   const interactive = options?.interactive !== false
+  // Microsoft's page only opens on an explicit request (the Connect Outlook button),
+  // never from a background sync.
+  const explicit = options?.interactive === true
   lastGraphTokenError = null
   const instance = await ensureMsal()
   if (!instance) {
@@ -580,12 +666,22 @@ export async function getGraphAccessToken(
     return null
   }
   const hint = graphLoginHint(options?.loginHint)
-  // Only a Microsoft account that belongs to the logged-in user may be used.
-  // Any other cached account (a previous user on this browser) is removed.
+  const owner = crmOwnerEmail()
   const accounts = instance.getAllAccounts()
-  const account = hint ? (accounts.find((row) => sameMailbox(row.username, hint)) ?? null) : (instance.getActiveAccount() ?? accounts[0] ?? null)
-  for (const other of accounts) {
-    if (other !== account) {
+  const boundId = owner ? readMailBinding(owner) : null
+  // A CRM user may use any Microsoft account they connected themselves, or the
+  // Microsoft account they signed in to the CRM with. Nothing else.
+  const belongsToUser = (row: AccountInfo) =>
+    (boundId !== null && row.homeAccountId === boundId) || (owner !== '' && sameMailbox(row.username, owner))
+  const account = owner
+    ? (accounts.find((row) => boundId !== null && row.homeAccountId === boundId) ??
+      accounts.find((row) => sameMailbox(row.username, owner)) ??
+      null)
+    : (instance.getActiveAccount() ?? accounts[0] ?? null)
+  if (owner) {
+    // Accounts left in this tab by someone else are removed.
+    for (const other of accounts) {
+      if (belongsToUser(other)) continue
       try {
         await instance.clearCache({ account: other })
       } catch {
@@ -593,18 +689,19 @@ export async function getGraphAccessToken(
       }
     }
   }
-  instance.setActiveAccount(account)
 
-  // No Microsoft account for this user yet. Open the Microsoft popup so they
-  // sign in and grant mail consent.
+  // No Microsoft account connected for this user yet. Microsoft's account picker opens,
+  // and the user signs in with any work, school, or personal Outlook account of their own.
   if (!account) {
-    if (!interactive) return null
-    return graphPopup(instance, { scopes, prompt: 'select_account', loginHint: hint }, hint)
+    if (!explicit) return null
+    const fresh = { scopes, prompt: 'select_account', loginHint: hint }
+    return options?.mode === 'redirect' ? graphRedirect(instance, fresh, owner) : graphPopup(instance, fresh, owner)
   }
 
   const request = buildGraphTokenRequest(scopes, account)
   try {
     const silent = await instance.acquireTokenSilent(request)
+    lastConnectError = null
     return silent.accessToken
   } catch (err) {
     if (!interactive) return null
@@ -612,7 +709,102 @@ export async function getGraphAccessToken(
       lastGraphTokenError = describeGraphError(err)
       return null
     }
-    return graphPopup(instance, request, hint)
+    return options?.mode === 'redirect' ? graphRedirect(instance, request, owner) : graphPopup(instance, request, owner)
+  }
+}
+
+const OUTLOOK_CONNECT_KEY = 'newport_msal_connect_pending'
+let lastConnectError: string | null = null
+
+/** Read and clear the Connect Outlook round trip started in this tab, if any. */
+function takeOutlookConnect(): { owner: string; returnHash: string } | null {
+  try {
+    const raw = sessionStorage.getItem(OUTLOOK_CONNECT_KEY)
+    if (!raw) return null
+    sessionStorage.removeItem(OUTLOOK_CONNECT_KEY)
+    const row = JSON.parse(raw) as { owner?: string; returnHash?: string }
+    const returnHash = typeof row.returnHash === 'string' && row.returnHash.startsWith('#/') ? row.returnHash : '#/email'
+    return { owner: String(row.owner ?? ''), returnHash }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Connect Outlook with a full-page trip to Microsoft's account picker. The person picks
+ * or types any work, school, or personal Microsoft account of their own, then comes back
+ * to the same CRM page. (A popup would land on this app and lose the result.)
+ */
+async function graphRedirect(
+  instance: PublicClientApplication,
+  request: RedirectRequest,
+  owner: string,
+): Promise<string | null> {
+  const returnHash =
+    typeof window !== 'undefined' && window.location.hash.startsWith('#/') ? window.location.hash : '#/email'
+  try {
+    sessionStorage.setItem(OUTLOOK_CONNECT_KEY, JSON.stringify({ owner, returnHash }))
+  } catch {
+    // storage blocked; Microsoft still returns, the binding just is not saved
+  }
+  let failure: unknown = null
+  try {
+    await instance.acquireTokenRedirect(request)
+  } catch (err) {
+    failure = err
+    if (microsoftAuthErrorCode(err) === 'interaction_in_progress') {
+      clearStuckMicrosoftInteraction()
+      try {
+        await instance.acquireTokenRedirect(request)
+        failure = null
+      } catch (again) {
+        failure = again
+      }
+    }
+  }
+  if (failure) {
+    try {
+      sessionStorage.removeItem(OUTLOOK_CONNECT_KEY)
+    } catch {
+      // ignore
+    }
+    lastGraphTokenError = describeGraphError(failure)
+    return null
+  }
+  // The browser is leaving for Microsoft's page. Stay in the "Connecting…" state.
+  return new Promise<string | null>(() => undefined)
+}
+
+const MAIL_BINDING_KEY = 'newport_msal_mail_account'
+
+/** Email of the person logged in to the CRM in this tab. */
+function crmOwnerEmail(): string {
+  try {
+    const raw = sessionStorage.getItem('newport_crm_session_user')
+    const email = raw ? String((JSON.parse(raw) as { email?: string }).email ?? '') : ''
+    return email.trim().toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/** The Microsoft account this CRM user connected for mail. Kept for this tab only. */
+function readMailBinding(owner: string): string | null {
+  try {
+    const raw = sessionStorage.getItem(MAIL_BINDING_KEY)
+    if (!raw) return null
+    const row = JSON.parse(raw) as { owner?: string; homeAccountId?: string }
+    return row.owner === owner && typeof row.homeAccountId === 'string' ? row.homeAccountId : null
+  } catch {
+    return null
+  }
+}
+
+function writeMailBinding(owner: string, homeAccountId: string): void {
+  try {
+    sessionStorage.setItem(MAIL_BINDING_KEY, JSON.stringify({ owner, homeAccountId }))
+  } catch {
+    // storage blocked; the token still works for this request
   }
 }
 
@@ -620,7 +812,7 @@ let lastGraphTokenError: string | null = null
 
 /** Plain reason the last Graph token request failed. Null when it worked or was not tried. */
 export function graphTokenError(): string | null {
-  return lastGraphTokenError
+  return lastGraphTokenError ?? lastConnectError
 }
 
 function graphLoginHint(explicit?: string): string | undefined {
@@ -654,22 +846,13 @@ function describeGraphError(err: unknown): string {
 async function graphPopup(
   instance: PublicClientApplication,
   request: PopupRequest,
-  expectedEmail?: string,
+  owner: string,
 ): Promise<string | null> {
   try {
     const result = await instance.acquireTokenPopup(request)
-    // Refuse a mailbox that is not the logged-in user's own.
-    if (expectedEmail && result.account && !sameMailbox(result.account.username, expectedEmail)) {
-      try {
-        await instance.clearCache({ account: result.account })
-      } catch {
-        // ignore
-      }
-      instance.setActiveAccount(null)
-      lastGraphTokenError = `You signed in to Microsoft as ${result.account.username}. Connect Outlook with ${expectedEmail}, the account logged in here.`
-      return null
-    }
-    if (result.account) instance.setActiveAccount(result.account)
+    // Remember which Microsoft account this CRM user connected. Any account works:
+    // work, school, or personal Outlook. It is never shared with another CRM user.
+    if (owner && result.account) writeMailBinding(owner, result.account.homeAccountId)
     return result.accessToken
   } catch (err) {
     lastGraphTokenError = describeGraphError(err)

@@ -10,7 +10,13 @@
  */
 
 const PERSONAL_PREFIXES = ['newport_outlook_', 'newport_msal_', 'msal.', 'msal-']
-const SESSION_KEYS = ['newport_crm_session_token', 'newport_crm_session_user', 'newport_crm_session_proof']
+const SESSION_KEYS = [
+  'newport_crm_session_token',
+  'newport_crm_session_user',
+  'newport_crm_session_proof',
+  'newport_crm_last_email',
+  'newport_crm_last_login_provider',
+]
 
 function normalize(email: string | null | undefined): string {
   return String(email ?? '').trim().toLowerCase()

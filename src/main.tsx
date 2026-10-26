@@ -2,7 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { ensureMsal, hasEntraRedirectReturn, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
+import {
+  ensureMsal,
+  hasEntraRedirectReturn,
+  isMsalChildWindow,
+  loadEntraConfig,
+  microsoftLoginInProgress,
+} from '@/auth/msal'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { installClientLogging } from '@/lib/clientLog'
 
@@ -36,20 +42,35 @@ function registerServiceWorker(): void {
     .catch(() => undefined)
 }
 
-const msalWarmup = loadEntraConfig()
-  .then(() => ensureMsal())
-  .catch(() => null)
+function boot(): void {
+  const msalWarmup = loadEntraConfig()
+    .then(() => ensureMsal())
+    .catch(() => null)
 
-// Only hold the first paint while Microsoft is handing back a sign-in (?code=…), so the
-// router cannot strip the response before MSAL reads it. Normal loads render at once.
-const waitForMicrosoft = hasEntraRedirectReturn()
+  // Only hold the first paint while Microsoft is handing back a sign-in, so the
+  // router cannot strip the response before MSAL reads it. Normal loads render at once.
+  const waitForMicrosoft = hasEntraRedirectReturn()
 
-void (waitForMicrosoft
-  ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 5000))])
-  : Promise.resolve()
-)
-  .catch(() => undefined)
-  .finally(() => {
-    render()
-    registerServiceWorker()
-  })
+  void (waitForMicrosoft
+    ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 8000))])
+    : Promise.resolve()
+  )
+    .catch(() => undefined)
+    .finally(() => {
+      render()
+      registerServiceWorker()
+    })
+}
+
+if (isMsalChildWindow()) {
+  // Microsoft's Connect Outlook popup (or a token iframe) landed back here. The main
+  // window reads the result from this address and closes the popup, so do not start
+  // the CRM or change the address.
+  const root = document.getElementById('root')
+  if (root) {
+    root.setAttribute('style', 'color:#e6eef8;font:14px system-ui;padding:24px')
+    root.textContent = 'Finishing Microsoft sign-in…'
+  }
+} else {
+  boot()
+}

@@ -4,6 +4,8 @@ import {
   buildMicrosoftLoginRequest,
   entraReturnErrorFromLocation,
   hasEntraRedirectReturn,
+  isAuthResponseString,
+  signInErrorDetail,
   isMicrosoftAuthCancelled,
   isMicrosoftAuthFallback,
   isMicrosoftCredentialDenied,
@@ -175,3 +177,24 @@ describe('Microsoft sign-in in Cursor / preview windows', () => {
     ).toBe('insecure')
   })
 })
+
+describe('Microsoft fragment sign-in return', () => {
+  it('detects a fragment response that hash routing would otherwise erase', () => {
+    expect(
+      hasEntraRedirectReturn('https://samadalam481470sa-cmd.github.io/sammyyyy/#code=abc&client_info=x&state=s1'),
+    ).toBe(true)
+    expect(hasEntraRedirectReturn('https://samadalam481470sa-cmd.github.io/sammyyyy/#error=access_denied&state=s1')).toBe(true)
+    expect(isAuthResponseString('#/email')).toBe(false)
+    expect(isAuthResponseString('#/login?code=1')).toBe(false)
+    expect(isAuthResponseString('#code=abc')).toBe(false)
+  })
+
+  it('explains Microsoft account-type and admin-consent errors in plain words', () => {
+    expect(signInErrorDetail(new Error('AADSTS50020: User account from identity provider does not exist'))).toMatch(
+      /any organization and personal/i,
+    )
+    expect(signInErrorDetail(new Error('AADSTS65001: The user or administrator has not consented'))).toMatch(/IT admin/i)
+    expect(signInErrorDetail(null, null)).toBeNull()
+  })
+})
+

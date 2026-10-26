@@ -9,6 +9,7 @@
     "dev:api": "tsx --tsconfig tsconfig.app.json server/index.ts",
     "build": "tsc -b && vite build",
     "build:desktop": "node scripts/build-desktop.mjs",
+    "deploy:pages": "node scripts/publish-pages.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",

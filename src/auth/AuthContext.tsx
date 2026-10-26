@@ -98,7 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (returned.kind === 'unknown') {
         rememberMicrosoftReturnError(
-          'Microsoft did not finish sign-in. Try again and enter your password on Microsoft’s page.',
+          returned.detail
+            ? `Microsoft did not finish sign-in. ${returned.detail}`
+            : 'Microsoft did not finish sign-in. Try again and enter your password on Microsoft’s page.',
         )
         if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
         setUser(null)

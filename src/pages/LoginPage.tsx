@@ -7,8 +7,6 @@ import {
   consumeMicrosoftReturnErrorMessage,
   isMicrosoftAuthCancelled,
   isMicrosoftCredentialDenied,
-  clearStuckMicrosoftInteraction,
-  hasEntraRedirectReturn,
 } from '@/auth/msal'
 import { LAST_EMAIL_KEY, LAST_PROVIDER_KEY, parseLoginEmail } from '@/lib/emailIdentity'
 import { attachLoginShield } from '@/lib/loginGuard'
@@ -33,12 +31,6 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
   const emailRef = useRef<HTMLInputElement>(null)
   const inFlightRef = useRef(false)
-
-  // An abandoned Microsoft sign-in leaves MSAL "interaction in progress" behind,
-  // which blocks the next attempt. Clear it unless Microsoft is returning now.
-  useEffect(() => {
-    if (!hasEntraRedirectReturn()) clearStuckMicrosoftInteraction()
-  }, [])
 
   useEffect(() => {
     const root = document.getElementById('root')

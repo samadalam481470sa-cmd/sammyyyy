@@ -225,7 +225,8 @@ async function readError(res: Response, fallback: string): Promise<Error> {
 }
 
 export async function outlookToken(interactive = false, loginHint?: string): Promise<string | null> {
-  return getGraphAccessToken([...OUTLOOK_SCOPES], { interactive, loginHint })
+  // The Connect Outlook button goes to Microsoft's account picker by full-page redirect.
+  return getGraphAccessToken([...OUTLOOK_SCOPES], interactive ? { interactive: true, loginHint, mode: 'redirect' } : { interactive: false })
 }
 
 export async function listOutlookFolder(token: string, folder: MailFolder): Promise<MailMessage[]> {
