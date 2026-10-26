@@ -1,19 +1,10 @@
-import type { Opportunity, OpportunityStatus } from '@/types'
+import type { Opportunity } from '@/types'
 import { formatCurrency, formatDate } from '@/utils/dashboard'
+import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 
 interface PriorityDealsTableProps {
   opportunities: Opportunity[]
   onSelect: (opportunity: Opportunity) => void
-}
-
-const STATUS_STYLES: Record<OpportunityStatus, string> = {
-  Active: 'bg-success-bg text-success',
-  Pending: 'bg-accent-soft text-accent-hover',
-  Inactive: 'bg-canvas text-ink-muted',
-  Closed: 'bg-canvas text-ink-muted',
-  Declined: 'bg-canvas text-ink-subtle',
-  Withdrew: 'bg-canvas text-ink-subtle',
-  Completed: 'bg-success-bg text-success',
 }
 
 export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTableProps) {
@@ -21,7 +12,7 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
     <section className="rounded-xl border border-border bg-surface shadow-(--shadow-card)">
       <div className="flex items-end justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <h2 className="font-brand text-lg font-bold text-navy-900">Priority Deals</h2>
+          <h2 className="font-brand text-lg font-bold text-navy-900">Deals Requiring Action</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
             Confidential project code names with key financials and next actions
           </p>
@@ -33,7 +24,7 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
           <thead>
             <tr className="border-b border-border bg-canvas/80 text-[11px] tracking-[0.06em] text-ink-subtle uppercase">
               <th className="px-5 py-3 font-semibold">Project</th>
-              <th className="px-3 py-3 font-semibold">Entity</th>
+              <th className="px-3 py-3 font-semibold">Company</th>
               <th className="px-3 py-3 font-semibold">Status</th>
               <th className="px-3 py-3 font-semibold">Stage</th>
               <th className="px-3 py-3 font-semibold">Deal Lead</th>
@@ -80,12 +71,14 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
                   <td className="px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
                   <td className="px-3 py-3.5">
                     <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[opp.status]}`}
+                      className={badgeClass(statusBadge(opp.status))}
                     >
                       {opp.status}
                     </span>
                   </td>
-                  <td className="px-3 py-3.5 font-medium text-ink">{opp.stage}</td>
+                  <td className="px-3 py-3.5">
+                    <span className={badgeClass(stageBadge(opp.stage))}>{opp.stage}</span>
+                  </td>
                   <td className="px-3 py-3.5 text-ink-muted">{opp.dealLead || '—'}</td>
                   <td className="px-3 py-3.5 text-right font-medium tabular-nums text-ink">
                     {formatCurrency(opp.nwp)}

@@ -2,7 +2,6 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'node:crypto'
 import { mockOpportunities } from '../../src/data/mockOpportunities.ts'
 import {
@@ -13,22 +12,104 @@ import {
   mockSources,
   mockTasksDb,
 } from '../../src/data/mockModules.ts'
+import { mockMeetings } from '../../src/data/mockMeetings.ts'
+import { DEMO_DATASET_VERSION, DEMO_PASSWORD_HASH } from './constants.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = path.resolve(__dirname, '../../data')
-const dbPath = path.join(dataDir, 'newport-crm.db')
+const dbPath = process.env.CRM_DB_PATH
+  ? path.resolve(process.env.CRM_DB_PATH)
+  : path.join(
+      process.env.CRM_DATA_DIR
+        ? path.resolve(process.env.CRM_DATA_DIR)
+        : path.resolve(__dirname, '../../data'),
+      'newport-crm.db',
+    )
+const dataDir = path.dirname(dbPath)
 
 fs.mkdirSync(dataDir, { recursive: true })
 
 export const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
+db.pragma('secure_delete = ON')
+db.pragma('trusted_schema = OFF')
+db.pragma('cell_size_check = ON')
+db.pragma('busy_timeout = 4000')
+
+;(() => {
+  const existing = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meetings'`)
+    .get() as { name: string } | undefined
+  if (!existing) return
+  const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'owner_key')) {
+    db.exec(`ALTER TABLE meetings ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''`)
+  }
+})()
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
+;(() => {
+  const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'owner_key')) return
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key)`)
+  db.prepare(`UPDATE meetings SET owner_key = 'key:demo' WHERE owner_key = ''`).run()
+})()
+
+// SQLite cannot ALTER CHECK constraints — rebuild sessions if manager_key is missing
+;(() => {
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'`)
+    .get() as { sql: string } | undefined
+  if (row?.sql && !row.sql.includes('manager_key')) {
+    db.exec(`
+      ALTER TABLE sessions RENAME TO sessions_legacy_migrate;
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
+        api_key_id TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO sessions (id, user_id, token_hash, auth_method, api_key_id, ip_address, user_agent, expires_at, created_at)
+      SELECT id, user_id, token_hash, auth_method, api_key_id, ip_address, user_agent, expires_at, created_at
+      FROM sessions_legacy_migrate;
+      DROP TABLE sessions_legacy_migrate;
+      CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+    `)
+  }
+})()
+
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+function resetPublicDemoTablesIfNeeded() {
+  db.exec(`CREATE TABLE IF NOT EXISTS app_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`)
+  const row = db.prepare(`SELECT v FROM app_meta WHERE k = 'demo_dataset'`).get() as
+    | { v: string }
+    | undefined
+  if (row?.v === DEMO_DATASET_VERSION) return
+  db.exec(`
+    DELETE FROM contacts;
+    DELETE FROM tasks;
+    DELETE FROM sources;
+    DELETE FROM carriers;
+    DELETE FROM portfolio_companies;
+    DELETE FROM documents;
+    DELETE FROM meetings;
+    DELETE FROM notifications;
+    DELETE FROM change_history;
+    DELETE FROM opportunities;
+  `)
+  db.prepare(`INSERT OR REPLACE INTO app_meta (k, v) VALUES ('demo_dataset', ?)`).run(
+    DEMO_DATASET_VERSION,
+  )
 }
 
 export function seedDatabase() {
@@ -44,7 +125,7 @@ export function seedDatabase() {
       name: 'Mary Sbaschnig',
       role: 'partner',
       initials: 'MS',
-      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+      password_hash: DEMO_PASSWORD_HASH,
     })
     insertUser.run({
       id: 'user-dennis',
@@ -52,8 +133,31 @@ export function seedDatabase() {
       name: 'Dennis DiCapua',
       role: 'partner',
       initials: 'DD',
-      password_hash: bcrypt.hashSync('demo-only-not-for-production', 10),
+      password_hash: DEMO_PASSWORD_HASH,
     })
+    insertUser.run({
+      id: 'user-manager',
+      email: 'samad@newportspecialty.demo',
+      name: 'Samad Alam',
+      role: 'admin',
+      initials: 'SA',
+      password_hash: DEMO_PASSWORD_HASH,
+    })
+  } else {
+    // Ensure managerial principal exists on upgraded databases
+    const mgrUser = db.prepare(`SELECT id FROM users WHERE id = 'user-manager'`).get()
+    if (!mgrUser) {
+      db.prepare(
+        `INSERT INTO users (id, email, name, role, initials, password_hash)
+         VALUES (?, ?, ?, 'admin', ?, ?)`,
+      ).run(
+        'user-manager',
+        'samad@newportspecialty.demo',
+        'Samad Alam',
+        'SA',
+        DEMO_PASSWORD_HASH,
+      )
+    }
   }
 
   const keyCount = db.prepare('SELECT COUNT(*) AS c FROM api_keys').get() as { c: number }
@@ -85,6 +189,60 @@ export function seedDatabase() {
     }
   }
 
+  // Exactly one managerial master key (issued to Samad / security owner).
+  const mgrCount = db.prepare('SELECT COUNT(*) AS c FROM manager_keys').get() as { c: number }
+  if (mgrCount.c === 0) {
+    const mgrPlain = 'nwp_mgr_samad_newport_master_only'
+    db.prepare(
+      `INSERT INTO manager_keys (id, label, holder_name, key_prefix, key_hash, status)
+       VALUES (?, ?, ?, ?, ?, 'active')`,
+    ).run(
+      'mgr-master-1',
+      'Managerial master key',
+      'Samad Alam',
+      'nwp_mgr_',
+      hashToken(mgrPlain),
+    )
+  }
+
+  const noteCount = db.prepare('SELECT COUNT(*) AS c FROM notifications').get() as { c: number }
+  if (noteCount.c === 0) {
+    const insertNote = db.prepare(
+      `INSERT INTO notifications (id, direction, from_address, to_address, subject, body, read_flag, related_project)
+       VALUES (@id, @direction, @from_address, @to_address, @subject, @body, @read_flag, @related_project)`,
+    )
+    insertNote.run({
+      id: 'notif-1',
+      direction: 'inbound',
+      from_address: 'counsel@demo-counsel.demo',
+      to_address: 'dennis@newportspecialty.demo',
+      subject: 'Re: Project A — NDA countersignature',
+      body: 'Dennis — the sample NDA is ready for countersignature. Please confirm board approval language before Friday.',
+      read_flag: 0,
+      related_project: 'Project A',
+    })
+    insertNote.run({
+      id: 'notif-2',
+      direction: 'inbound',
+      from_address: 'mary@newportspecialty.demo',
+      to_address: 'dennis@newportspecialty.demo',
+      subject: 'Diligence pack — Project C',
+      body: 'Uploaded the latest sample diligence pack. Outstanding: call accountant on broker comps.',
+      read_flag: 0,
+      related_project: 'Project C',
+    })
+    insertNote.run({
+      id: 'notif-3',
+      direction: 'outbound',
+      from_address: 'dennis@newportspecialty.demo',
+      to_address: 'banker@demo-advisory.demo',
+      subject: 'Follow-up: Project A management call',
+      body: 'Confirming Thursday 2pm ET for the sample management update call.',
+      read_flag: 1,
+      related_project: 'Project A',
+    })
+  }
+
   const oppCount = db.prepare('SELECT COUNT(*) AS c FROM opportunities').get() as { c: number }
   if (oppCount.c === 0) {
     const insertOpp = db.prepare(`
@@ -104,19 +262,19 @@ export function seedDatabase() {
     `)
 
     const outstandingById: Record<string, string[]> = {
-      'opp-guardian': ['Review initial materials', 'Confirm NDA scope with counsel'],
-      'opp-jugular': ['Schedule follow-up with management', 'Call accountant re: broker comps'],
-      'opp-beacon': ['Finalize LOI terms', 'Call lawyer on exclusivity language'],
-      'opp-summit': ['Review diligence findings pack', 'Confirm data room access'],
-      'opp-atlas': ['Confirm exclusivity extension'],
-      'opp-vertex': ['Assign next action', 'Re-engage banker'],
-      'opp-cipher': ['Assign deal lead'],
+      'opp-a': ['Review sample materials', 'Confirm NDA scope with counsel'],
+      'opp-b': ['Schedule follow-up with management', 'Call accountant re: sample comps'],
+      'opp-c': ['Finalize LOI terms', 'Call lawyer on exclusivity language'],
+      'opp-d': ['Review diligence findings pack', 'Confirm data room access'],
+      'opp-e': ['Confirm exclusivity extension'],
+      'opp-g': ['Assign next action', 'Re-engage banker'],
+      'opp-h': ['Assign deal lead'],
     }
 
     mockOpportunities.forEach((opp, index) => {
       insertOpp.run({
         id: opp.id,
-        project_number: index + 1,
+        project_number: opp.projectNumber ?? index + 1,
         project_name: opp.projectName,
         entity_name: opp.entityName,
         type: opp.type,
@@ -207,6 +365,29 @@ function seedModuleTables() {
     `)
     mockDocuments.forEach((r) => ins.run(r))
   }
+
+  if (count('meetings') === 0) {
+    const ins = db.prepare(`
+      INSERT INTO meetings (
+        id, title, channel, status, direction, started_at, ended_at, duration_seconds,
+        host_name, participant_name, participant_company, participant_email, participant_phone,
+        join_url, dialed_number, opportunity_id, project_name, transcript, transcript_lines_json,
+        summary, customer_notes, tags, recording_enabled, owner_key
+      ) VALUES (
+        @id, @title, @channel, @status, @direction, @startedAt, @endedAt, @durationSeconds,
+        @hostName, @participantName, @participantCompany, @participantEmail, @participantPhone,
+        @joinUrl, @dialedNumber, @opportunityId, @projectName, @transcript, @transcriptLinesJson,
+        @summary, @customerNotes, @tags, @recordingEnabled, @ownerKey
+      )
+    `)
+    mockMeetings.forEach((r) =>
+      ins.run({
+        ...r,
+        recordingEnabled: r.recordingEnabled ? 1 : 0,
+        ownerKey: 'key:demo',
+      }),
+    )
+  }
 }
 
 export function createSessionToken() {
@@ -215,5 +396,6 @@ export function createSessionToken() {
 
 export { hashToken }
 
+resetPublicDemoTablesIfNeeded()
 seedDatabase()
 seedModuleTables()

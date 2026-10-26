@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { db } from '../db/index.ts'
-import { requireAuth, requireRole, writeAudit } from '../middleware/security.ts'
+import { requireAuth, requireManager, writeAudit } from '../middleware/security.ts'
 import { rowToOpportunity, type DbOpportunityRow } from '../mappers.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -107,8 +107,8 @@ exportRouter.get('/opportunities.json', (req, res) => {
   })
 })
 
-/** Full SQLite database download — partner/admin only. */
-exportRouter.get('/database', requireRole('admin', 'partner'), (req, res) => {
+/** Full SQLite database download — managerial key only. */
+exportRouter.get('/database', requireManager, (req, res) => {
   if (!fs.existsSync(DB_PATH)) {
     return res.status(404).json({ error: 'Database file not found' })
   }

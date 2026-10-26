@@ -34,6 +34,22 @@ export const STATUS_FILTER_OPTIONS = [
 
 export type StatusFilterOption = (typeof STATUS_FILTER_OPTIONS)[number]
 
+/** Visible Dashboard status chips. Other statuses remain in records and Opportunities. */
+export const DASHBOARD_STATUS_FILTERS = ['All Deals', 'Active', 'Pending', 'Completed'] as const
+
+export type DashboardStatusFilter = (typeof DASHBOARD_STATUS_FILTERS)[number]
+
+/** Dashboard All Deals = these three statuses only. Full taxonomy stays on Opportunities. */
+export const DASHBOARD_FOCUS_STATUSES: readonly OpportunityStatus[] = [
+  'Active',
+  'Pending',
+  'Completed',
+] as const
+
+export function isDashboardFocusStatus(status: OpportunityStatus): boolean {
+  return (DASHBOARD_FOCUS_STATUSES as readonly string[]).includes(status)
+}
+
 export const OPPORTUNITY_TYPES = [
   'Platform Acquisition',
   'Add-on Acquisition',
@@ -59,14 +75,12 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', enabled: true },
   { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: true },
-  { id: 'projects', label: 'Projects', path: '/projects', enabled: true },
   { id: 'relationships', label: 'Relationships', path: '/relationships', enabled: true },
   { id: 'tasks', label: 'Tasks & Follow-Ups', path: '/tasks', enabled: true },
-  { id: 'sources', label: 'Sources / Bankers', path: '/sources', enabled: true },
-  { id: 'carriers', label: 'Carriers / Reinsurers', path: '/carriers', enabled: true },
-  { id: 'portfolio', label: 'Portfolio Companies', path: '/portfolio', enabled: true },
   { id: 'documents', label: 'Documents', path: '/documents', enabled: true },
+  { id: 'email', label: 'Email', path: '/email', enabled: true },
   { id: 'reports', label: 'Reports', path: '/reports', enabled: true },
+  { id: 'meetings', label: 'Meetings', path: '/meetings', enabled: true },
   { id: 'security', label: 'Security', path: '/security', enabled: true },
 ]
 

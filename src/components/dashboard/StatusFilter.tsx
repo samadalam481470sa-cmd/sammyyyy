@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { STATUS_FILTER_OPTIONS } from '@/data/constants'
+import { DASHBOARD_STATUS_FILTERS } from '@/data/constants'
 import type { DashboardFilters, OpportunityStatus } from '@/types'
 
 interface StatusFilterProps {
@@ -19,8 +19,8 @@ export function StatusFilter({
 }: StatusFilterProps) {
   const options =
     filters.status === 'Needs Attention'
-      ? ([...STATUS_FILTER_OPTIONS, 'Needs Attention'] as const)
-      : STATUS_FILTER_OPTIONS
+      ? ([...DASHBOARD_STATUS_FILTERS, 'Needs Attention'] as const)
+      : DASHBOARD_STATUS_FILTERS
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">

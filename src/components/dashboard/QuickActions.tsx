@@ -15,7 +15,9 @@ export function QuickActions({ onAction }: QuickActionsProps) {
   return (
     <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)">
       <h2 className="font-brand text-lg font-bold text-navy-900">Quick Actions</h2>
-      <p className="mt-0.5 mb-4 text-sm text-ink-muted">Common workflows — prototype only</p>
+      <p className="mt-0.5 mb-4 text-sm text-ink-muted">
+        Import Excel, log work, and jump into core workflows
+      </p>
       <div className="grid grid-cols-2 gap-2">
         {ACTIONS.map(({ id, label, icon: Icon }) => (
           <button

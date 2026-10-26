@@ -27,7 +27,7 @@ export function PipelineOverview({
         <div>
           <h2 className="font-brand text-lg font-bold text-navy-900">Acquisition Pipeline</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
-            Active and pending opportunities by acquisition stage
+            Active, pending, and completed opportunities by acquisition stage
           </p>
         </div>
         <p className="text-xs text-ink-subtle">{totalDeals} deals in view</p>

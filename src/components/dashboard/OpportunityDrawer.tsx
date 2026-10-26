@@ -25,7 +25,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
   if (!opportunity) return null
 
   const fields: { label: string; value: string }[] = [
-    { label: 'Entity', value: opportunity.entityName },
+    { label: 'Company', value: opportunity.entityName },
     { label: 'Status', value: opportunity.status },
     { label: 'Stage', value: opportunity.stage },
     { label: 'Deal Lead', value: opportunity.dealLead || 'Unassigned' },

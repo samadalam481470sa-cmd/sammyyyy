@@ -1,0 +1,58 @@
+import type { MeetingRecord } from '@/types/meetings'
+import { anonymousEntityName, anonymousProjectName } from '../lib/demoAliases'
+
+export const mockMeetings: MeetingRecord[] = [
+  {
+    id: 'mtg-1',
+    title: `${anonymousProjectName('opp-a')} — management update`,
+    channel: 'teams',
+    status: 'completed',
+    direction: 'conference',
+    startedAt: '2026-10-07T14:00:00.000Z',
+    endedAt: '2026-10-07T14:42:00.000Z',
+    durationSeconds: 2520,
+    hostName: 'Dennis DiCapua',
+    participantName: 'Alex Rivera',
+    participantCompany: anonymousEntityName('opp-a'),
+    participantEmail: 'alex.rivera@entity-a.demo',
+    participantPhone: '(555) 201-3344',
+    joinUrl: 'https://teams.microsoft.com/l/meetup-join/demo-project-a',
+    dialedNumber: '',
+    opportunityId: 'opp-a',
+    projectName: anonymousProjectName('opp-a'),
+    transcript:
+      'Dennis: Thanks for joining, Alex. Alex: Pleasure. We wanted to walk the sample premium trajectory and two open diligence items. Dennis: Understood — we will loop Mary on the capacity schedule.',
+    transcriptLinesJson: '[]',
+    summary:
+      'Discussed sample premium trajectory and claims diligence. Follow-up with Mary on capacity schedule.',
+    customerNotes: 'Prefers Teams; mornings ET.',
+    tags: 'diligence,management',
+    recordingEnabled: true,
+  },
+  {
+    id: 'mtg-2',
+    title: 'Demo Advisory Group check-in',
+    channel: 'phone',
+    status: 'completed',
+    direction: 'outbound',
+    startedAt: '2026-10-06T16:15:00.000Z',
+    endedAt: '2026-10-06T16:28:00.000Z',
+    durationSeconds: 780,
+    hostName: 'Mary Sbaschnig',
+    participantName: 'Jordan Hale',
+    participantCompany: 'Demo Advisory Group',
+    participantEmail: 'jordan.hale@demo-advisory.demo',
+    participantPhone: '(555) 410-8872',
+    joinUrl: 'tel:+15554108872',
+    dialedNumber: '5554108872',
+    opportunityId: 'opp-a',
+    projectName: anonymousProjectName('opp-a'),
+    transcript:
+      'Mary: Calling regarding sample process letter timing. Jordan: Process letters go out Thursday. Soft circle of three strategics remains intact.',
+    transcriptLinesJson: '[]',
+    summary: 'Process letters Thursday; three strategics soft-circled (sample).',
+    customerNotes: 'Sample sell-side banker.',
+    tags: 'banker,process',
+    recordingEnabled: true,
+  },
+]

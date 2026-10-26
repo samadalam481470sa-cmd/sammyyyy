@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TopHeader } from '@/components/layout/TopHeader'
 import { StatusFilter } from '@/components/dashboard/StatusFilter'
 import { KPIRow } from '@/components/dashboard/KPIRow'
@@ -6,22 +7,42 @@ import { PipelineOverview } from '@/components/dashboard/PipelineOverview'
 import { PriorityDealsTable } from '@/components/dashboard/PriorityDealsTable'
 import { PriorityTasks } from '@/components/dashboard/PriorityTasks'
 import { AttentionAlerts } from '@/components/dashboard/AttentionAlerts'
-import { DashboardCharts } from '@/components/dashboard/DashboardCharts'
 import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
+import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
+import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
-import { mockActivity, mockAlerts, mockPriorityTasks } from '@/data/mockTasks'
+import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
-import type { AcquisitionStage, DashboardFilters, Opportunity } from '@/types'
+import { useAuth } from '@/auth/AuthContext'
+import { isLocalPersistence } from '@/lib/persistenceMode'
+import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { sessionOwnerKey } from '@/lib/ownerKey'
+import { mockContacts } from '@/data/mockModules'
+import type { ImportRow } from '@/lib/excelImport'
+import type {
+  AcquisitionStage,
+  ActivityItem,
+  DashboardFilters,
+  Opportunity,
+  PriorityTask,
+} from '@/types'
 import {
-  computeDealsByStatus,
+  computeFinancialTotals,
   computeKpis,
   computePipelineByStage,
-  filterOpportunities,
+  filterDashboardOpportunities,
   hasActiveFilters,
 } from '@/utils/dashboard'
+import {
+  rankOpportunitiesByNextAction,
+  topAttentionAlerts,
+  uniqueAttentionCount,
+} from '@/lib/attention'
+import { rankWeekPriorityTasks } from '@/lib/taskSort'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
 const DEFAULT_FILTERS: DashboardFilters = {
   status: 'All Deals',
@@ -30,108 +51,105 @@ const DEFAULT_FILTERS: DashboardFilters = {
 }
 
 export function Dashboard() {
-  const { opportunities } = useData()
+  const {
+    opportunities,
+    tasks,
+    documents,
+    activity,
+    createOpportunity,
+    saveOpportunity,
+    createTask,
+  } = useData()
+  const { user } = useAuth()
+  const owner = sessionOwnerKey(user)
+  const navigate = useNavigate()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [excelOpen, setExcelOpen] = useState(false)
+  const { addSheet } = useSpreadsheetColumns()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityNotice, setActivityNotice] = useState<string | null>(null)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(null), 2800)
   }, [])
 
+  const keepSpreadsheet = useCallback(
+    (grid: Parameters<typeof addSheet>[0], sourceName: string) => {
+      addSheet(grid, sourceName)
+      showToast('Spreadsheet column added in the sidebar')
+    },
+    [addSheet, showToast],
+  )
+
   const filtered = useMemo(
-    () => filterOpportunities(opportunities, filters),
+    () => filterDashboardOpportunities(opportunities, filters),
     [filters, opportunities],
   )
 
-  /** Pipeline / KPIs use a broader set when status filter is active stages matter */
-  const pipelineSource = useMemo(() => {
-    // Pipeline should focus on Active + Pending for M&A view unless filtering Needs Attention
-    if (filters.status === 'Needs Attention') {
-      return opportunities.filter((o) => o.needsAttention)
-    }
-    if (filters.status === 'All Deals') {
-      return opportunities.filter(
-        (o) => o.status === 'Active' || o.status === 'Pending',
-      )
-    }
-    return opportunities.filter((o) => o.status === filters.status)
-  }, [filters.status, opportunities])
+  const counts = useMemo(() => computeKpis(opportunities), [opportunities])
+  const finances = useMemo(() => computeFinancialTotals(filtered), [filtered])
 
-  const pipelineFiltered = useMemo(() => {
-    if (!filters.search.trim()) return pipelineSource
-    const q = filters.search.trim().toLowerCase()
-    return pipelineSource.filter((o) =>
-      `${o.projectName} ${o.entityName} ${o.dealLead}`.toLowerCase().includes(q),
-    )
-  }, [pipelineSource, filters.search])
-
-  const kpis = useMemo(() => {
-    // Executive KPIs always reflect full book unless searching
-    const base = filters.search.trim()
-      ? filterOpportunities(opportunities, {
-          status: 'All Deals',
-          stage: null,
-          search: filters.search,
-        })
-      : opportunities
-    return computeKpis(base)
-  }, [filters.search, opportunities])
-
-  const pipeline = useMemo(
-    () => computePipelineByStage(pipelineFiltered),
-    [pipelineFiltered],
+  const kpis = useMemo(
+    () => ({
+      activeDeals: counts.activeDeals,
+      pendingDeals: counts.pendingDeals,
+      nwp: finances.nwp,
+      pfEbitda: finances.pfEbitda,
+      needsAttention: uniqueAttentionCount(opportunities, tasks),
+    }),
+    [counts.activeDeals, counts.pendingDeals, finances.nwp, finances.pfEbitda, opportunities, tasks],
   )
 
-  const chartOpportunities = useMemo(() => {
-    // Charts respond to status + search (not stage) so stage filter remains table-focused
-    return filterOpportunities(opportunities, {
-      status: filters.status,
-      stage: null,
-      search: filters.search,
-    })
-  }, [filters.status, filters.search, opportunities])
+  const pipeline = useMemo(() => computePipelineByStage(filtered), [filtered])
 
-  const byStatus = useMemo(
-    () => computeDealsByStatus(chartOpportunities),
-    [chartOpportunities],
+  const tableRows = useMemo(
+    () => rankOpportunitiesByNextAction(filtered, tasks).slice(0, 8),
+    [filtered, tasks],
   )
 
-  const byStage = useMemo(() => {
-    const activeLike =
-      filters.status === 'All Deals' || filters.status === 'Active'
-        ? chartOpportunities.filter((o) => o.status === 'Active')
-        : chartOpportunities
-    return computePipelineByStage(activeLike).map(({ stage, count }) => ({
-      stage,
-      count,
-    }))
-  }, [chartOpportunities, filters.status])
+  const weekTasks = useMemo<PriorityTask[]>(() => {
+    return rankWeekPriorityTasks(tasks)
+      .slice(0, 5)
+      .map((task) => ({
+        id: task.id,
+        priority: (task.priority === 'A' || task.priority === 'B' || task.priority === 'C'
+          ? task.priority
+          : 'B') as PriorityTask['priority'],
+        action: task.action,
+        projectId: task.opportunityId || '',
+        projectName: task.projectName,
+        owner: task.owner,
+        dueDate: task.dueDate || '',
+      }))
+  }, [tasks])
 
-  /** Priority table: show filtered set, prefer Active/Pending when viewing all */
-  const tableRows = useMemo(() => {
-    let rows = filtered
-    if (filters.status === 'All Deals' && !filters.stage && !filters.search.trim()) {
-      rows = opportunities.filter(
-        (o) => o.status === 'Active' || o.status === 'Pending',
-      )
-    }
-    return [...rows]
-      .sort((a, b) => {
-        const pri = { A: 0, B: 1, C: 2 }
-        if (pri[a.priority] !== pri[b.priority]) return pri[a.priority] - pri[b.priority]
-        if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1
-        return a.projectName.localeCompare(b.projectName)
-      })
-      .slice(0, 8)
-  }, [filtered, filters, opportunities])
+  const recentActivity = useMemo(
+    () =>
+      [...activity]
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, 5),
+    [activity],
+  )
+
+  const allActivity = useMemo(
+    () => [...activity].sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+    [activity],
+  )
+
+  const alerts = useMemo(() => topAttentionAlerts(opportunities, tasks, 5), [opportunities, tasks])
+  const uniqueAlerts = useMemo(
+    () => uniqueAttentionCount(opportunities, tasks),
+    [opportunities, tasks],
+  )
 
   const setStatus = (status: DashboardFilters['status']) => {
     setFilters((prev) => ({
       ...prev,
       status: prev.status === status && status !== 'All Deals' ? 'All Deals' : status,
-      // Clear stage when switching broad status chips for clarity
       stage: status === 'All Deals' ? prev.stage : null,
     }))
   }
@@ -147,17 +165,59 @@ export function Dashboard() {
     setSelected(opp)
   }
 
+  const openActivity = (item: ActivityItem) => {
+    const type =
+      item.targetType ??
+      (item.type === 'task' ? 'task' : item.type === 'document' ? 'document' : 'opportunity')
+    const id = item.targetId ?? item.projectId
+    if (!id) {
+      setActivityNotice('This activity is not linked to a record.')
+      return
+    }
+    if (type === 'opportunity') {
+      if (!opportunities.some((row) => row.id === id)) {
+        setActivityNotice('This opportunity was deleted and is no longer available.')
+        return
+      }
+      setActivityOpen(false)
+      void navigate(`/opportunities?select=${encodeURIComponent(id)}`)
+      return
+    }
+    if (type === 'task') {
+      const task = tasks.find((row) => row.id === id)
+      if (!task || task.deletedAt) {
+        setActivityNotice('This task was deleted and is no longer available.')
+        return
+      }
+      setActivityOpen(false)
+      void navigate(`/tasks?select=${encodeURIComponent(id)}`)
+      return
+    }
+    const doc = documents.find((row) => row.id === id)
+    if (!doc) {
+      setActivityNotice('This document was removed from the CRM.')
+      return
+    }
+    const opportunityId = doc.opportunityId ?? item.projectId
+    if (!opportunityId || !opportunities.some((row) => row.id === opportunityId)) {
+      setActivityNotice('The linked opportunity for this document is no longer available.')
+      return
+    }
+    setActivityOpen(false)
+    void navigate(
+      `/documents?select=${encodeURIComponent(opportunityId)}&doc=${encodeURIComponent(id)}`,
+    )
+  }
+
   return (
     <>
       <TopHeader
         search={filters.search}
         onSearchChange={(search) => setFilters((prev) => ({ ...prev, search }))}
-        onNewOpportunity={() =>
-          showToast('New Opportunity workflow — coming in a future sprint')
-        }
+        onNewOpportunity={() => setCreateOpen(true)}
       />
 
-      <main className="flex-1 px-6 py-6 lg:px-8">
+      <main data-testid="crm-dashboard" className="flex-1 px-6 py-6 lg:px-8">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
           <StatusFilter
             filters={filters}
@@ -178,27 +238,47 @@ export function Dashboard() {
           <PriorityDealsTable opportunities={tableRows} onSelect={setSelected} />
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <PriorityTasks tasks={mockPriorityTasks} onProjectClick={openById} />
-            <AttentionAlerts
-              alerts={mockAlerts}
+            <PriorityTasks
+              tasks={weekTasks}
               onProjectClick={openById}
-              onViewAll={() => setStatus('Needs Attention')}
+              onViewAll={() => void navigate('/tasks')}
+            />
+            <AttentionAlerts
+              alerts={alerts}
+              uniqueDealCount={uniqueAlerts}
+              onProjectClick={openById}
+              onViewAll={() => void navigate('/opportunities?attention=1')}
             />
           </div>
 
-          <DashboardCharts byStatus={byStatus} byStage={byStage} />
-
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-1">
-              <RecentActivity items={mockActivity} />
+              <RecentActivity
+                items={recentActivity}
+                allItems={allActivity}
+                onViewAll={() => setActivityOpen(true)}
+                onItemClick={openActivity}
+                historyOpen={activityOpen}
+                onCloseHistory={() => setActivityOpen(false)}
+              />
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
-                onAction={(action) =>
-                  showToast(
-                    `${action.replace(/-/g, ' ')} — prototype action (no backend yet)`,
-                  )
-                }
+                onAction={(action) => {
+                  if (action === 'import-excel') {
+                    setExcelOpen(true)
+                    return
+                  }
+                  if (action === 'new-opportunity') {
+                    setCreateOpen(true)
+                    return
+                  }
+                  if (action === 'add-task') {
+                    void navigate('/tasks?new=1')
+                    return
+                  }
+                  showToast(`${action.replace(/-/g, ' ')} — open the matching module to continue`)
+                }}
               />
               <NewportAI />
             </div>
@@ -208,7 +288,74 @@ export function Dashboard() {
         </div>
       </main>
 
+      <OpportunityCreateForm
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(opp) => showToast(`Created ${opp.projectName}`)}
+      />
+
+      <ExcelImportModal
+        open={excelOpen}
+        onClose={() => setExcelOpen(false)}
+        opportunities={opportunities}
+        onCreateOpportunities={async (drafts) => {
+          for (const d of drafts) {
+            await createOpportunity(d)
+          }
+          showToast(`Imported ${drafts.length} opportunit${drafts.length === 1 ? 'y' : 'ies'}`)
+        }}
+        onUpdateOpportunity={async (id, patch) => {
+          await saveOpportunity(id, patch)
+          showToast('Opportunity autofilled from Excel')
+        }}
+        onImportTasks={async (rows: ImportRow[]) => {
+          for (const [i, r] of rows.entries()) {
+            await createTask({
+              action: String(r.action ?? r.nextAction ?? r.name ?? `Imported task ${i + 1}`),
+              priority: String(r.priority ?? 'B'),
+              owner: String(r.dealLead ?? r.owner ?? ''),
+              projectName: String(r.projectName ?? ''),
+              dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
+              status: 'Open',
+              notes: String(r.notes ?? 'Excel import'),
+            })
+          }
+        }}
+        onKeepAsColumn={keepSpreadsheet}
+        onImportContacts={async (rows: ImportRow[]) => {
+          if (isLocalPersistence()) {
+            const existing = loadOwnedCollection('contacts', owner, mockContacts)
+            const mapped = rows.map((r, i) => ({
+              id: `con_import_${Date.now()}_${i}`,
+              name: String(r.name ?? r.entityName ?? `Contact ${i + 1}`),
+              title: String(r.title ?? ''),
+              company: String(r.company ?? r.entityName ?? ''),
+              category: 'Other',
+              email: String(r.email ?? ''),
+              phone: String(r.phone ?? ''),
+              opportunityId: null,
+              projectName: String(r.projectName ?? ''),
+              status: 'Active',
+              lastContactDate: null,
+              notes: String(r.notes ?? 'Excel import'),
+            }))
+            saveOwnedCollection('contacts', owner, [...mapped, ...existing])
+          }
+        }}
+      />
+
       <OpportunityDrawer opportunity={selected} onClose={() => setSelected(null)} />
+
+      <ConfirmDialog
+        open={Boolean(activityNotice)}
+        title="Record unavailable"
+        message={activityNotice ?? ''}
+        confirmLabel="OK"
+        cancelLabel="Close"
+        tone="default"
+        onConfirm={() => setActivityNotice(null)}
+        onCancel={() => setActivityNotice(null)}
+      />
 
       {toast && (
         <div

@@ -1,11 +1,60 @@
 /**
  * Persistent local demo store for static hosting (GitHub Pages / CDN).
- * Saves CRM data in localStorage so edits survive closing and reopening the link.
+ * Saves CRM data in localStorage so edits survive refresh in THIS browser.
+ * Does not sync across browsers, devices, or users — that is why a Chrome
+ * stage change does not appear in Safari.
  */
 
 const PREFIX = 'newport_crm_demo_v1_'
+const DATASET_VERSION_KEY = 'newport_crm_demo_dataset_version'
+/** Bump when public seed data is replaced so stale browser caches cannot restore old names. */
+export const DEMO_DATASET_VERSION = 'anon-letter-v1'
+
+const PRESERVE_COLLECTION_EXACT = new Set([
+  'issued_api_keys',
+  'api_key_slots',
+  'sessions',
+])
+
+function shouldResetDemoCollection(name: string): boolean {
+  if (PRESERVE_COLLECTION_EXACT.has(name)) return false
+  if (name.startsWith('huddle')) return false
+  return (
+    name.startsWith('opportunities') ||
+    name.startsWith('contacts') ||
+    name.startsWith('tasks') ||
+    name.startsWith('sources') ||
+    name.startsWith('carriers') ||
+    name.startsWith('portfolio') ||
+    name.startsWith('documents') ||
+    name.startsWith('meetings') ||
+    name.startsWith('notifications') ||
+    name.startsWith('change_history') ||
+    name.startsWith('live_meeting_') ||
+    name.startsWith('meetings_v2_')
+  )
+}
+
+function ensureDemoDatasetVersion(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    if (localStorage.getItem(DATASET_VERSION_KEY) === DEMO_DATASET_VERSION) return
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k?.startsWith(PREFIX)) continue
+      const name = k.slice(PREFIX.length)
+      if (shouldResetDemoCollection(name)) toRemove.push(k)
+    }
+    for (const k of toRemove) localStorage.removeItem(k)
+    localStorage.setItem(DATASET_VERSION_KEY, DEMO_DATASET_VERSION)
+  } catch {
+    // private mode / quota
+  }
+}
 
 function key(name: string) {
+  ensureDemoDatasetVersion()
   return `${PREFIX}${name}`
 }
 
@@ -28,29 +77,145 @@ export function saveDemoCollection<T>(name: string, items: T[]): void {
   }
 }
 
-export function appendDemoChange(entry: {
+export function ownedStoreName(resource: string, ownerKey: string) {
+  return `${resource}__${ownerKey}`
+}
+
+/** Per-key CRM collection. First visit copies any shared legacy store, then diverges. */
+export function loadOwnedCollection<T>(resource: string, ownerKey: string, fallback: T[]): T[] {
+  const scoped = ownedStoreName(resource, ownerKey)
+  try {
+    const scopedRaw = localStorage.getItem(key(scoped))
+    if (scopedRaw) {
+      const parsed = JSON.parse(scopedRaw) as unknown
+      return Array.isArray(parsed) ? (parsed as T[]) : fallback
+    }
+    const legacyRaw = localStorage.getItem(key(resource))
+    if (legacyRaw) {
+      const parsed = JSON.parse(legacyRaw) as unknown
+      if (Array.isArray(parsed)) {
+        saveDemoCollection(scoped, parsed as T[])
+        return parsed as T[]
+      }
+    }
+    // First visit for this login: bind the seed to this email so logout keeps it.
+    if (fallback.length > 0) {
+      saveDemoCollection(scoped, fallback)
+    }
+  } catch {
+    // ignore
+  }
+  return fallback
+}
+
+export function saveOwnedCollection<T>(resource: string, ownerKey: string, items: T[]): void {
+  saveDemoCollection(ownedStoreName(resource, ownerKey), items)
+}
+
+export interface DemoChange {
   resourceType: string
   resourceId: string
   changeType: string
   changedFields: string[]
   actorName: string
   createdAt: string
-}): void {
+  ownerKey?: string
+  apiKeySlot?: number | null
+  authMethod?: string
+}
+
+export function appendDemoChange(entry: DemoChange): void {
   try {
-    const existing = loadDemoCollection<typeof entry>('change_history', [])
-    saveDemoCollection('change_history', [entry, ...existing].slice(0, 500))
+    const owner = entry.ownerKey ?? 'anonymous'
+    const row: DemoChange = { ...entry, ownerKey: owner }
+    const scoped = loadDemoCollection<DemoChange>(`change_history__${owner}`, [])
+    saveDemoCollection(`change_history__${owner}`, [row, ...scoped].slice(0, 500))
+    const all = loadDemoCollection<DemoChange>('change_history__all', [])
+    saveDemoCollection('change_history__all', [row, ...all].slice(0, 500))
+    saveDemoCollection('change_history', [row, ...all].slice(0, 500))
   } catch {
     // ignore
   }
 }
 
-export function loadDemoChangeHistory() {
-  return loadDemoCollection<{
-    resourceType: string
-    resourceId: string
-    changeType: string
-    changedFields: string[]
-    actorName: string
-    createdAt: string
-  }>('change_history', [])
+export function loadDemoChangeHistory(ownerKey?: string): DemoChange[] {
+  if (ownerKey) return loadDemoCollection<DemoChange>(`change_history__${ownerKey}`, [])
+  return loadAllKeyChangeHistory()
+}
+
+export function loadAllKeyChangeHistory(): DemoChange[] {
+  const combined = loadDemoCollection<DemoChange>('change_history__all', [])
+  if (combined.length) return combined
+  const owners = [
+    'key:slot-1',
+    'key:slot-2',
+    'key:slot-3',
+    'key:slot-4',
+    'key:slot-5',
+    'key:manager',
+    'key:demo',
+  ]
+  const merged = owners.flatMap((owner) =>
+    loadDemoCollection<DemoChange>(`change_history__${owner}`, []),
+  )
+  if (merged.length) {
+    return [...merged].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+  return loadDemoCollection<DemoChange>('change_history', [])
+}
+
+/** Issued local-demo API keys (hash → slot). Plaintext is optional leftover from older demos. */
+export type LocalIssuedKey = {
+  slot: number
+  plaintext?: string
+  keyHash?: string
+  status: 'active' | 'revoked'
+}
+
+export function loadLocalIssuedKeys(): LocalIssuedKey[] {
+  return loadDemoCollection<LocalIssuedKey>('issued_api_keys', [
+    {
+      slot: 1,
+      keyHash: '2629c112620dfbb298f34dde60c3d45b3526526a244cf9eb22a2f5ccf826491e',
+      status: 'active',
+    },
+  ])
+}
+
+export function saveLocalIssuedKeys(keys: LocalIssuedKey[]): void {
+  saveDemoCollection('issued_api_keys', keys)
+}
+
+export function revokeLocalIssuedKey(slot: number): void {
+  const next = loadLocalIssuedKeys().map((k) =>
+    k.slot === slot ? { ...k, status: 'revoked' as const } : k,
+  )
+  // Ensure slot exists even if never provisioned in this browser
+  if (!next.some((k) => k.slot === slot)) {
+    next.push({ slot, status: 'revoked' })
+  }
+  saveLocalIssuedKeys(next)
+}
+
+export async function registerLocalIssuedKey(slot: number, plaintext: string): Promise<void> {
+  const { sha256Hex } = await import('@/lib/sha256')
+  const keyHash = await sha256Hex(plaintext.trim())
+  const others = loadLocalIssuedKeys().filter((k) => k.slot !== slot)
+  saveLocalIssuedKeys([...others, { slot, keyHash, status: 'active' }])
+}
+
+export function findLocalIssuedKeyByHash(keyHash: string): LocalIssuedKey | undefined {
+  return loadLocalIssuedKeys().find((k) => k.keyHash === keyHash)
+}
+
+export function findLocalIssuedKey(plaintext: string): LocalIssuedKey | undefined {
+  return loadLocalIssuedKeys().find((k) => k.plaintext && k.plaintext === plaintext)
+}
+
+export function isLocalSlotRevoked(slot: number): boolean {
+  const slots = loadDemoCollection<{ slot: number; status: string }>('api_key_slots', [])
+  const fromSlots = slots.find((s) => s.slot === slot)
+  if (fromSlots?.status === 'revoked') return true
+  const issued = loadLocalIssuedKeys().find((k) => k.slot === slot)
+  return issued?.status === 'revoked'
 }

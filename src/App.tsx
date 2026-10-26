@@ -6,15 +6,15 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/pages/Dashboard'
 import { LoginPage } from '@/pages/LoginPage'
 import { OpportunitiesPage } from '@/pages/OpportunitiesPage'
-import { ProjectsPage } from '@/pages/ProjectsPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RelationshipsPage } from '@/pages/RelationshipsPage'
 import { TasksPage } from '@/pages/TasksPage'
-import { SourcesPage } from '@/pages/SourcesPage'
-import { CarriersPage } from '@/pages/CarriersPage'
-import { PortfolioPage } from '@/pages/PortfolioPage'
+import { EmailPage } from '@/pages/EmailPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
+import { MeetingsPage } from '@/pages/MeetingsPage'
+import { SettingsPage } from '@/pages/SettingsPage'
+import { OfflineNotice } from '@/components/shared/OfflineNotice'
 
 // Hash routing keeps the static demo working from any CDN subpath
 const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
@@ -22,6 +22,7 @@ const Router = import.meta.env.VITE_STATIC_DEMO ? HashRouter : BrowserRouter
 export default function App() {
   return (
     <AuthProvider>
+      <OfflineNotice />
       <Router basename={import.meta.env.VITE_STATIC_DEMO ? undefined : import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -35,15 +36,20 @@ export default function App() {
             >
               <Route index element={<Dashboard />} />
               <Route path="opportunities" element={<OpportunitiesPage />} />
-              <Route path="projects" element={<ProjectsPage />} />
-              <Route path="security" element={<SecurityPage />} />
+              <Route path="projects" element={<Navigate to="/opportunities" replace />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />
-              <Route path="sources" element={<SourcesPage />} />
-              <Route path="carriers" element={<CarriersPage />} />
-              <Route path="portfolio" element={<PortfolioPage />} />
+              <Route path="sources" element={<Navigate to="/relationships" replace />} />
+              <Route path="carriers" element={<Navigate to="/relationships" replace />} />
+              <Route path="email" element={<EmailPage />} />
+              <Route path="portfolio" element={<Navigate to="/" replace />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="meetings" element={<MeetingsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="security" element={<SecurityPage />} />
+              <Route path="security/keys" element={<Navigate to="/security" replace />} />
+              <Route path="security/provision" element={<Navigate to="/security" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Route>

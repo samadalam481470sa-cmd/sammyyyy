@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-brand: "Libre Baskerville", Georgia, serif;
-  --font-sans: "Source Sans 3", ui-sans-serif, sans-serif;
+  --font-brand: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, sans-serif;
 
   --color-navy-950: #06101f;
   --color-navy-900: #0b1f3a;
@@ -28,6 +28,8 @@
   --color-attention-border: #e8c9b0;
   --color-success: #1f6b4a;
   --color-success-bg: #eef7f2;
+  --color-danger: #b42318;
+  --color-danger-bg: #fef3f2;
 
   --shadow-card: 0 1px 2px rgb(11 31 58 / 0.04), 0 1px 3px rgb(11 31 58 / 0.06);
   --shadow-elevated: 0 4px 16px rgb(11 31 58 / 0.08), 0 1px 3px rgb(11 31 58 / 0.04);

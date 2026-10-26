@@ -27,6 +27,7 @@ dist-ssr
 /src/generated/prisma
 
 .env
+# Runtime SQLite (WAL / live sessions). Canonical DB is server/db/schema.sql + seed.sql
 data/*.db
 data/*.db-*
 

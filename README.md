@@ -4,12 +4,25 @@ Enterprise M&A / acquisition deal-management app for Newport Specialty Partners.
 
 > This repository also contains other packages under `job-finder/` and `chrome-extension/` from prior work. The **root** of the repo is the Newport Acquisition CRM.
 
+## Permanent database (GitHub)
+
+GitHub holds the reconstructable CRM database and every application source file:
+
+- Schema: `server/db/schema.sql`
+- Canonical demo rows: `server/db/seed.sql` (dataset `anon-letter-v1`)
+- TypeScript seed used by the static demo: `src/data/mockOpportunities.ts`, `mockModules.ts`, `mockMeetings.ts`
+- App and API: `src/` and `server/`
+
+Rebuild a local SQLite file with `npm run db:rebuild`. Refresh `seed.sql` after mock or schema edits with `npm run db:dump`. Runtime `data/*.db` files stay gitignored (WAL, sessions, live edits). Do not commit user vaults.
+
+GitHub Pages cannot run SQLite. The hosted demo stores each signed-in email's edits in that browser. Sign-out ends the session only; the same email restores that vault.
+
 ## Stack
 
 - React 19 + TypeScript + Vite + Tailwind CSS
 - Express API + SQLite (`better-sqlite3`) database
 - Lucide icons, Recharts, Zod validation
-- Helmet, rate limiting, hashed sessions & API keys, audit logging + permanent change history
+- Helmet, rate limiting, Microsoft 365 (MSAL) sign-in, audit logging + change history
 
 ## Run locally
 
@@ -23,11 +36,10 @@ npm run dev
 
 ## Sign in
 
-1. **Sign in — Demo access** enters the dashboard (Dennis session).
-2. Or authenticate with the local demo API key (slot 1 only):
-   `nwp_demo_key_slot1_replace_me_by_security_team`
+Sign-in is Microsoft Entra ID only (`https://login.microsoftonline.com/common`). Work accounts from any firm, Outlook.com, Hotmail, Live, and MSN enter their username and password on Microsoft’s page. Newport does not store that password, and the sign-in field starts blank.
 
-Production will use **five API key slots** provisioned by the security team. This app stores **hashes only**.
+The dashboard opens only after Microsoft accepts the account. Sign out ends that session only — CRM edits stay in this browser and come back with the same email.
+Sessions are device-signed with a random token; another email cannot open your vault. Failed sign-ins are throttled.
 
 ## 24/7 static demo (GitHub Pages)
 

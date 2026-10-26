@@ -1,6 +1,7 @@
--- Newport Specialty Partners Acquisition CRM Database
--- SQLite database for acquisition deal tracking (confidential M&A data).
--- Schema is the source of truth; replace SQLite with Postgres in production.
+-- Permanent Newport Specialty Partners Acquisition CRM database schema.
+-- GitHub source of truth together with server/db/seed.sql (dataset anon-letter-v1).
+-- Rebuild: sqlite3 data/newport-crm.db < server/db/schema.sql && sqlite3 data/newport-crm.db < server/db/seed.sql
+-- Replace SQLite with Postgres in production. Do not commit runtime data/*.db files.
 
 PRAGMA foreign_keys = ON;
 
@@ -13,6 +14,12 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Dataset version and other durable app keys. Seed writes demo_dataset=anon-letter-v1.
+CREATE TABLE IF NOT EXISTS app_meta (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL
 );
 
 -- Exactly five API key slots for application access (keys provisioned by security team).
@@ -32,11 +39,39 @@ CREATE TABLE IF NOT EXISTS api_keys (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Exactly one managerial master key — can revoke/provision the 5 API key slots
+-- and kick active sessions. Plaintext is shown only once at seed/provision time.
+CREATE TABLE IF NOT EXISTS manager_keys (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  holder_name TEXT NOT NULL,
+  key_prefix TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked')),
+  last_used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- In-app work-email style notifications (best-effort live feed)
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  from_address TEXT NOT NULL,
+  to_address TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  read_flag INTEGER NOT NULL DEFAULT 0,
+  related_project TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
-  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password')),
+  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
   api_key_id TEXT REFERENCES api_keys(id),
   ip_address TEXT,
   user_agent TEXT,
@@ -200,6 +235,50 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Per-user UI preferences (sidebar order, etc.)
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  nav_order TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Per-session-key meeting calendars (slot 1 ≠ slot 2 ≠ manager)
+CREATE TABLE IF NOT EXISTS key_calendars (
+  owner_key TEXT PRIMARY KEY,
+  events_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Meetings / calls hub (Teams, Zoom, Skype, phone, landline, face call)
+CREATE TABLE IF NOT EXISTS meetings (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'facecall',
+  status TEXT NOT NULL DEFAULT 'scheduled',
+  direction TEXT NOT NULL DEFAULT 'conference',
+  started_at TEXT,
+  ended_at TEXT,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  host_name TEXT NOT NULL DEFAULT '',
+  participant_name TEXT NOT NULL DEFAULT '',
+  participant_company TEXT NOT NULL DEFAULT '',
+  participant_email TEXT NOT NULL DEFAULT '',
+  participant_phone TEXT NOT NULL DEFAULT '',
+  join_url TEXT NOT NULL DEFAULT '',
+  dialed_number TEXT NOT NULL DEFAULT '',
+  opportunity_id TEXT,
+  project_name TEXT NOT NULL DEFAULT '',
+  transcript TEXT NOT NULL DEFAULT '',
+  transcript_lines_json TEXT NOT NULL DEFAULT '[]',
+  summary TEXT NOT NULL DEFAULT '',
+  customer_notes TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  recording_enabled INTEGER NOT NULL DEFAULT 1,
+  owner_key TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_opportunities_stage ON opportunities(stage);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
@@ -207,6 +286,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_change_history_created ON change_history(created_at);
 CREATE INDEX IF NOT EXISTS idx_change_history_resource ON change_history(resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_change_history_slot ON change_history(api_key_slot);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_opp ON contacts(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_started ON meetings(started_at);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
+CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key);
