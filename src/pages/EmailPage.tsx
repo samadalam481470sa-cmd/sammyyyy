@@ -293,7 +293,7 @@ export function EmailPage() {
     setStatus(
       mode === 'graph'
         ? `Sent from ${account} through Microsoft Graph.`
-        : `Saved in the fictional Sent folder for ${account}. Microsoft did not deliver this message.`,
+        : `Outlook is not connected. Nothing was sent for ${account}.`,
     )
     if (mode === 'graph') void syncOutlookNow(email, { incremental: true, mail: true })
   }
@@ -302,7 +302,9 @@ export function EmailPage() {
     setComposing(null)
     setFolder('sent')
     setMobilePane('read')
-    void sendDraftMail(email, message).then(finishSend)
+    void sendDraftMail(email, message)
+      .then(finishSend)
+      .catch((err) => setStatus(err instanceof Error ? err.message : 'Outlook did not send the draft.'))
   }
 
   const sendCurrent = () => {
@@ -399,7 +401,7 @@ export function EmailPage() {
       setSelectedId(saved.id)
       setComposing(null)
       setMobilePane('read')
-      setStatus(saved.demo ? `Draft kept for ${account}.` : `Draft saved in Outlook for ${account}.`)
+      setStatus(saved.demo ? `Draft kept in this browser only. Outlook is not connected for ${account}.` : `Draft saved in Outlook for ${account}.`)
     })
   }
 
@@ -633,9 +635,21 @@ export function EmailPage() {
               </div>
             </div>
             {graphMode === 'demo' && (
-              <p className="border-b border-[#e0e0e0] bg-[#fff8e6] px-4 py-2 text-xs text-[#7a5b00]">
-                Sample mail for {account}. Click Connect Outlook to load your real inbox here.
-              </p>
+              <div data-testid="outlook-not-connected" className="border-b border-[#e0e0e0] bg-[#fff8e6] px-4 py-3 text-xs text-[#7a5b00]">
+                <p className="font-semibold">Outlook not connected</p>
+                <p className="mt-1">
+                  No mail has been retrieved for {account}. Click Connect Outlook and sign in with this account on
+                  Microsoft&apos;s page. Microsoft asks you to approve mail access the first time.
+                </p>
+                {graphTokenError() && <p className="mt-1">Last error: {graphTokenError()}</p>}
+                <button
+                  type="button"
+                  onClick={connectOutlook}
+                  className="mt-2 inline-flex h-7 items-center rounded-md bg-[#0f6cbd] px-3 font-semibold text-white hover:bg-[#115ea3]"
+                >
+                  Connect Outlook
+                </button>
+              </div>
             )}
             <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
               {visible.map((message) => {

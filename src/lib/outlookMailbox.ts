@@ -152,13 +152,15 @@ function isMailMessage(value: unknown): value is MailMessage {
 
 export function loadMailbox(email: string): MailMessage[] {
   try {
+    // Only real Outlook mail (and the user's own local drafts) is shown.
+    // Fictional sample mail is never presented as if it came from Outlook.
     const raw = localStorage.getItem(mailboxKey(email))
-    if (raw == null) return demoMailbox(email)
+    if (raw == null) return []
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return demoMailbox(email)
-    return parsed.filter(isMailMessage)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isMailMessage).filter((message) => !message.demo || message.folder === 'drafts')
   } catch {
-    return demoMailbox(email)
+    return []
   }
 }
 

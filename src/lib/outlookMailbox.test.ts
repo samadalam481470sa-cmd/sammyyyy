@@ -38,11 +38,8 @@ describe('per-account Outlook mailbox', () => {
   })
 
   it('keeps messages and last-sync time on the normalized login email', () => {
-    const mary = loadMailbox('Mary@Outlook.com')
-    expect(mary.every((message) => message.demo)).toBe(true)
-    expect(mary.find((message) => message.folder === 'inbox')?.to).toBe('mary@outlook.com')
-    expect(mary.find((message) => message.folder === 'sent')?.from).toBe('mary@outlook.com')
-    expect(mary.some((message) => /fictional/i.test(`${message.subject} ${message.preview} ${message.body}`))).toBe(true)
+    // Not connected: no fictional mail is shown as Outlook mail.
+    expect(loadMailbox('Mary@Outlook.com')).toEqual([])
 
     saveMailbox('Mary@Outlook.com', [
       {
@@ -76,7 +73,7 @@ describe('per-account Outlook mailbox', () => {
       JSON.stringify([{ id: 'shared', to: 'someone-else@example.com', demo: false }]),
     )
     expect(loadMailbox('mary@outlook.com').some((message) => message.id === 'shared')).toBe(false)
-    expect(loadMailbox('mary@outlook.com')[0]?.to).toBe('mary@outlook.com')
+    expect(loadMailbox('mary@outlook.com')).toEqual([])
   })
 
   it('merges by id without duplicates and keeps other folders', () => {

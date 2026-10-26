@@ -93,4 +93,4 @@ export const CURRENT_USER = {
 
 /** Demo disclaimer — all financial figures are fictional. */
 export const DEMO_DISCLAIMER =
-  'Demo data for illustration only. Financial figures are fictional and do not represent actual Newport data.'
+  'Fictional seed records for development and testing. Figures do not represent actual Newport data.'

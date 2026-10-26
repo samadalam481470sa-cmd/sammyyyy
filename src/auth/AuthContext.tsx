@@ -29,7 +29,6 @@ import {
   hasEntraRedirectReturn,
   isMsalConfigured,
   loadEntraConfig,
-  microsoftLogout,
   rememberMicrosoftReturnError,
   startMicrosoftLogin,
   userFromMicrosoftAccount,
@@ -227,11 +226,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore
       }
-      try {
-        await microsoftLogout()
-      } catch {
-        await clearMicrosoftCache().catch(() => undefined)
-      }
+      // Clear Microsoft tokens in this app only. A full Microsoft sign-out redirect
+      // sends the user to Microsoft's "pick an account" page and often leaves the
+      // next sign-in stuck, so it is not used here.
+      await clearMicrosoftCache().catch(() => undefined)
     } finally {
       signingOutRef.current = false
       setSigningOut(false)

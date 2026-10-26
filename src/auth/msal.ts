@@ -330,7 +330,7 @@ export function markMicrosoftLoginStarted(loginHint?: string): void {
   }
 }
 
-function clearStuckMicrosoftInteraction(): void {
+export function clearStuckMicrosoftInteraction(): void {
   try {
     const keys: string[] = []
     for (let i = 0; i < sessionStorage.length; i += 1) {
