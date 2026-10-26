@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite --host 0.0.0.0 --port 5173",
-    "dev:api": "tsx server/index.ts",
+    "dev:api": "tsx --tsconfig tsconfig.app.json server/index.ts",
     "build": "tsc -b && vite build",
     "build:desktop": "node scripts/build-desktop.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "db:dump": "tsx scripts/dump-seed.ts",
+    "db:dump": "tsx --tsconfig tsconfig.app.json scripts/dump-seed.ts",
     "db:rebuild": "mkdir -p data && rm -f data/newport-crm.db data/newport-crm.db-wal data/newport-crm.db-shm && sqlite3 data/newport-crm.db < server/db/schema.sql && sqlite3 data/newport-crm.db < server/db/seed.sql",
     "db:reset": "rm -f data/newport-crm.db data/newport-crm.db-wal data/newport-crm.db-shm && npm run dev:api"
   },
