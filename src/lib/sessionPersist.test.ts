@@ -54,9 +54,11 @@ describe('logout keeps CRM edits', () => {
 
     await storeSession('msal', mary, 'email-fingerprint')
     expect(getStoredSession()?.user.email).toBe('mary@outlook.com')
-    expect(localStorage.getItem(TOKEN_KEY)).toBe('msal')
-    expect(localStorage.getItem(USER_KEY)).toBeTruthy()
-    expect(localStorage.getItem(PROOF_KEY)).toBeTruthy()
+    // Sign-in is kept only for this tab, never in localStorage.
+    expect(sessionStorage.getItem(TOKEN_KEY)).toBe('msal')
+    expect(sessionStorage.getItem(USER_KEY)).toBeTruthy()
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(localStorage.getItem(USER_KEY)).toBeNull()
 
     clearSession()
 

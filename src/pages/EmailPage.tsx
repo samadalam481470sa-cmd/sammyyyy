@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+import { ensureMsal } from '@/auth/msal'
 import {
   Archive,
   ArrowLeft,
@@ -44,6 +45,7 @@ import {
   downloadOutlookAttachment,
   getOutlookMessage,
   listOutlookAttachments,
+  graphTokenError,
   outlookToken,
 } from '@/lib/outlookGraph'
 import {
@@ -254,14 +256,19 @@ export function EmailPage() {
     })
   }
 
+  // Start MSAL early so the Microsoft popup opens inside the click.
+  useEffect(() => {
+    void ensureMsal()
+  }, [])
+
   const connectOutlook = () => {
     setSyncing(true)
     setStatus('Connecting Outlook…')
-    void outlookToken(true).then((token) => {
+    void outlookToken(true, email).then((token) => {
       if (!token) {
         setSyncing(false)
         setGraphMode('demo')
-        setStatus(`Fictional mailbox for ${account}. Outlook consent was not granted.`)
+        setStatus(graphTokenError() ?? `Outlook sign-in did not finish for ${account}.`)
         return
       }
       void syncOutlookNow(email, { incremental: false, mail: true })

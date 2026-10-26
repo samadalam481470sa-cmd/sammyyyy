@@ -1,4 +1,6 @@
-import { getGraphAccessToken } from '@/auth/msal'
+import { getGraphAccessToken, graphTokenError } from '@/auth/msal'
+
+export { graphTokenError }
 import { parseAddresses } from '@/lib/mailAddress'
 import type { MailAttachment, MailFolder, MailMessage } from '@/lib/outlookMailbox'
 import type { CalendarEvent } from '@/lib/meetingCalendar'
@@ -222,8 +224,8 @@ async function readError(res: Response, fallback: string): Promise<Error> {
   return new Error(`${fallback} (${res.status}).`)
 }
 
-export async function outlookToken(interactive = false): Promise<string | null> {
-  return getGraphAccessToken([...OUTLOOK_SCOPES], { interactive })
+export async function outlookToken(interactive = false, loginHint?: string): Promise<string | null> {
+  return getGraphAccessToken([...OUTLOOK_SCOPES], { interactive, loginHint })
 }
 
 export async function listOutlookFolder(token: string, folder: MailFolder): Promise<MailMessage[]> {

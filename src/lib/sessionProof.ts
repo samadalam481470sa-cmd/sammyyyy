@@ -17,7 +17,9 @@ const PROOF_VERSION = 3 as const
 
 function storageGet(key: string): string | null {
   try {
-    return localStorage.getItem(key) ?? sessionStorage.getItem(key)
+    // Sign-in lives only in this tab. Old copies in localStorage are dropped.
+    localStorage.removeItem(key)
+    return sessionStorage.getItem(key)
   } catch {
     return null
   }
@@ -25,7 +27,7 @@ function storageGet(key: string): string | null {
 
 function storageSet(key: string, value: string): void {
   try {
-    localStorage.setItem(key, value)
+    localStorage.removeItem(key)
   } catch {
     // private mode
   }

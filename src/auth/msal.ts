@@ -8,6 +8,7 @@ import {
   type RedirectRequest,
 } from '@azure/msal-browser'
 import type { AuthUser } from '@/types'
+import { sameMailbox } from '@/lib/userPrivacy'
 
 export const LOGIN_SCOPES = ['openid', 'profile', 'email', 'User.Read']
 export const GRAPH_FILE_SCOPES = ['User.Read', 'Files.ReadWrite']
@@ -429,7 +430,7 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
         navigateToLoginRequestUrl: false,
       },
       cache: {
-        cacheLocation: 'localStorage',
+        cacheLocation: 'sessionStorage',
         storeAuthStateInCookie: false,
       },
     })
@@ -569,23 +570,109 @@ export function buildGraphTokenRequest<T extends object>(scopes: string[], accou
 
 export async function getGraphAccessToken(
   scopes: string[] = GRAPH_FILE_SCOPES,
-  options?: { interactive?: boolean },
+  options?: { interactive?: boolean; loginHint?: string },
 ): Promise<string | null> {
   const interactive = options?.interactive !== false
+  lastGraphTokenError = null
   const instance = await ensureMsal()
-  const account = instance?.getActiveAccount() ?? instance?.getAllAccounts()[0]
-  if (!instance || !account) return null
+  if (!instance) {
+    lastGraphTokenError = 'Microsoft sign-in could not start in this window.'
+    return null
+  }
+  const hint = graphLoginHint(options?.loginHint)
+  // Only a Microsoft account that belongs to the logged-in user may be used.
+  // Any other cached account (a previous user on this browser) is removed.
+  const accounts = instance.getAllAccounts()
+  const account = hint ? (accounts.find((row) => sameMailbox(row.username, hint)) ?? null) : (instance.getActiveAccount() ?? accounts[0] ?? null)
+  for (const other of accounts) {
+    if (other !== account) {
+      try {
+        await instance.clearCache({ account: other })
+      } catch {
+        // stale entry; ignore
+      }
+    }
+  }
+  instance.setActiveAccount(account)
+
+  // No Microsoft account for this user yet. Open the Microsoft popup so they
+  // sign in and grant mail consent.
+  if (!account) {
+    if (!interactive) return null
+    return graphPopup(instance, { scopes, prompt: 'select_account', loginHint: hint }, hint)
+  }
+
   const request = buildGraphTokenRequest(scopes, account)
   try {
     const silent = await instance.acquireTokenSilent(request)
     return silent.accessToken
   } catch (err) {
-    if (!interactive || !(err instanceof InteractionRequiredAuthError)) return null
-    try {
-      const popup = await instance.acquireTokenPopup(request)
-      return popup.accessToken
-    } catch {
+    if (!interactive) return null
+    if (!(err instanceof InteractionRequiredAuthError) && !(err instanceof BrowserAuthError)) {
+      lastGraphTokenError = describeGraphError(err)
       return null
     }
+    return graphPopup(instance, request, hint)
+  }
+}
+
+let lastGraphTokenError: string | null = null
+
+/** Plain reason the last Graph token request failed. Null when it worked or was not tried. */
+export function graphTokenError(): string | null {
+  return lastGraphTokenError
+}
+
+function graphLoginHint(explicit?: string): string | undefined {
+  const fromArg = explicit?.trim()
+  if (fromArg) return fromArg
+  try {
+    const raw = sessionStorage.getItem('newport_crm_session_user')
+    const email = raw ? String((JSON.parse(raw) as { email?: string }).email ?? '').trim() : ''
+    return email.includes('@') ? email : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function describeGraphError(err: unknown): string {
+  const code = (err as { errorCode?: string })?.errorCode ?? ''
+  const text = err instanceof Error ? err.message : String(err)
+  if (code === 'popup_window_error' || code === 'empty_window_error') {
+    return 'The browser blocked the Microsoft popup. Allow popups for this site and click Connect Outlook again.'
+  }
+  if (code === 'user_cancelled') return 'The Microsoft window was closed before sign-in finished.'
+  if (/AADSTS65001|AADSTS90094|admin/i.test(text)) {
+    return 'Your organization requires an admin to approve mail access for this app. Ask your IT admin to grant consent, or connect a personal Outlook.com account.'
+  }
+  if (/AADSTS50020|AADSTS50011/i.test(text)) {
+    return 'Microsoft rejected this account or redirect address for the app registration.'
+  }
+  return text || 'Microsoft sign-in failed.'
+}
+
+async function graphPopup(
+  instance: PublicClientApplication,
+  request: PopupRequest,
+  expectedEmail?: string,
+): Promise<string | null> {
+  try {
+    const result = await instance.acquireTokenPopup(request)
+    // Refuse a mailbox that is not the logged-in user's own.
+    if (expectedEmail && result.account && !sameMailbox(result.account.username, expectedEmail)) {
+      try {
+        await instance.clearCache({ account: result.account })
+      } catch {
+        // ignore
+      }
+      instance.setActiveAccount(null)
+      lastGraphTokenError = `You signed in to Microsoft as ${result.account.username}. Connect Outlook with ${expectedEmail}, the account logged in here.`
+      return null
+    }
+    if (result.account) instance.setActiveAccount(result.account)
+    return result.accessToken
+  } catch (err) {
+    lastGraphTokenError = describeGraphError(err)
+    return null
   }
 }
