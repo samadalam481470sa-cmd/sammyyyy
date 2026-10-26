@@ -39,6 +39,79 @@ export class MicrosoftAuthUnavailableError extends Error {
   }
 }
 
+/** Thrown when sign-in was handed to the real browser because this window cannot run it. */
+export class MicrosoftOpenedElsewhereError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MicrosoftOpenedElsewhereError'
+  }
+}
+
+/** Loopback hosts that are not registered as Entra redirect URIs. Only "localhost" is. */
+const LOOPBACK_ALIASES = new Set(['127.0.0.1', '0.0.0.0', '[::1]', '::1'])
+
+export type MicrosoftBlockReason = 'embedded' | 'insecure' | 'loopback-alias' | null
+
+/**
+ * Why Microsoft sign-in cannot run in this window:
+ * - embedded: inside an iframe (Cursor / VS Code preview). Microsoft's page refuses to load in frames.
+ * - insecure: plain http on a LAN IP. The browser hides WebCrypto, so MSAL cannot start.
+ * - loopback-alias: 127.0.0.1 / 0.0.0.0. Entra only accepts the registered http://localhost:5173/.
+ */
+export function microsoftBlockReason(
+  env: { href: string; framed: boolean; hasCrypto: boolean } | null = null,
+): MicrosoftBlockReason {
+  let href = env?.href
+  let framed = env?.framed
+  let hasCrypto = env?.hasCrypto
+  if (!env) {
+    if (typeof window === 'undefined') return null
+    href = window.location.href
+    try {
+      framed = window.self !== window.top
+    } catch {
+      framed = true
+    }
+    hasCrypto = Boolean(window.isSecureContext !== false && window.crypto?.subtle)
+  }
+  let host = ''
+  try {
+    host = new URL(href ?? '').hostname
+  } catch {
+    return null
+  }
+  if (framed) return 'embedded'
+  if (LOOPBACK_ALIASES.has(host)) return 'loopback-alias'
+  if (!hasCrypto) return 'insecure'
+  return null
+}
+
+/** Same page on the registered "localhost" host, so Entra accepts the redirect. */
+export function registeredBrowserUrl(href: string): string {
+  const url = new URL(href)
+  if (LOOPBACK_ALIASES.has(url.hostname)) url.hostname = 'localhost'
+  return url.toString()
+}
+
+/** Open the app in the real browser (or move to localhost) instead of failing silently. */
+function handOffMicrosoftSignIn(reason: Exclude<MicrosoftBlockReason, null>): never {
+  const target = registeredBrowserUrl(window.location.href)
+  if (reason === 'loopback-alias') {
+    window.location.assign(target)
+    throw new MicrosoftOpenedElsewhereError('Moving to localhost so Microsoft accepts the sign-in…')
+  }
+  if (reason === 'embedded') {
+    window.open(target, '_blank', 'noopener,noreferrer')
+    throw new MicrosoftOpenedElsewhereError(
+      'Microsoft sign-in cannot run inside the Cursor preview. The app opened in your browser — sign in there. If nothing opened, copy this address into Chrome or Edge: ' +
+        target,
+    )
+  }
+  throw new MicrosoftOpenedElsewhereError(
+    'Microsoft sign-in needs a secure address. Open http://localhost:5173 on this computer, or the live link https://samadalam481470sa-cmd.github.io/sammyyyy/.',
+  )
+}
+
 const COMMON_AUTHORITY = 'https://login.microsoftonline.com/common'
 
 /** Public SPA client ID. Not a secret. Work + personal Microsoft accounts. */
@@ -340,6 +413,9 @@ export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
 export async function ensureMsal(): Promise<PublicClientApplication | null> {
   if (pca) return pca
   if (!msalClientId()) return null
+  // MSAL cannot start (or would hang) in a preview iframe or an insecure page. Skip it fast.
+  const blocked = microsoftBlockReason()
+  if (blocked === 'embedded' || blocked === 'insecure') return null
   if (initPromise) return initPromise
   initPromise = (async () => {
     const clientId = msalClientId()
@@ -431,6 +507,8 @@ export function purgeMicrosoftAuthStorage(): void {
 }
 
 export async function startMicrosoftLogin(loginHint?: string): Promise<MicrosoftLoginResult> {
+  const blocked = microsoftBlockReason()
+  if (blocked) handOffMicrosoftSignIn(blocked)
   const instance = await ensureMsal()
   if (!instance) throw new MicrosoftAuthUnavailableError()
 

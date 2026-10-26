@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { ensureMsal, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
+import { ensureMsal, hasEntraRedirectReturn, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { installClientLogging } from '@/lib/clientLog'
 
@@ -36,10 +36,18 @@ function registerServiceWorker(): void {
     .catch(() => undefined)
 }
 
-void Promise.race([
-  loadEntraConfig().then(() => ensureMsal()),
-  new Promise((resolve) => window.setTimeout(resolve, 8000)),
-])
+const msalWarmup = loadEntraConfig()
+  .then(() => ensureMsal())
+  .catch(() => null)
+
+// Only hold the first paint while Microsoft is handing back a sign-in (?code=…), so the
+// router cannot strip the response before MSAL reads it. Normal loads render at once.
+const waitForMicrosoft = hasEntraRedirectReturn()
+
+void (waitForMicrosoft
+  ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 5000))])
+  : Promise.resolve()
+)
   .catch(() => undefined)
   .finally(() => {
     render()
