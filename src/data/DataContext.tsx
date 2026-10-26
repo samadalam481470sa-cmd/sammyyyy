@@ -17,7 +17,9 @@ import {
 } from '@/lib/api'
 import { useAuth } from '@/auth/AuthContext'
 import { mockOpportunities } from '@/data/mockOpportunities'
+import { coverOpportunities, mergeMissingById, sprintExtraTasks } from '@/data/sprintSeed'
 import {
+  mockContacts,
   mockDocuments,
   mockTasksDb,
   type DocumentRecord,
@@ -108,10 +110,16 @@ function decorateOpportunities(list: Opportunity[], tasks: TaskRecord[]): Opport
 }
 
 function snapshotLocalCrm(owner: string, users: CrmUser[]) {
-  const rawTasks = applyTaskArchiveRules(
-    loadOwnedCollection('tasks', owner, mockTasksDb).map((row) => migrateTaskRecord(row, users)),
-  )
-  const rawOpps = loadOwnedCollection('opportunities', owner, mockOpportunities)
+  const storedTasks = loadOwnedCollection('tasks', owner, mockTasksDb)
+  const mergedTasks = mergeMissingById(storedTasks, sprintExtraTasks())
+  if (mergedTasks.length !== storedTasks.length) saveOwnedCollection('tasks', owner, mergedTasks)
+  const rawTasks = applyTaskArchiveRules(mergedTasks.map((row) => migrateTaskRecord(row, users)))
+  const storedOpps = loadOwnedCollection('opportunities', owner, mockOpportunities)
+  const rawOpps = mergeMissingById(storedOpps, mockOpportunities)
+  if (rawOpps.length !== storedOpps.length) saveOwnedCollection('opportunities', owner, rawOpps)
+  const storedContacts = loadOwnedCollection('contacts', owner, mockContacts)
+  const coveredContacts = coverOpportunities(mergeMissingById(storedContacts, mockContacts), rawOpps)
+  if (coveredContacts.length !== storedContacts.length) saveOwnedCollection('contacts', owner, coveredContacts)
   const rawDocs = loadOwnedCollection('documents', owner, mockDocuments)
   const rawActivity = loadOwnedCollection<ActivityItem>('activity', owner, [])
   return {

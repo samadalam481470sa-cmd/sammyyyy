@@ -52,9 +52,8 @@ describe('dashboard filters', () => {
       search: 'project a',
     }
     const result = filterOpportunities(mockOpportunities, filters)
-    expect(result).toHaveLength(1)
-    expect(result[0].projectName).toBe('Project A')
-    expect(result[0].entityName).toBe('Entity A')
+    expect(result.some((row) => row.id === 'opp-a' && row.entityName === 'Entity A')).toBe(true)
+    expect(result.every((row) => `${row.projectName} ${row.entityName}`.toLowerCase().includes('project a'))).toBe(true)
   })
 
   it('filters needs attention', () => {

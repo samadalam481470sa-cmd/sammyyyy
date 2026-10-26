@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Bell, Plus, Search } from 'lucide-react'
+import { Bell, Plus, RefreshCw, Search } from 'lucide-react'
+import { requestOutlookSync } from '@/lib/outlookMailbox'
 import { getGreeting } from '@/utils/dashboard'
 import { useAuth } from '@/auth/AuthContext'
 import { NotificationsPanel } from '@/components/layout/NotificationsPanel'
@@ -43,6 +44,15 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
           </div>
 
           <div className="relative flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => requestOutlookSync()}
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:bg-canvas hover:text-ink"
+              aria-label="Sync Outlook"
+              title="Sync Outlook"
+            >
+              <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
+            </button>
             <div className="relative">
               <Search
                 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle"

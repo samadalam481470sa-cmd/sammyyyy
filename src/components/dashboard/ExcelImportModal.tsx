@@ -224,7 +224,7 @@ export function ExcelImportModal({
                 Open Excel on the web
               </a>
               <p className="text-[11px] leading-relaxed text-ink-subtle">
-                Headers like Project Name, Entity, Status, Stage, NWP, Net Revenue, PF EBITDA map into
+                Headers like Project Name, Company, Status, Stage, NWP, Net Revenue, PF EBITDA map into
                 matching CRM elements. Unknown columns stay red so you can rename them in Excel.
               </p>
             </div>

@@ -5,6 +5,7 @@
  */
 
 import { anonymousEntityName, anonymousProjectName } from '../lib/demoAliases'
+import { sprintCoverageContacts, sprintExtraTasks } from './sprintSeed'
 
 export interface ContactRecord {
   id: string
@@ -15,6 +16,7 @@ export interface ContactRecord {
   email: string
   phone: string
   opportunityId: string | null
+  opportunityIds?: string[]
   projectName: string
   status: string
   lastContactDate: string | null
@@ -227,6 +229,7 @@ export const mockContacts: ContactRecord[] = [
     lastContactDate: '2026-10-01',
     notes: 'Sample intermediary covering two active files.',
   },
+  ...sprintCoverageContacts(),
 ]
 
 export const mockTasksDb: TaskRecord[] = [
@@ -328,6 +331,7 @@ export const mockTasksDb: TaskRecord[] = [
     notes: 'Completed earlier in the demo timeline.',
     completedAt: '2026-10-01T15:00:00Z',
   },
+  ...sprintExtraTasks(),
 ]
 
 export const mockSources: SourceRecord[] = [

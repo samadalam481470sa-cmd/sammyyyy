@@ -4,28 +4,6 @@
  * Sample names and figures are illustrative only — not live Newport metrics.
  */
 
-/** Seed opportunity IDs (A–P). Order is fixed and ID-keyed, not UI position. */
-export const DEMO_SEED_OPPORTUNITY_IDS = [
-  'opp-a',
-  'opp-b',
-  'opp-c',
-  'opp-d',
-  'opp-e',
-  'opp-f',
-  'opp-g',
-  'opp-h',
-  'opp-i',
-  'opp-j',
-  'opp-k',
-  'opp-l',
-  'opp-m',
-  'opp-n',
-  'opp-o',
-  'opp-p',
-] as const
-
-export type DemoSeedOpportunityId = (typeof DEMO_SEED_OPPORTUNITY_IDS)[number]
-
 /** Excel-style column codes: 0 → A, 25 → Z, 26 → AA. */
 export function indexToLetterCode(index: number): string {
   if (!Number.isFinite(index) || index < 0) return 'A'
@@ -37,6 +15,13 @@ export function indexToLetterCode(index: number): string {
   } while (n >= 0)
   return out
 }
+
+/** Seed opportunity IDs A through the 42nd letter code. Order is ID-keyed. */
+export const DEMO_SEED_OPPORTUNITY_IDS = Array.from({ length: 42 }, (_, index) => {
+  return `opp-${indexToLetterCode(index).toLowerCase()}`
+})
+
+export type DemoSeedOpportunityId = (typeof DEMO_SEED_OPPORTUNITY_IDS)[number]
 
 export function letterCodeToIndex(code: string): number {
   const letters = code.trim().toUpperCase()

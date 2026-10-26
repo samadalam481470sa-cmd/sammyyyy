@@ -76,7 +76,7 @@ export function DocumentsPage() {
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Documents</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Checkmarks mean the file is in the CRM. X means that slot is still missing.
+            Navy icons mean a file is saved. Grey icons mean that slot is empty.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -173,30 +173,24 @@ export function DocumentsPage() {
                     active ? 'border-accent bg-accent-soft/50' : 'border-border hover:border-accent-muted'
                   }`}
                 >
-                  <p className="font-brand text-xl font-bold text-navy-900">{opp.projectName}</p>
-                  <p className="mt-1 text-sm font-semibold text-ink">{dealIdFromOpportunity(opp)}</p>
-                  <p className="text-sm text-ink-muted">{opp.entityName}</p>
-                  <div className="mt-4 flex flex-wrap gap-x-2 gap-y-1.5">
-                    {DOCUMENT_SLOT_META.map((slot) => {
-                      const record = slotDocument(documents, opp.id, slot.id)
-                      const available = hasAttachedFile(record)
-                      return (
-                        <span
-                          key={slot.id}
-                          className="inline-flex items-center gap-1 whitespace-nowrap"
-                          title={
-                            available
-                              ? `${slot.label}: ${record?.name ?? 'Available'}`
-                              : `${slot.label}: Missing`
-                          }
-                        >
-                          <SlotPresenceIcon available={available} size="sm" />
-                          <span className="text-[10px] font-semibold tracking-wide text-ink-muted">
-                            {slot.abbr}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-brand text-lg font-bold text-navy-900">{opp.projectName}</p>
+                      <p className="mt-1 text-xs font-semibold text-ink">{dealIdFromOpportunity(opp)}</p>
+                      <p className="truncate text-xs text-ink-muted">{opp.entityName}</p>
+                    </div>
+                    <div className="grid shrink-0 grid-cols-3 gap-1.5">
+                      {DOCUMENT_SLOT_META.map((slot) => {
+                        const record = slotDocument(documents, opp.id, slot.id)
+                        const available = hasAttachedFile(record)
+                        return (
+                          <span key={slot.id} className="flex flex-col items-center gap-0.5" title={slot.label}>
+                            <SlotPresenceIcon available={available} size="sm" />
+                            <span className="text-[9px] font-semibold tracking-wide text-ink-muted">{slot.abbr}</span>
                           </span>
-                        </span>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 </button>
               )

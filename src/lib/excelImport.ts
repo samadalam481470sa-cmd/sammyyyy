@@ -12,7 +12,7 @@ export type ImportDestination =
 /** Canonical CRM fields we can autofill from a sheet. */
 export const CRM_FIELD_LABELS: Record<string, string> = {
   projectName: 'Project name',
-  entityName: 'Entity / company',
+  entityName: 'Company Name',
   type: 'Opportunity type',
   status: 'Status',
   stage: 'Stage',

@@ -33,20 +33,13 @@ describe('document slots', () => {
   it('lists the six required deal types with short labels', () => {
     expect([...DEFAULT_DOCUMENT_SLOTS]).toEqual([
       'NDA',
-      'CIM',
       'LOI',
+      'CIM',
       'IOI',
       'Draft Agreement',
       'Finalized Agreement',
     ])
-    expect(DOCUMENT_SLOT_META.map((s) => s.abbr)).toEqual([
-      'NDA',
-      'CIM',
-      'LOI',
-      'IOI',
-      'Draft',
-      'Final',
-    ])
+    expect(DOCUMENT_SLOT_META.map((s) => s.abbr)).toEqual(['NDA', 'LOI', 'CIM', 'IOI', 'DA', 'FA'])
   })
 
   it('maps aliases including Teaser / CIM onto the standard slots', () => {
@@ -55,7 +48,7 @@ describe('document slots', () => {
     expect(normalizeDocSlot('Final')).toBe('Finalized Agreement')
     expect(isDefaultDocumentSlot('Teaser / CIM')).toBe(true)
     expect(isDefaultDocumentSlot('Financials')).toBe(false)
-    expect(slotAbbreviation('Draft Agreement')).toBe('Draft')
+    expect(slotAbbreviation('Draft Agreement')).toBe('DA')
   })
 
   it('treats metadata-only rows as missing even when the name looks like a file', () => {

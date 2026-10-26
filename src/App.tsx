@@ -9,8 +9,7 @@ import { OpportunitiesPage } from '@/pages/OpportunitiesPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RelationshipsPage } from '@/pages/RelationshipsPage'
 import { TasksPage } from '@/pages/TasksPage'
-import { SourcesPage } from '@/pages/SourcesPage'
-import { CarriersPage } from '@/pages/CarriersPage'
+import { EmailPage } from '@/pages/EmailPage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
@@ -40,8 +39,9 @@ export default function App() {
               <Route path="projects" element={<Navigate to="/opportunities" replace />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />
-              <Route path="sources" element={<SourcesPage />} />
-              <Route path="carriers" element={<CarriersPage />} />
+              <Route path="sources" element={<Navigate to="/relationships" replace />} />
+              <Route path="carriers" element={<Navigate to="/relationships" replace />} />
+              <Route path="email" element={<EmailPage />} />
               <Route path="portfolio" element={<Navigate to="/" replace />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="reports" element={<ReportsPage />} />

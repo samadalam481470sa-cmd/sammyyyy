@@ -192,7 +192,7 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
               onChange={(e) => setField('projectName', e.target.value)}
             />
           </Field>
-          <Field label="Entity" required>
+          <Field label="Company Name" required>
             <input
               className="field-input"
               value={draft.entityName}
@@ -325,13 +325,17 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !draft.projectName.trim() || !draft.entityName.trim()}
             onClick={() =>
               void persist().then((ok) => {
                 if (ok) onClose()
               })
             }
-            className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+            className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
+              draft.projectName.trim() && draft.entityName.trim() && !saving
+                ? 'bg-navy-900 text-white hover:bg-navy-800'
+                : 'border border-border bg-white text-ink-muted'
+            }`}
           >
             {saveButtonLabel(saving)}
           </button>

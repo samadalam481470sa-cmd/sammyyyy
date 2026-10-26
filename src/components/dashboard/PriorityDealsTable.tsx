@@ -24,7 +24,7 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
           <thead>
             <tr className="border-b border-border bg-canvas/80 text-[11px] tracking-[0.06em] text-ink-subtle uppercase">
               <th className="px-5 py-3 font-semibold">Project</th>
-              <th className="px-3 py-3 font-semibold">Entity</th>
+              <th className="px-3 py-3 font-semibold">Company</th>
               <th className="px-3 py-3 font-semibold">Status</th>
               <th className="px-3 py-3 font-semibold">Stage</th>
               <th className="px-3 py-3 font-semibold">Deal Lead</th>

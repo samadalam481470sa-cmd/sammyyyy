@@ -9,6 +9,7 @@ import {
 } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { registerVaultFlush } from '@/lib/userVault'
+import { mergeMissingById } from '@/data/sprintSeed'
 
 const API_BASE = '/api/resources'
 
@@ -35,6 +36,7 @@ export interface ResourceApi<T extends { id: string }> {
   error: string | null
   save: (id: string, patch: Partial<T>) => Promise<T>
   create: (data: Partial<T>) => Promise<T>
+  remove: (id: string) => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -73,12 +75,19 @@ export function useResource<T extends { id: string }>(
     [persistLocal, resource, owner],
   )
 
+  const loadLocal = useCallback(() => {
+    const stored = loadOwnedCollection(resource, owner, mock)
+    const loaded = mergeMissingById(stored, mock)
+    if (loaded.length !== stored.length) saveOwnedCollection(resource, owner, loaded)
+    return loaded
+  }, [resource, owner, mock])
+
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
     if (isLocalDemo()) {
       localMode.current = true
-      const loaded = loadOwnedCollection(resource, owner, mock)
+      const loaded = loadLocal()
       itemsRef.current = loaded
       setItems(loaded)
       setLoading(false)
@@ -92,14 +101,14 @@ export function useResource<T extends { id: string }>(
       if (persistLocal) saveOwnedCollection(resource, owner, data)
     } catch (err) {
       localMode.current = true
-      const loaded = loadOwnedCollection(resource, owner, mock)
+      const loaded = loadLocal()
       itemsRef.current = loaded
       setItems(loaded)
       setError(err instanceof Error ? err.message : 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [resource, mock, owner, persistLocal])
+  }, [resource, mock, owner, persistLocal, loadLocal])
 
   useEffect(() => {
     itemsRef.current = items
@@ -187,5 +196,26 @@ export function useResource<T extends { id: string }>(
     [resource, writeLocal, owner, user],
   )
 
-  return { items, loading, error, save, create, refresh }
+  const remove = useCallback(
+    async (id: string) => {
+      const next = itemsRef.current.filter((item) => item.id !== id)
+      itemsRef.current = next
+      setItems(next)
+      writeLocal(next)
+      if (!localMode.current) {
+        await request(`/${resource}/${id}`, { method: 'DELETE' }).catch(() => undefined)
+      }
+      appendDemoChange({
+        resourceType: resource,
+        resourceId: id,
+        changeType: 'delete',
+        changedFields: ['id'],
+        createdAt: new Date().toISOString(),
+        ...changeMeta(),
+      })
+    },
+    [resource, writeLocal, owner, user],
+  )
+
+  return { items, loading, error, save, create, remove, refresh }
 }

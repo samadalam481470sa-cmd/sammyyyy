@@ -208,7 +208,7 @@ export function TasksPage() {
                 <th className="px-5 py-3 font-semibold">Priority</th>
                 <th className="px-3 py-3 font-semibold">Action</th>
                 <th className="px-3 py-3 font-semibold">Project Name</th>
-                <th className="px-3 py-3 font-semibold">Entity Name</th>
+                <th className="px-3 py-3 font-semibold">Company Name</th>
                 <th className="px-3 py-3 font-semibold">Owner</th>
                 <th className="px-3 py-3 font-semibold">Due Date</th>
                 <th className="px-5 py-3 font-semibold">Status</th>

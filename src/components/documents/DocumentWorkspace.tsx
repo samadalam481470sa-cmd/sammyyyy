@@ -518,9 +518,11 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving || deleting}
+            disabled={saving || deleting || !dirty}
             onClick={() => void persist()}
-            className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+            className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
+              dirty && !saving ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
+            }`}
           >
             {saveButtonLabel(saving)}
           </button>
@@ -578,7 +580,23 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
                 setConfirmDelete(false)
                 setDeleting(false)
                 deletingRef.current = false
-                loadSlot('NDA')
+                setPendingFile(null)
+                if (isDefaultDocumentSlot(draft.docType)) {
+                  const empty = emptyDraft(normalizeDocSlot(draft.docType))
+                  setEditingId(null)
+                  setMode('slot')
+                  setTab(normalizeDocSlot(draft.docType))
+                  setDraft(empty)
+                  setSaved(empty)
+                } else {
+                  const empty = emptyDraft('NDA')
+                  setEditingId(null)
+                  setMode('slot')
+                  setTab('NDA')
+                  setDraft(empty)
+                  setSaved(empty)
+                }
+                setMessage('Document removed')
               })
               .catch((err) => {
                 deletingRef.current = false

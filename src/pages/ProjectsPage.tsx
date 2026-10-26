@@ -31,7 +31,7 @@ export function ProjectsPage() {
     () => [
       { id: 'overview', label: 'Snapshot' },
       { id: 'status', label: 'Status' },
-      { id: 'entity', label: 'Entity' },
+      { id: 'entity', label: 'Company' },
       { id: 'diligence', label: 'Diligence' },
       { id: 'actions', label: 'Outstanding' },
     ],

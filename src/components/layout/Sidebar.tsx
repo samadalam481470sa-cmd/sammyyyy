@@ -22,6 +22,7 @@ import {
   GripVertical,
   Video,
   Settings,
+  Mail,
 } from 'lucide-react'
 import { NAV_ITEMS, type NavItem } from '@/data/constants'
 import { useAuth } from '@/auth/AuthContext'
@@ -49,6 +50,7 @@ const ICONS: Record<string, LucideIcon> = {
   sources: Building2,
   carriers: Shield,
   documents: FileText,
+  email: Mail,
   reports: BarChart3,
   meetings: Video,
   security: ShieldCheck,

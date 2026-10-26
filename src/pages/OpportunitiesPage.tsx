@@ -290,7 +290,7 @@ export function OpportunitiesPage() {
               <tr className="border-b border-border">
                 <th className="px-5 py-3 font-semibold">Deal ID</th>
                 <th className="px-3 py-3 font-semibold">Project Name</th>
-                <th className="px-3 py-3 font-semibold">Entity</th>
+                <th className="px-3 py-3 font-semibold">Company</th>
                 <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="px-3 py-3 font-semibold">Stage</th>
                 <th className="px-5 py-3 text-right font-semibold">NWP</th>

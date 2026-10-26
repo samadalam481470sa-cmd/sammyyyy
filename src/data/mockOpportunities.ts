@@ -1,8 +1,10 @@
-import type { Opportunity } from '@/types'
+import type { Opportunity, OpportunityStatus } from '@/types'
+import { ACQUISITION_STAGES } from './constants'
 import {
   anonymousEntityName,
   anonymousProjectName,
   demoProjectNumber,
+  indexToLetterCode,
 } from '../lib/demoAliases'
 
 /**
@@ -360,3 +362,50 @@ export const mockOpportunities: Opportunity[] = [
     diligenceNotes: '',
   }),
 ]
+
+const EXTRA_STATUSES: OpportunityStatus[] = [
+  'Active',
+  'Pending',
+  'Completed',
+  'Inactive',
+  'Closed',
+  'Declined',
+  'Withdrew',
+]
+const EXTRA_DATES = [
+  '2026-10-20',
+  '2026-10-26',
+  '2026-10-30',
+  '2026-11-06',
+  '2026-11-20',
+  '2026-12-15',
+  '2027-02-02',
+]
+const EXTRA_LEADS = ['Dennis DiCapua', 'Mary Sbaschnig', 'Alex Rivera']
+
+for (let index = mockOpportunities.length; index < 42; index += 1) {
+  const id = `opp-${indexToLetterCode(index).toLowerCase()}`
+  mockOpportunities.push(
+    deal(id, {
+      type: index % 2 === 0 ? 'Platform Acquisition' : 'Add-on Acquisition',
+      status: EXTRA_STATUSES[index % EXTRA_STATUSES.length],
+      stage: ACQUISITION_STAGES[index % ACQUISITION_STAGES.length],
+      dealLead: EXTRA_LEADS[index % EXTRA_LEADS.length],
+      sourceType: 'Other',
+      sourceName: 'Demo Advisory Group',
+      specialty: 'Specialty Casualty',
+      geography: 'United States',
+      nwp: 4_000_000 + index * 650_000,
+      netRevenue: 900_000 + index * 120_000,
+      pfEbitda: 400_000 + index * 55_000,
+      nextAction: 'Review fictional diligence notes',
+      nextActionDate: EXTRA_DATES[index % EXTRA_DATES.length],
+      priority: (['A', 'B', 'C'] as const)[index % 3],
+      lastActivityDate: '2026-10-01T15:00:00Z',
+      needsAttention: false,
+      attentionReasons: [],
+      outstandingItems: [],
+      diligenceNotes: 'Fictional sprint sample. Not a live Newport target.',
+    }),
+  )
+}

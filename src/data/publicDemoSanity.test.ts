@@ -32,8 +32,8 @@ describe('public demo sanitization', () => {
 
   it('keeps only anonymous project/entity labels in seed records', () => {
     for (const row of mockOpportunities) {
-      expect(row.projectName).toMatch(/^Project [A-P]$/)
-      expect(row.entityName).toMatch(/^Entity [A-P]$/)
+      expect(row.projectName).toMatch(/^Project [A-Z]{1,2}$/)
+      expect(row.entityName).toMatch(/^Entity [A-Z]{1,2}$/)
     }
     const blob = JSON.stringify([
       mockOpportunities,

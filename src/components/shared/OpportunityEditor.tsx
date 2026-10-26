@@ -44,7 +44,7 @@ interface OpportunityEditorProps {
 
 const DEFAULT_TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'entity', label: 'Entity' },
+  { id: 'entity', label: 'Company' },
   { id: 'diligence', label: 'Diligence' },
   { id: 'actions', label: 'Next Action' },
 ]
@@ -270,7 +270,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                   onChange={(e) => setField('projectName', e.target.value)}
                 />
               </Field>
-              <Field label="Entity / company">
+              <Field label="Company Name">
                 <input
                   className="field-input"
                   value={draft.entityName}
@@ -439,10 +439,14 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving || deleting}
+            disabled={saving || deleting || !dirty}
             data-testid="save-opportunity"
             onClick={() => void persist()}
-            className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+            className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
+              dirty && !saving
+                ? 'bg-navy-900 text-white hover:bg-navy-800'
+                : 'border border-border bg-white text-ink-muted'
+            }`}
           >
             {saveButtonLabel(saving)}
           </button>

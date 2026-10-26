@@ -251,7 +251,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           </label>
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Entity
+              Company
             </span>
             <input
               className="mt-1.5 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink-muted"
@@ -299,9 +299,11 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           {message && <p className="text-xs text-success">{message}</p>}
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || !dirty}
             onClick={() => void persist()}
-            className="h-10 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+            className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
+              dirty && !saving ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
+            }`}
           >
             {saveButtonLabel(saving)}
           </button>
