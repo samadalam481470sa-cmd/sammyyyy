@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PenSquare, RefreshCw } from 'lucide-react'
-import { lastOutlookSync, loadMailbox, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
-import { OUTLOOK_SYNCED_EVENT, deliverMail } from '@/lib/outlookSync'
-import { requestOutlookSync } from '@/lib/outlookMailbox'
+import { useAuth } from '@/auth/AuthContext'
+import { normalizeEmail } from '@/lib/emailIdentity'
+import { lastOutlookSync, loadMailbox, requestOutlookSync, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
+import { OUTLOOK_SYNCED_EVENT, deliverMail, syncOutlookNow } from '@/lib/outlookSync'
 
 const FOLDERS = [
   ['inbox', 'Inbox'],
@@ -11,14 +12,17 @@ const FOLDERS = [
 ] as const
 
 export function EmailPage() {
+  const { user } = useAuth()
+  const email = user?.email ?? ''
+  const account = normalizeEmail(email)
   const [folder, setFolder] = useState<(typeof FOLDERS)[number][0]>('inbox')
-  const [messages, setMessages] = useState<MailMessage[]>(() => loadMailbox())
+  const [messages, setMessages] = useState<MailMessage[]>(() => loadMailbox(email))
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
   const [draft, setDraft] = useState({ to: '', subject: '', body: '' })
-  const [status, setStatus] = useState('Demo mailbox. These messages were not sent or received in Outlook.')
+  const [status, setStatus] = useState('Checking Microsoft Graph…')
   const [syncing, setSyncing] = useState(false)
-  const [syncedAt, setSyncedAt] = useState<string | null>(() => lastOutlookSync())
+  const [syncedAt, setSyncedAt] = useState<string | null>(() => lastOutlookSync(email))
 
   const visible = useMemo(
     () => messages.filter((message) => message.folder === folder),
@@ -33,41 +37,59 @@ export function EmailPage() {
   }
 
   useEffect(() => {
+    setMessages(loadMailbox(email))
+    setSyncedAt(lastOutlookSync(email))
+    setSelectedId(null)
+    setComposing(false)
+    if (!email) return
+    setSyncing(true)
+    setStatus(`Checking Microsoft Graph for ${account}…`)
+    void syncOutlookNow(email)
+  }, [email, account])
+
+  useEffect(() => {
     const onSynced = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail
-      setMessages(loadMailbox())
-      setSyncedAt(lastOutlookSync())
+      setMessages(loadMailbox(email))
+      setSyncedAt(lastOutlookSync(email))
       setStatus(detail || 'Outlook check finished.')
       setSyncing(false)
     }
     window.addEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
     return () => window.removeEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
-  }, [])
+  }, [email])
 
   const openMessage = (message: MailMessage) => {
     setComposing(false)
     setSelectedId(message.id)
     setMessages((prev) => {
       const next = prev.map((row) => (row.id === message.id ? { ...row, read: true } : row))
-      saveMailbox(next)
+      saveMailbox(email, next)
       return next
     })
   }
 
   const sendMail = () => {
     if (!draft.subject.trim() && !draft.body.trim()) return
-    const replyToId = selected?.demo === false ? selected.id : undefined
-    void deliverMail({ to: draft.to, subject: draft.subject, body: draft.body, replyToId }).then((mode) => {
+    const replyToId = selected && !selected.demo ? selected.id : undefined
+    void deliverMail({
+      email,
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+      replyToId,
+      skipGraph: selected?.demo === true,
+    }).then((mode) => {
       setComposing(false)
       setDraft({ to: '', subject: '', body: '' })
       if (mode === 'graph') {
-        setStatus('Sent through Microsoft Outlook.')
+        setStatus(`Sent from ${account} through Microsoft Outlook.`)
         requestOutlookSync()
         return
       }
-      setMessages(loadMailbox())
+      setMessages(loadMailbox(email))
       setFolder('sent')
-      setStatus('Saved in the demo Sent folder. Microsoft did not deliver this message.')
+      setStatus(`Saved in the fictional Sent folder for ${account}. Microsoft did not deliver this message.`)
     }).catch((err) => {
       setStatus(err instanceof Error ? err.message : 'Outlook send failed. Nothing was delivered.')
     })
@@ -78,6 +100,7 @@ export function EmailPage() {
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-6 py-4">
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Email</h1>
+          <p className="text-sm font-semibold text-navy-900">{account || 'Sign in to open a mailbox'}</p>
           <p className="text-sm text-ink-muted">{status}</p>
           {syncedAt && <p className="text-[11px] text-ink-subtle">Last Outlook check {new Date(syncedAt).toLocaleString()}</p>}
         </div>
@@ -139,7 +162,7 @@ export function EmailPage() {
         <section className="bg-surface p-5">
           {composing ? (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-ink-muted">Send uses Outlook when mailbox permission is granted. Otherwise it stays in the demo folder.</p>
+              <p className="text-xs font-semibold text-ink-muted">From {account}. Send and reply use Outlook when Mail.Read, Mail.ReadWrite, and Mail.Send are granted. Otherwise the message stays in this account’s fictional Sent folder.</p>
               <input className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="To" value={draft.to} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} />
               <input className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="Subject" value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} />
               <textarea className="min-h-40 w-full rounded-lg border border-border px-3 py-2 text-sm" value={draft.body} onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))} />

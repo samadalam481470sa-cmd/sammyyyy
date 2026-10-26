@@ -20,7 +20,7 @@ import { TranscriptPanel } from '@/components/meetings/TranscriptPanel'
 import { MeetingCalendar } from '@/components/meetings/MeetingCalendar'
 import { TeamHuddle } from '@/components/meetings/TeamHuddle'
 import { createAzureTeamsMeeting } from '@/lib/azureMeetings'
-import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay, openPhoneLink } from '@/lib/meetingLinks'
+import { buildJoinUrl, channelLabel, formatDuration, normalizePhoneDisplay, openPhoneLink, teamsCallUrl } from '@/lib/meetingLinks'
 import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import {
   clearLiveMeetingDraft,
@@ -497,46 +497,37 @@ export function MeetingsPage() {
     summary,
   ])
 
-  const onSoftCall = async () => {
-    setChannel('phone')
-    const phone = normalizePhoneDisplay(dialNumber)
-    if (sanitizePhone(dialNumber).replace(/\D/g, '').length < 3) {
-      setError('Enter a valid phone number before calling.')
+  const startTeamsCall = async (label: string) => {
+    const me = user?.email?.trim()
+    if (!me) {
+      setError('Sign in with Microsoft before starting a Teams call.')
       return
     }
-    setCustomer((c) => ({ ...c, phone: c.phone || phone }))
-    const tel = buildJoinUrl('phone', { phone: dialNumber })
-    if (!openPhoneLink(tel)) {
-      setError('That number could not be sent to the phone dialer.')
+    const typed = dialNumber.trim()
+    const target = typed.includes('@') ? typed : me
+    const url = teamsCallUrl(target)
+    if (!isAllowedJoinUrl(url, 'teams')) {
+      setError('That Teams call could not be opened.')
       return
     }
+    safeOpenJoinUrl(url, 'teams')
+    setChannel('teams')
+    setMessage(`Teams call as ${me}${target !== me ? ` to ${target}` : ''}.`)
     await beginSession({
-      channel: 'phone',
-      title: sanitizeText(title, FIELD_LIMITS.title) || `Phone call ${phone}`,
+      channel: 'teams',
+      title: sanitizeText(title, FIELD_LIMITS.title) || label,
       dialedNumber: sanitizePhone(dialNumber).replace(/\D/g, ''),
-      joinUrl: buildJoinUrl('phone', { phone: dialNumber }),
+      joinUrl: url,
       withCamera: false,
     })
   }
 
+  const onSoftCall = async () => {
+    await startTeamsCall(`Teams call ${user?.email ?? ''}`.trim())
+  }
+
   const onLandline = () => {
-    const href = buildJoinUrl('landline', { phone: dialNumber })
-    if (!isAllowedJoinUrl(href, 'landline')) {
-      setError('That phone number could not be used for a landline connection.')
-      return
-    }
-    if (!openPhoneLink(href)) {
-      setError('That phone number could not be used for a landline connection.')
-      return
-    }
-    setChannel('landline')
-    void beginSession({
-      channel: 'landline',
-      title: sanitizeText(title, FIELD_LIMITS.title) || `Landline ${normalizePhoneDisplay(dialNumber)}`,
-      dialedNumber: sanitizePhone(dialNumber).replace(/\D/g, ''),
-      joinUrl: href,
-      withCamera: false,
-    })
+    void startTeamsCall(`Teams call ${normalizePhoneDisplay(dialNumber) || user?.email || ''}`.trim())
   }
 
   const onPlatformJoin = async (platform: MeetingChannel) => {

@@ -80,12 +80,12 @@ export function SoftPhone({
         {!live ? (
           <button
             type="button"
-            disabled={disabled || number.replace(/\D/g, '').length < 3}
+            disabled={disabled}
             onClick={onCall}
             className="inline-flex h-11 flex-[1.4] items-center justify-center gap-1.5 rounded-xl bg-success text-sm font-semibold text-white hover:brightness-110 disabled:opacity-40"
           >
             <Phone className="h-4 w-4" />
-            Call
+            Teams call
           </button>
         ) : (
           <button
@@ -101,11 +101,11 @@ export function SoftPhone({
 
       <button
         type="button"
-        disabled={live || disabled || number.replace(/\D/g, '').length < 3}
+        disabled={live || disabled}
         onClick={onLandline}
         className="mt-2 flex h-10 w-full items-center justify-center rounded-xl border border-navy-800/20 bg-navy-900 text-xs font-semibold tracking-wide text-white uppercase hover:bg-navy-800 disabled:opacity-40"
       >
-        Connect landline (tel:)
+        Teams call with my email
       </button>
     </div>
   )

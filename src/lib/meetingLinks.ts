@@ -66,6 +66,11 @@ export function buildJoinUrl(
   }
 }
 
+/** Teams call for the signed-in account, or for an address typed into the phone field. */
+export function teamsCallUrl(email: string): string {
+  return `https://teams.microsoft.com/l/call/0/0?users=${encodeURIComponent(email.trim())}`
+}
+
 /** Hand the number to the device dialer without leaving the CRM tab. */
 export function openPhoneLink(url: string): boolean {
   if (!isAllowedTelUrl(url) || typeof document === 'undefined') return false

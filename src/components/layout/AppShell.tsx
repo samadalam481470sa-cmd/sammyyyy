@@ -4,7 +4,6 @@ import { Sidebar } from './Sidebar'
 import { EditorGuardProvider } from '@/components/shared/EditorGuardContext'
 import { SpreadsheetColumnProvider, useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { useAuth } from '@/auth/AuthContext'
-import { sessionOwnerKey } from '@/lib/ownerKey'
 import { installOutlookSync } from '@/lib/outlookSync'
 import { sidebarOffset } from '@/lib/dashboardSpreadsheets'
 import { calendarOwnerKey, loadCalendarEvents } from '@/lib/meetingCalendar'
@@ -38,7 +37,10 @@ function AppFrame() {
     pushCalendarReminders(user, loadCalendarEvents(calendarOwnerKey(user)))
   }, [user])
 
-  useEffect(() => installOutlookSync(sessionOwnerKey(user)), [user])
+  useEffect(() => {
+    if (!user?.email) return
+    return installOutlookSync(user.email)
+  }, [user?.email])
 
   return (
     <div className="flex min-h-full bg-canvas">

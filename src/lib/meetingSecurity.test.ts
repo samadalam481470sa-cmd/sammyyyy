@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildJoinUrl } from './meetingLinks'
+import { buildJoinUrl, teamsCallUrl } from './meetingLinks'
 import {
   isAllowedJoinUrl,
   parseTranscriptLines,
@@ -77,5 +77,12 @@ describe('meetingSecurity', () => {
     })
     expect(patch).not.toHaveProperty('ownerKey')
     expect(patch.joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/ok')
+  })
+
+  it('opens a Teams call for the signed-in email', () => {
+    expect(teamsCallUrl('Ada@Outlook.com')).toBe(
+      'https://teams.microsoft.com/l/call/0/0?users=Ada%40Outlook.com',
+    )
+    expect(isAllowedJoinUrl(teamsCallUrl('ada@outlook.com'), 'teams')).toBe(true)
   })
 })
