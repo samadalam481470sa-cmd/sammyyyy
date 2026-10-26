@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   demoMailbox,
+  filterMailbox,
   lastOutlookSync,
+  loadDeltaLinks,
   loadMailbox,
   markOutlookSynced,
+  mergeMailbox,
+  saveDeltaLink,
   saveMailbox,
+  type MailMessage,
 } from './outlookMailbox'
 
 function memoryStorage() {
@@ -72,5 +77,56 @@ describe('per-account Outlook mailbox', () => {
     )
     expect(loadMailbox('mary@outlook.com').some((message) => message.id === 'shared')).toBe(false)
     expect(loadMailbox('mary@outlook.com')[0]?.to).toBe('mary@outlook.com')
+  })
+
+  it('merges by id without duplicates and keeps other folders', () => {
+    const row = (id: string, folder: MailMessage['folder'], subject: string, extra: Partial<MailMessage> = {}): MailMessage => ({
+      id,
+      folder,
+      from: 'ada@gmail.com',
+      to: 'mary@outlook.com',
+      subject,
+      preview: 'preview',
+      body: extra.body ?? '',
+      at: '2026-10-26T12:00:00Z',
+      read: false,
+      demo: false,
+      ...extra,
+    })
+    const existing = [row('a', 'inbox', 'Hello', { body: 'Kept body', bodyLoaded: true }), row('s', 'sent', 'Sent')]
+    const merged = mergeMailbox(existing, {
+      folder: 'inbox',
+      incoming: [row('a', 'inbox', 'Hello again'), row('b', 'inbox', 'New'), row('a', 'inbox', 'Hello again')],
+      replaceFolder: false,
+    })
+    expect(merged.map((message) => message.id).sort()).toEqual(['a', 'b', 's'])
+    expect(merged.find((message) => message.id === 'a')).toMatchObject({ subject: 'Hello again', body: 'Kept body' })
+
+    const replaced = mergeMailbox(merged, {
+      folder: 'inbox',
+      incoming: [row('b', 'inbox', 'Only b')],
+      removedIds: ['missing'],
+      replaceFolder: true,
+    })
+    expect(replaced.map((message) => message.id).sort()).toEqual(['b', 's'])
+
+    const pending = row('pending-1', 'sent', 'Hello', { to: 'ada@gmail.com', pending: true, body: 'Note' })
+    const reconciled = mergeMailbox([pending, row('real', 'inbox', 'Other')], {
+      folder: 'sent',
+      incoming: [row('real-sent', 'sent', 'Hello', { to: 'ada@gmail.com', preview: 'from graph' })],
+      replaceFolder: true,
+    })
+    expect(reconciled.map((message) => message.id).sort()).toEqual(['real', 'real-sent'])
+  })
+
+  it('filters the open folder immediately and keeps delta links per account', () => {
+    const mary = demoMailbox('mary@outlook.com')
+    expect(filterMailbox(mary, 'inbox', 'project q').map((message) => message.id)).toEqual(['demo-mail-1'])
+    expect(filterMailbox(mary, 'sent', 'project q')).toEqual([])
+    saveDeltaLink('Mary@Outlook.com', 'inbox', 'https://graph.example/mary')
+    saveDeltaLink('sam@outlook.com', 'inbox', 'https://graph.example/sam')
+    expect(loadDeltaLinks('mary@outlook.com').inbox).toBe('https://graph.example/mary')
+    expect(loadDeltaLinks('sam@outlook.com').inbox).toBe('https://graph.example/sam')
+    expect(loadDeltaLinks('mary@outlook.com').sent).toBeUndefined()
   })
 })

@@ -484,17 +484,27 @@ export async function microsoftLogout(): Promise<void> {
   }
 }
 
-export async function getGraphAccessToken(scopes: string[] = GRAPH_FILE_SCOPES): Promise<string | null> {
+/** Silent Graph token, then the official popup only when Microsoft requires interaction. No prompt=consent or prompt=login. */
+export function buildGraphTokenRequest<T extends object>(scopes: string[], account: T): { scopes: string[]; account: T } {
+  return { scopes, account }
+}
+
+export async function getGraphAccessToken(
+  scopes: string[] = GRAPH_FILE_SCOPES,
+  options?: { interactive?: boolean },
+): Promise<string | null> {
+  const interactive = options?.interactive !== false
   const instance = await ensureMsal()
   const account = instance?.getActiveAccount() ?? instance?.getAllAccounts()[0]
   if (!instance || !account) return null
+  const request = buildGraphTokenRequest(scopes, account)
   try {
-    const silent = await instance.acquireTokenSilent({ scopes, account })
+    const silent = await instance.acquireTokenSilent(request)
     return silent.accessToken
   } catch (err) {
-    if (!(err instanceof InteractionRequiredAuthError)) return null
+    if (!interactive || !(err instanceof InteractionRequiredAuthError)) return null
     try {
-      const popup = await instance.acquireTokenPopup({ scopes, account })
+      const popup = await instance.acquireTokenPopup(request)
       return popup.accessToken
     } catch {
       return null

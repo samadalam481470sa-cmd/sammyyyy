@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildGraphTokenRequest,
   buildMicrosoftLoginRequest,
   entraReturnErrorFromLocation,
   hasEntraRedirectReturn,
@@ -52,6 +53,12 @@ describe('Microsoft 365 SPA URLs', () => {
     )
     expect(clientIdFromEntraDocument({ clientId: '  ' })).toBe(ENTRA_SPA_CLIENT_ID)
     expect(clientIdFromEntraDocument(null)).toBe(ENTRA_SPA_CLIENT_ID)
+  })
+
+  it('requests mailbox tokens without prompt=consent or prompt=login', () => {
+    const request = buildGraphTokenRequest(['Mail.Read', 'Mail.Send'], { homeAccountId: 'account' })
+    expect(request).toEqual({ scopes: ['Mail.Read', 'Mail.Send'], account: { homeAccountId: 'account' } })
+    expect(request).not.toHaveProperty('prompt')
   })
 
   it('forces the hosted Microsoft password page and prefills the typed email', () => {

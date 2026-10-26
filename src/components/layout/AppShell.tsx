@@ -20,7 +20,9 @@ export function AppShell() {
 }
 
 function AppFrame() {
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches,
+  )
   const [motionReady, setMotionReady] = useState(false)
   const { user } = useAuth()
   const { sheets } = useSpreadsheetColumns()
@@ -30,6 +32,15 @@ function AppFrame() {
   useEffect(() => {
     const id = window.requestAnimationFrame(() => setMotionReady(true))
     return () => window.cancelAnimationFrame(id)
+  }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)')
+    const onChange = () => {
+      if (media.matches) setCollapsed(true)
+    }
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
   }, [])
 
   useEffect(() => {
