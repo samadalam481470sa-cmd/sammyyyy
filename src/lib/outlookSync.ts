@@ -67,26 +67,6 @@ function publish(message: string, mode: 'graph' | 'demo'): void {
   window.dispatchEvent(new CustomEvent(OUTLOOK_SYNCED_EVENT, { detail }))
 }
 
-function keepUndelivered(email: string, input: { to: string; cc?: string; bcc?: string; subject: string; body: string }): 'demo' {
-  const account = accountEmail(email)
-  const message: MailMessage = {
-    id: `demo-local-${Date.now()}`,
-    folder: 'sent',
-    from: account,
-    to: input.to,
-    cc: input.cc,
-    bcc: input.bcc,
-    subject: input.subject.trim() || '(no subject)',
-    preview: 'Fictional demo. Microsoft did not deliver this.',
-    body: `${input.body}\n\nFictional demo only. Microsoft did not deliver this message.`,
-    at: new Date().toISOString(),
-    read: true,
-    demo: true,
-    bodyLoaded: true,
-  }
-  saveMailbox(account, [message, ...loadMailbox(account)])
-  return 'demo'
-}
 
 async function pullFolder(token: string, folder: MailFolder, deltaLink?: string): Promise<OutlookFolderPage> {
   if (typeof deltaOutlookFolder === 'function') {
@@ -137,8 +117,8 @@ export async function syncOutlookNow(
       const fictional = mailboxIsFictional(loadMailbox(account))
       publish(
         fictional
-          ? `Fictional mailbox for ${account}. Connect Outlook to use this Microsoft mailbox.`
-          : `Showing saved mail for ${account}. Connect Outlook to refresh.`,
+          ? `Outlook not connected for ${account}. No mail was retrieved.`
+          : `Outlook not connected for ${account}. Showing mail saved in this browser from the last sync.`,
         'demo',
       )
     }
@@ -228,8 +208,8 @@ export async function deliverMail(input: {
           await replyOutlookMail(token, graphId, input.body)
         }
         return 'graph'
-      } catch {
-        return keepUndelivered(account, input)
+      } catch (err) {
+        throw new Error(`Outlook did not send the reply. Nothing was delivered. ${err instanceof Error ? err.message : ''}`.trim())
       }
     }
     if (token && action === 'send' && input.to.includes('@')) {
@@ -242,12 +222,13 @@ export async function deliverMail(input: {
           ...(input.bcc ? { bcc: input.bcc } : {}),
         })
         return 'graph'
-      } catch {
-        return keepUndelivered(account, input)
+      } catch (err) {
+        throw new Error(`Outlook did not send the message. Nothing was delivered. ${err instanceof Error ? err.message : ''}`.trim())
       }
     }
   }
-  return keepUndelivered(account, input)
+  void account
+  throw new Error('Outlook is not connected. Nothing was sent. Click Connect Outlook first.')
 }
 
 export async function pushMailMove(id: string, folder: 'deleted' | 'archive'): Promise<void> {
@@ -302,7 +283,7 @@ export async function saveDraftMail(input: {
         saveMailbox(account, [saved, ...without])
         return saved
       } catch {
-        // Keep the draft in this account's fictional Drafts folder.
+        // Graph refused the draft; keep it in this browser only (marked local).
       }
     }
   }
@@ -323,25 +304,13 @@ export async function sendDraftMail(email: string, message: MailMessage): Promis
         )
         saveMailbox(account, next)
         return 'graph'
-      } catch {
-        // Fall through to the fictional Sent folder for this login.
+      } catch (err) {
+        throw new Error(`Outlook did not send the draft. ${err instanceof Error ? err.message : ''}`.trim())
       }
     }
   }
-  const sent: MailMessage = {
-    ...message,
-    id: `demo-local-${Date.now()}`,
-    folder: 'sent',
-    from: account,
-    demo: true,
-    pending: false,
-    preview: 'Fictional demo. Microsoft did not deliver this.',
-    body: `${message.body}\n\nFictional demo only. Microsoft did not deliver this message.`,
-    at: new Date().toISOString(),
-  }
-  const without = loadMailbox(account).filter((row) => row.id !== message.id)
-  saveMailbox(account, [sent, ...without])
-  return 'demo'
+  void account
+  throw new Error('Outlook is not connected. The draft was not sent. Click Connect Outlook first.')
 }
 
 let mailSurfaceActive = false

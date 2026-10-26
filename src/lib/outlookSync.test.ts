@@ -160,36 +160,19 @@ describe('Outlook send and sync', () => {
     })
   })
 
-  it('keeps an undelivered message in that login’s fictional Sent folder', async () => {
+  it('refuses to send when Outlook is not connected and saves nothing', async () => {
     outlookToken.mockResolvedValue(null)
-    const mode = await deliverMail({
-      email: 'Mary@Outlook.com',
-      to: 'ada@outlook.com',
-      subject: 'Hello',
-      body: 'Note',
-    })
-    expect(mode).toBe('demo')
-    const sent = loadMailbox('mary@outlook.com').find((message) => message.subject === 'Hello')
-    expect(sent).toMatchObject({
-      folder: 'sent',
-      from: 'mary@outlook.com',
-      demo: true,
-    })
-    expect(sent?.preview).toMatch(/Microsoft did not deliver/i)
-    expect(loadMailbox('sam@outlook.com').some((message) => message.subject === 'Hello')).toBe(false)
+    await expect(
+      deliverMail({ email: 'Mary@Outlook.com', to: 'ada@outlook.com', subject: 'Hello', body: 'Note' }),
+    ).rejects.toThrow(/not connected/i)
+    expect(loadMailbox('mary@outlook.com').some((message) => message.subject === 'Hello')).toBe(false)
 
     outlookToken.mockResolvedValue('graph-token')
     sendOutlookMail.mockRejectedValue(new Error('consent denied'))
-    await deliverMail({
-      email: 'sam@outlook.com',
-      to: 'ada@outlook.com',
-      subject: 'Blocked',
-      body: 'Nope',
-    })
-    const blocked = loadMailbox('sam@outlook.com').find((message) => message.subject === 'Blocked')
-    expect(blocked?.from).toBe('sam@outlook.com')
-    expect(blocked?.demo).toBe(true)
-    expect(loadMailbox('mary@outlook.com').some((message) => message.subject === 'Blocked')).toBe(false)
+    await expect(
+      deliverMail({ email: 'sam@outlook.com', to: 'ada@outlook.com', subject: 'Blocked', body: 'Nope' }),
+    ).rejects.toThrow(/consent denied/)
+    expect(loadMailbox('sam@outlook.com').some((message) => message.subject === 'Blocked')).toBe(false)
   })
 
   it('refreshes only that user’s calendar and does not reload the page', async () => {

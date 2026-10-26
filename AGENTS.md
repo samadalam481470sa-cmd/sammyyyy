@@ -9,6 +9,8 @@ Whenever you finish a code change for this CRM, **also update the live GitHub Pa
 - Live URL: https://samadalam481470sa-cmd.github.io/sammyyyy/
 - Pages source branch: `gh-pages` (legacy Pages, not GitHub Actions — the Actions workflow has been unreliable)
 
+One command does all of the steps below: `npm run deploy:pages` (builds, then pushes `dist/` to `gh-pages`).
+
 Deploy steps (run after the feature is committed on the working branch):
 
 1. `npm run build:desktop` (GitHub Pages base `/sammyyyy/`, static hash routing, production env, installable manifest)

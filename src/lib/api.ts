@@ -13,6 +13,7 @@ import {
   writeSessionItem,
 } from '@/lib/sessionProof'
 import { sha256Hex } from '@/lib/sha256'
+import { purgeOtherUsersMail, purgePersonalData } from '@/lib/userPrivacy'
 
 const API_BASE = '/api'
 
@@ -68,6 +69,8 @@ export async function storeSession(token: string, user: AuthUser, fingerprint: s
     authMethod: user.authMethod,
   })
   const proof = await createSessionProof({ token, user: locked, fingerprint })
+  // A new person on this browser never sees the previous person's mail or Microsoft sign-in.
+  purgeOtherUsersMail(locked.email ?? '')
   writeSessionItem(TOKEN_KEY, token)
   writeSessionItem(USER_KEY, JSON.stringify(locked))
   persistProof(proof)
@@ -172,7 +175,14 @@ export async function signOut() {
   } catch {
     // ignore network errors on sign-out
   }
+  try {
+    const { clearMicrosoftCache } = await import('@/auth/msal')
+    await clearMicrosoftCache()
+  } catch {
+    // purge below still wipes Microsoft keys
+  }
   clearSession()
+  purgePersonalData()
 }
 
 export async function fetchOpportunities() {
