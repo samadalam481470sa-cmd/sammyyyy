@@ -11,6 +11,7 @@ import { resourcesRouter } from './routes/resources.ts'
 import { aiRouter } from './routes/ai.ts'
 import { preferencesRouter } from './routes/preferences.ts'
 import './db/index.ts'
+import { connectMongo, getMongoHealth } from './db/mongo.ts'
 
 const app = express()
 const PORT = Number(process.env.API_PORT || 3001)
@@ -64,6 +65,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'newport-acquisition-crm',
     database: 'sqlite',
+    mongo: getMongoHealth(),
     apiKeySlots: 5,
   })
 })
@@ -92,6 +94,11 @@ app.use(
   },
 )
 
+const mongoStartup = connectMongo().catch(() => getMongoHealth())
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Newport CRM API listening on http://localhost:${PORT}`)
+  void mongoStartup.then((mongo) => {
+    console.log(`MongoDB status: ${mongo.status}`)
+  })
 })
