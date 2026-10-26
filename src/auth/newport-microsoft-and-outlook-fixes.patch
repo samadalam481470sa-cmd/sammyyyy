@@ -1,0 +1,965 @@
+From 33358f05ee5b40ecdcd85f66af1ac20a209ddb54 Mon Sep 17 00:00:00 2001
+From: samadalam481470sa-cmd <samadalam481470sa-cmd@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 17:24:58 -0500
+Subject: [PATCH 1/2] Fix Microsoft sign-in lag and silent failure in Cursor
+ preview
+
+- Render the app immediately; only wait for MSAL when returning from Microsoft.
+- Skip MSAL init inside preview iframes and insecure http pages (it hung or failed).
+- In the Cursor/VS Code preview, open the app in the real browser to sign in.
+- Move 127.0.0.1 / 0.0.0.0 to the registered localhost redirect.
+- Show a clear message instead of 'Microsoft cloud sign-in is not connected'.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KpwQi1koQyAcMumJxBKyKw
+---
+ src/auth/msal.test.ts | 29 ++++++++++++++++
+ src/auth/msal.ts      | 78 +++++++++++++++++++++++++++++++++++++++++++
+ src/main.tsx          | 18 +++++++---
+ 3 files changed, 120 insertions(+), 5 deletions(-)
+
+diff --git a/src/auth/msal.test.ts b/src/auth/msal.test.ts
+index c118cbe..549d9b0 100644
+--- a/src/auth/msal.test.ts
++++ b/src/auth/msal.test.ts
+@@ -13,6 +13,8 @@ import {
+   msalAuthority,
+   msalClientId,
+   microsoftAuthErrorCode,
++  microsoftBlockReason,
++  registeredBrowserUrl,
+   MicrosoftAuthUnavailableError,
+   spaRedirectUriFromLocation,
+   stripAuthRedirectQuery,
+@@ -146,3 +148,30 @@ describe('Microsoft 365 errors', () => {
+     ).toBe('sam@outlook.com')
+   })
+ })
++
++describe('Microsoft sign-in in Cursor / preview windows', () => {
++  const base = { href: 'http://localhost:5173/login', framed: false, hasCrypto: true }
++
++  it('runs normally in a real localhost tab', () => {
++    expect(microsoftBlockReason(base)).toBeNull()
++    expect(
++      microsoftBlockReason({ ...base, href: 'https://samadalam481470sa-cmd.github.io/sammyyyy/' }),
++    ).toBeNull()
++  })
++
++  it('hands off when the app is inside an editor preview iframe', () => {
++    expect(microsoftBlockReason({ ...base, framed: true })).toBe('embedded')
++  })
++
++  it('moves 127.0.0.1 and 0.0.0.0 to the registered localhost redirect', () => {
++    expect(microsoftBlockReason({ ...base, href: 'http://127.0.0.1:5173/' })).toBe('loopback-alias')
++    expect(registeredBrowserUrl('http://127.0.0.1:5173/login')).toBe('http://localhost:5173/login')
++    expect(registeredBrowserUrl('http://0.0.0.0:5173/')).toBe('http://localhost:5173/')
++  })
++
++  it('flags plain-http LAN pages that have no WebCrypto', () => {
++    expect(
++      microsoftBlockReason({ href: 'http://192.168.1.20:5173/', framed: false, hasCrypto: false }),
++    ).toBe('insecure')
++  })
++})
+diff --git a/src/auth/msal.ts b/src/auth/msal.ts
+index e16d03c..9cd4348 100644
+--- a/src/auth/msal.ts
++++ b/src/auth/msal.ts
+@@ -39,6 +39,79 @@ export class MicrosoftAuthUnavailableError extends Error {
+   }
+ }
+ 
++/** Thrown when sign-in was handed to the real browser because this window cannot run it. */
++export class MicrosoftOpenedElsewhereError extends Error {
++  constructor(message: string) {
++    super(message)
++    this.name = 'MicrosoftOpenedElsewhereError'
++  }
++}
++
++/** Loopback hosts that are not registered as Entra redirect URIs. Only "localhost" is. */
++const LOOPBACK_ALIASES = new Set(['127.0.0.1', '0.0.0.0', '[::1]', '::1'])
++
++export type MicrosoftBlockReason = 'embedded' | 'insecure' | 'loopback-alias' | null
++
++/**
++ * Why Microsoft sign-in cannot run in this window:
++ * - embedded: inside an iframe (Cursor / VS Code preview). Microsoft's page refuses to load in frames.
++ * - insecure: plain http on a LAN IP. The browser hides WebCrypto, so MSAL cannot start.
++ * - loopback-alias: 127.0.0.1 / 0.0.0.0. Entra only accepts the registered http://localhost:5173/.
++ */
++export function microsoftBlockReason(
++  env: { href: string; framed: boolean; hasCrypto: boolean } | null = null,
++): MicrosoftBlockReason {
++  let href = env?.href
++  let framed = env?.framed
++  let hasCrypto = env?.hasCrypto
++  if (!env) {
++    if (typeof window === 'undefined') return null
++    href = window.location.href
++    try {
++      framed = window.self !== window.top
++    } catch {
++      framed = true
++    }
++    hasCrypto = Boolean(window.isSecureContext !== false && window.crypto?.subtle)
++  }
++  let host = ''
++  try {
++    host = new URL(href ?? '').hostname
++  } catch {
++    return null
++  }
++  if (framed) return 'embedded'
++  if (LOOPBACK_ALIASES.has(host)) return 'loopback-alias'
++  if (!hasCrypto) return 'insecure'
++  return null
++}
++
++/** Same page on the registered "localhost" host, so Entra accepts the redirect. */
++export function registeredBrowserUrl(href: string): string {
++  const url = new URL(href)
++  if (LOOPBACK_ALIASES.has(url.hostname)) url.hostname = 'localhost'
++  return url.toString()
++}
++
++/** Open the app in the real browser (or move to localhost) instead of failing silently. */
++function handOffMicrosoftSignIn(reason: Exclude<MicrosoftBlockReason, null>): never {
++  const target = registeredBrowserUrl(window.location.href)
++  if (reason === 'loopback-alias') {
++    window.location.assign(target)
++    throw new MicrosoftOpenedElsewhereError('Moving to localhost so Microsoft accepts the sign-in…')
++  }
++  if (reason === 'embedded') {
++    window.open(target, '_blank', 'noopener,noreferrer')
++    throw new MicrosoftOpenedElsewhereError(
++      'Microsoft sign-in cannot run inside the Cursor preview. The app opened in your browser — sign in there. If nothing opened, copy this address into Chrome or Edge: ' +
++        target,
++    )
++  }
++  throw new MicrosoftOpenedElsewhereError(
++    'Microsoft sign-in needs a secure address. Open http://localhost:5173 on this computer, or the live link https://samadalam481470sa-cmd.github.io/sammyyyy/.',
++  )
++}
++
+ const COMMON_AUTHORITY = 'https://login.microsoftonline.com/common'
+ 
+ /** Public SPA client ID. Not a secret. Work + personal Microsoft accounts. */
+@@ -340,6 +413,9 @@ export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
+ export async function ensureMsal(): Promise<PublicClientApplication | null> {
+   if (pca) return pca
+   if (!msalClientId()) return null
++  // MSAL cannot start (or would hang) in a preview iframe or an insecure page. Skip it fast.
++  const blocked = microsoftBlockReason()
++  if (blocked === 'embedded' || blocked === 'insecure') return null
+   if (initPromise) return initPromise
+   initPromise = (async () => {
+     const clientId = msalClientId()
+@@ -431,6 +507,8 @@ export function purgeMicrosoftAuthStorage(): void {
+ }
+ 
+ export async function startMicrosoftLogin(loginHint?: string): Promise<MicrosoftLoginResult> {
++  const blocked = microsoftBlockReason()
++  if (blocked) handOffMicrosoftSignIn(blocked)
+   const instance = await ensureMsal()
+   if (!instance) throw new MicrosoftAuthUnavailableError()
+ 
+diff --git a/src/main.tsx b/src/main.tsx
+index e3ba228..0f2ecd0 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
+ import { createRoot } from 'react-dom/client'
+ import './index.css'
+ import App from './App.tsx'
+-import { ensureMsal, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
++import { ensureMsal, hasEntraRedirectReturn, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
+ import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
+ import { installClientLogging } from '@/lib/clientLog'
+ 
+@@ -36,10 +36,18 @@ function registerServiceWorker(): void {
+     .catch(() => undefined)
+ }
+ 
+-void Promise.race([
+-  loadEntraConfig().then(() => ensureMsal()),
+-  new Promise((resolve) => window.setTimeout(resolve, 8000)),
+-])
++const msalWarmup = loadEntraConfig()
++  .then(() => ensureMsal())
++  .catch(() => null)
++
++// Only hold the first paint while Microsoft is handing back a sign-in (?code=…), so the
++// router cannot strip the response before MSAL reads it. Normal loads render at once.
++const waitForMicrosoft = hasEntraRedirectReturn()
++
++void (waitForMicrosoft
++  ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 5000))])
++  : Promise.resolve()
++)
+   .catch(() => undefined)
+   .finally(() => {
+     render()
+-- 
+2.43.0
+
+
+From e2111fd2e04d238dcc30854e528305db7fd00cc9 Mon Sep 17 00:00:00 2001
+From: samadalam481470sa-cmd <samadalam481470sa-cmd@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 17:28:37 -0500
+Subject: [PATCH 2/2] Make Email an Outlook-style inbox inside the platform
+
+Remove the separate Outlook pop-up window. The Email page is now a full
+Outlook-style home (app bar, search, command ribbon, folder pane, message
+list with All/Unread, reading pane, inline compose) backed by Microsoft Graph.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KpwQi1koQyAcMumJxBKyKw
+---
+ src/components/email/OutlookWindowPane.tsx |  43 --
+ src/pages/EmailPage.tsx                    | 582 ++++++++++++---------
+ 2 files changed, 341 insertions(+), 284 deletions(-)
+ delete mode 100644 src/components/email/OutlookWindowPane.tsx
+
+diff --git a/src/components/email/OutlookWindowPane.tsx b/src/components/email/OutlookWindowPane.tsx
+deleted file mode 100644
+index 72ce72c..0000000
+--- a/src/components/email/OutlookWindowPane.tsx
++++ /dev/null
+@@ -1,43 +0,0 @@
+-import { outlookWebUrl } from '@/lib/outlookWindow'
+-
+-interface OutlookWindowPaneProps {
+-  email: string
+-  tenantId?: string | null
+-  blocked: boolean
+-  onOpen: () => void
+-}
+-
+-export function OutlookWindowPane({ email, tenantId, blocked, onOpen }: OutlookWindowPaneProps) {
+-  const url = outlookWebUrl(email, tenantId)
+-  const host = new URL(url).host
+-
+-  return (
+-    <div className="flex min-h-0 flex-1 items-center justify-center bg-canvas px-4 py-8">
+-      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface px-6 py-8 shadow-(--shadow-card) sm:px-8">
+-        <p className="text-[11px] font-semibold tracking-[0.16em] text-accent uppercase">Outlook</p>
+-        <h2 className="mt-2 font-brand text-3xl font-semibold text-navy-900">Outlook mail</h2>
+-        <p className="mt-4 text-sm font-semibold text-navy-900">{email || 'Sign in to open a mailbox'}</p>
+-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+-          Microsoft displays Outlook in its own secure window.
+-        </p>
+-        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+-          Any Gmail account already linked inside Outlook is available in that window. Mail sent from the Newport mailbox uses this Microsoft account.
+-        </p>
+-        <button
+-          type="button"
+-          onClick={onOpen}
+-          data-testid="outlook-open-window"
+-          className="mt-6 inline-flex h-11 items-center rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white hover:bg-navy-800"
+-        >
+-          Show Outlook window
+-        </button>
+-        <p className="mt-3 text-xs text-ink-subtle">{host}</p>
+-        {blocked && (
+-          <p className="mt-3 text-sm text-attention" data-testid="outlook-popup-blocked">
+-            The browser blocked the Outlook window. Click the button to open it.
+-          </p>
+-        )}
+-      </div>
+-    </div>
+-  )
+-}
+diff --git a/src/pages/EmailPage.tsx b/src/pages/EmailPage.tsx
+index 38f0ca6..61b0ce7 100644
+--- a/src/pages/EmailPage.tsx
++++ b/src/pages/EmailPage.tsx
+@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
+ import {
+   Archive,
+   ArrowLeft,
++  FileText,
+   Forward,
++  Inbox,
+   Mail,
+   MailOpen,
+   Paperclip,
+@@ -12,11 +14,13 @@ import {
+   ReplyAll,
+   Search,
+   Send,
++  ShieldAlert,
+   Trash,
++  Trash2,
++  X,
++  type LucideIcon,
+ } from 'lucide-react'
+ import { useAuth } from '@/auth/AuthContext'
+-import { getMicrosoftAccount } from '@/auth/msal'
+-import { OutlookWindowPane } from '@/components/email/OutlookWindowPane'
+ import { normalizeEmail } from '@/lib/emailIdentity'
+ import { parseAddresses, uniqueAddresses } from '@/lib/mailAddress'
+ import { renderMailHtml } from '@/lib/mailHtml'
+@@ -54,9 +58,8 @@ import {
+   setOutlookMailSurfaceActive,
+   syncOutlookNow,
+ } from '@/lib/outlookSync'
+-import { openOutlookMailWindow } from '@/lib/outlookWindow'
+ 
+-type MailView = 'mailbox' | 'outlook'
++type ListFilter = 'all' | 'unread'
+ type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward' | 'draft'
+ 
+ interface ComposeDraft {
+@@ -94,6 +97,29 @@ function quoted(message: MailMessage): string {
+   return `\n\n----------\nFrom: ${message.from}\nTo: ${message.to}\nSubject: ${message.subject}\n\n${text}`
+ }
+ 
++const FOLDER_ICONS: Record<MailFolder, LucideIcon> = {
++  inbox: Inbox,
++  sent: Send,
++  drafts: FileText,
++  junk: ShieldAlert,
++  deleted: Trash2,
++  archive: Archive,
++}
++
++function initialsOf(value: string): string {
++  const name = value.replace(/<.*>/, '').replace(/^To\s+/, '').trim()
++  const base = name.includes('@') ? name.split('@')[0] : name
++  const parts = base.split(/[\s._-]+/).filter(Boolean)
++  return `${parts[0]?.[0] ?? '?'}${parts[1]?.[0] ?? ''}`.toUpperCase()
++}
++
++function avatarTone(value: string): string {
++  const tones = ['bg-[#0f6cbd]', 'bg-[#8764b8]', 'bg-[#038387]', 'bg-[#ca5010]', 'bg-[#4f6bed]', 'bg-[#498205]']
++  let hash = 0
++  for (const ch of value) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
++  return tones[hash % tones.length]
++}
++
+ function senderLabel(message: MailMessage): string {
+   if (message.folder === 'sent' || message.folder === 'drafts') {
+     return message.to ? `To ${message.to}` : 'No recipient'
+@@ -105,7 +131,7 @@ export function EmailPage() {
+   const { user } = useAuth()
+   const email = user?.email ?? ''
+   const account = normalizeEmail(email)
+-  const [view, setView] = useState<MailView>('mailbox')
++  const [listFilter, setListFilter] = useState<ListFilter>('all')
+   const [folder, setFolder] = useState<MailFolder>('inbox')
+   const [messages, setMessages] = useState<MailMessage[]>(() => loadMailbox(email))
+   const [selectedId, setSelectedId] = useState<string | null>(null)
+@@ -121,11 +147,13 @@ export function EmailPage() {
+   const [narrow, setNarrow] = useState(() =>
+     typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false,
+   )
+-  const [outlookBlocked, setOutlookBlocked] = useState(false)
+ 
+-  const visible = useMemo(() => filterMailbox(messages, folder, query), [messages, folder, query])
++  const visible = useMemo(() => {
++    const rows = filterMailbox(messages, folder, query)
++    return listFilter === 'unread' ? rows.filter((message) => !message.read) : rows
++  }, [messages, folder, query, listFilter])
+   const selected = messages.find((message) => message.id === selectedId) ?? null
+-  const tenantId = getMicrosoftAccount()?.tenantId ?? null
++  const folderLabel = MAIL_FOLDERS.find((item) => item.id === folder)?.label ?? 'Inbox'
+   const showList = !narrow || (mobilePane === 'list' && !composing)
+   const showReader = !narrow || mobilePane === 'read' || Boolean(composing)
+ 
+@@ -226,10 +254,24 @@ export function EmailPage() {
+     })
+   }
+ 
+-  const openOutlook = () => {
+-    const result = openOutlookMailWindow(email, getMicrosoftAccount()?.tenantId)
+-    setOutlookBlocked(result === 'blocked')
+-    setView('outlook')
++  const connectOutlook = () => {
++    setSyncing(true)
++    setStatus('Connecting Outlook…')
++    void outlookToken(true).then((token) => {
++      if (!token) {
++        setSyncing(false)
++        setGraphMode('demo')
++        setStatus(`Fictional mailbox for ${account}. Outlook consent was not granted.`)
++        return
++      }
++      void syncOutlookNow(email, { incremental: false, mail: true })
++    })
++  }
++
++  const syncNow = () => {
++    setSyncing(true)
++    setStatus('Checking Microsoft Graph…')
++    void syncOutlookNow(email, { incremental: false, mail: true })
+   }
+ 
+   const startCompose = (draft: ComposeDraft) => {
+@@ -426,275 +468,333 @@ export function EmailPage() {
+   }
+ 
+   const html = selected ? renderMailHtml(selected) : ''
++  const ribbonButton =
++    'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-[#242424] hover:bg-[#f0f0f0] disabled:text-[#a0a0a0] disabled:hover:bg-transparent'
+ 
+   return (
+-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-canvas" onKeyDown={onKeyDown}>
+-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3 sm:px-6">
+-        <div className="min-w-0">
+-          <h1 className="font-brand text-2xl font-bold text-navy-900">Email</h1>
+-          <p className="truncate text-sm font-semibold text-navy-900">{account || 'Sign in to open a mailbox'}</p>
+-          <p className="text-sm text-ink-muted" data-testid="email-status">{status}</p>
+-          {syncedAt && <p className="text-[11px] text-ink-subtle">Last check {new Date(syncedAt).toLocaleString()}</p>}
++    <div
++      className="flex h-dvh min-h-0 flex-col overflow-hidden bg-[#f5f5f5] text-[#242424]"
++      onKeyDown={onKeyDown}
++      data-testid="outlook-home"
++    >
++      {/* Outlook-style app bar */}
++      <header className="flex h-12 shrink-0 items-center gap-3 bg-[#0f6cbd] px-3 text-white sm:px-4">
++        <div className="flex shrink-0 items-center gap-2">
++          <Mail className="h-5 w-5" />
++          <h1 className="text-base font-semibold">Outlook</h1>
+         </div>
+-        <div className="flex flex-wrap items-center gap-2">
+-          <div className="flex rounded-lg border border-border p-0.5">
+-            <button
+-              type="button"
+-              data-testid="email-view-mailbox"
+-              onClick={() => setView('mailbox')}
+-              className={`h-9 rounded-md px-3 text-sm font-semibold ${view === 'mailbox' ? 'bg-navy-900 text-white' : 'text-ink'}`}
+-            >
+-              Mailbox
+-            </button>
+-            <button
+-              type="button"
+-              data-testid="email-view-outlook"
+-              onClick={openOutlook}
+-              className={`h-9 rounded-md px-3 text-sm font-semibold ${view === 'outlook' ? 'bg-navy-900 text-white' : 'text-ink'}`}
+-            >
+-              Outlook
+-            </button>
+-          </div>
+-          {graphMode === 'demo' && (
+-            <button
+-              type="button"
+-              data-testid="email-connect"
+-              onClick={() => {
+-                setSyncing(true)
+-                setStatus('Connecting Outlook…')
+-                void outlookToken(true).then((token) => {
+-                  if (!token) {
+-                    setSyncing(false)
+-                    setGraphMode('demo')
+-                    setStatus(`Fictional mailbox for ${account}. Outlook consent was not granted.`)
+-                    return
+-                  }
+-                  void syncOutlookNow(email, { incremental: false, mail: true })
+-                })
+-              }}
+-              className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-ink"
+-            >
+-              Connect Outlook
+-            </button>
+-          )}
+-          <button
+-            type="button"
+-            onClick={() => {
+-              setSyncing(true)
+-              setStatus('Checking Microsoft Graph…')
+-              void syncOutlookNow(email, { incremental: false, mail: true })
+-            }}
+-            disabled={syncing}
+-            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-semibold text-ink disabled:text-ink-subtle"
+-          >
+-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+-            Sync
+-          </button>
++        <div className="relative mx-auto w-full max-w-xl">
++          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#0f6cbd]" />
++          <input
++            type="search"
++            value={query}
++            onChange={(event) => setQuery(event.target.value)}
++            placeholder="Search mail"
++            data-testid="email-search"
++            aria-label="Search mail"
++            className="h-8 w-full rounded-md bg-[#ebf3fc] pr-3 pl-9 text-sm text-[#242424] outline-none placeholder:text-[#616161] focus:bg-white"
++          />
++        </div>
++        <button
++          type="button"
++          onClick={syncNow}
++          disabled={syncing}
++          aria-label="Sync mail"
++          title="Sync mail"
++          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-white/15"
++        >
++          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
++        </button>
++        <span
++          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-semibold sm:inline-flex"
++          title={account}
++        >
++          {initialsOf(account || 'Me')}
++        </span>
++      </header>
++
++      {/* Command ribbon */}
++      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[#e0e0e0] bg-white px-2 py-1.5 sm:px-3">
++        <button
++          type="button"
++          data-testid="email-compose"
++          onClick={() => startCompose({ mode: 'new', to: '', cc: '', bcc: '', subject: '', body: '' })}
++          className="mr-2 inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0f6cbd] px-3 text-sm font-semibold text-white hover:bg-[#115ea3]"
++        >
++          <PenSquare className="h-4 w-4" />
++          New mail
++        </button>
++        <button type="button" className={ribbonButton} disabled={!selected} onClick={() => selected && moveMessage(selected, 'deleted')}>
++          <Trash className="h-4 w-4" /> Delete
++        </button>
++        <button type="button" className={ribbonButton} disabled={!selected} onClick={() => selected && moveMessage(selected, 'archive')}>
++          <Archive className="h-4 w-4" /> Archive
++        </button>
++        <button type="button" className={ribbonButton} disabled={!selected} onClick={() => selected && toggleRead(selected)}>
++          {selected && !selected.read ? <MailOpen className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
++          {selected && !selected.read ? 'Mark read' : 'Mark unread'}
++        </button>
++        <span className="mx-1 hidden h-5 w-px bg-[#e0e0e0] sm:inline-block" />
++        <button
++          type="button"
++          className={ribbonButton}
++          disabled={!selected}
++          onClick={() => selected && startCompose({ mode: 'reply', ...replyFields(selected, account, false), bcc: '', subject: subjectWith('Re', selected.subject), body: '', replyToId: selected.id })}
++        >
++          <Reply className="h-4 w-4" /> Reply
++        </button>
++        <button
++          type="button"
++          className={ribbonButton}
++          disabled={!selected}
++          onClick={() => selected && startCompose({ mode: 'replyAll', ...replyFields(selected, account, true), bcc: '', subject: subjectWith('Re', selected.subject), body: '', replyToId: selected.id })}
++        >
++          <ReplyAll className="h-4 w-4" /> Reply all
++        </button>
++        <button
++          type="button"
++          className={ribbonButton}
++          disabled={!selected}
++          onClick={() => selected && startCompose({ mode: 'forward', to: '', cc: '', bcc: '', subject: subjectWith('Fwd', selected.subject), body: quoted(selected), replyToId: selected.id })}
++        >
++          <Forward className="h-4 w-4" /> Forward
++        </button>
++        {graphMode === 'demo' && (
+           <button
+             type="button"
+-            data-testid="email-compose"
+-            onClick={() => startCompose({ mode: 'new', to: '', cc: '', bcc: '', subject: '', body: '' })}
+-            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-navy-900 px-3 text-sm font-semibold text-white"
++            data-testid="email-connect"
++            onClick={connectOutlook}
++            className="ml-auto inline-flex h-8 items-center rounded-md border border-[#0f6cbd] px-3 text-sm font-semibold text-[#0f6cbd] hover:bg-[#ebf3fc]"
+           >
+-            <PenSquare className="h-4 w-4" />
+-            New Email
++            Connect Outlook
+           </button>
+-        </div>
+-      </header>
++        )}
++      </div>
+ 
+-      {view === 'outlook' ? (
+-        <OutlookWindowPane email={account} tenantId={tenantId} blocked={outlookBlocked} onOpen={openOutlook} />
+-      ) : (
+-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[200px_minmax(260px,340px)_minmax(0,1fr)]">
+-          {showList && (
+-            <aside className="flex min-h-0 gap-1 overflow-x-auto border-b border-border bg-canvas p-2 lg:flex-col lg:overflow-visible lg:border-r lg:border-b-0 lg:p-3">
+-              {MAIL_FOLDERS.map((item) => {
+-                const count = messages.filter((message) => message.folder === item.id && !message.read).length
+-                return (
++      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[220px_minmax(280px,360px)_minmax(0,1fr)]">
++        {/* Folder pane */}
++        {showList && (
++          <nav className="flex min-h-0 gap-1 overflow-x-auto border-b border-[#e0e0e0] bg-[#f5f5f5] p-2 lg:flex-col lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-2 lg:py-3">
++            <p className="hidden truncate px-3 pb-2 text-xs font-semibold text-[#616161] lg:block" title={account}>
++              {account || 'Mailbox'}
++            </p>
++            {MAIL_FOLDERS.map((item) => {
++              const count = messages.filter((message) => message.folder === item.id && !message.read).length
++              const Icon = FOLDER_ICONS[item.id]
++              const active = folder === item.id
++              return (
++                <button
++                  key={item.id}
++                  type="button"
++                  data-testid={`email-folder-${item.id}`}
++                  onClick={() => {
++                    setFolder(item.id)
++                    setMobilePane('list')
++                    setComposing(null)
++                  }}
++                  className={`relative flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 text-sm lg:w-full ${
++                    active ? 'bg-[#e6eef8] font-semibold text-[#0f6cbd]' : 'text-[#242424] hover:bg-[#ebebeb]'
++                  }`}
++                >
++                  {active && <span className="absolute top-2 bottom-2 left-0 hidden w-0.5 rounded bg-[#0f6cbd] lg:block" />}
++                  <Icon className="h-4 w-4 shrink-0" />
++                  <span className="flex-1 text-left">{item.label}</span>
++                  {count > 0 && <span className="text-xs font-semibold text-[#0f6cbd]">{count}</span>}
++                </button>
++              )
++            })}
++          </nav>
++        )}
++
++        {/* Message list */}
++        {showList && (
++          <div className="flex min-h-0 flex-col border-b border-[#e0e0e0] bg-white lg:border-r lg:border-b-0" data-mail-list>
++            <div className="flex items-center justify-between gap-2 border-b border-[#e0e0e0] px-4 pt-3 pb-2">
++              <h2 className="text-base font-semibold">{folderLabel}</h2>
++              <div className="flex rounded-md bg-[#f5f5f5] p-0.5 text-xs">
++                {(['all', 'unread'] as const).map((value) => (
+                   <button
+-                    key={item.id}
++                    key={value}
+                     type="button"
+-                    data-testid={`email-folder-${item.id}`}
+-                    onClick={() => {
+-                      setFolder(item.id)
+-                      setMobilePane('list')
+-                      setComposing(null)
+-                    }}
+-                    className={`flex h-10 shrink-0 items-center justify-between gap-2 rounded-lg px-3 text-sm font-semibold lg:mb-1 lg:w-full ${
+-                      folder === item.id ? 'bg-navy-900 text-white' : 'text-ink hover:bg-surface'
+-                    }`}
++                    data-testid={`email-filter-${value}`}
++                    onClick={() => setListFilter(value)}
++                    className={`h-6 rounded px-2.5 font-semibold capitalize ${listFilter === value ? 'bg-white text-[#0f6cbd] shadow-sm' : 'text-[#616161]'}`}
+                   >
+-                    <span>{item.label}</span>
+-                    {count > 0 && (
+-                      <span className={`rounded-full px-1.5 text-[11px] ${folder === item.id ? 'bg-white/15' : 'bg-accent-soft text-navy-900'}`}>
+-                        {count}
+-                      </span>
+-                    )}
++                    {value}
+                   </button>
+-                )
+-              })}
+-            </aside>
+-          )}
+-
+-          {showList && (
+-            <div className="flex min-h-0 flex-col border-b border-border lg:border-r lg:border-b-0" data-mail-list>
+-              <div className="border-b border-border p-2">
+-                <div className="relative">
+-                  <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
+-                  <input
+-                    type="search"
+-                    value={query}
+-                    onChange={(event) => setQuery(event.target.value)}
+-                    placeholder={`Search ${folder}`}
+-                    data-testid="email-search"
+-                    aria-label={`Search ${folder}`}
+-                    className="h-10 w-full rounded-lg border border-border bg-surface pr-3 pl-9 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+-                  />
+-                </div>
+-                {graphMode === 'demo' && (
+-                  <p className="px-1 pt-2 text-xs text-ink-muted">Fictional sample for {account}.</p>
+-                )}
++                ))}
+               </div>
+-              <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
+-                {visible.map((message) => (
++            </div>
++            {graphMode === 'demo' && (
++              <p className="border-b border-[#e0e0e0] bg-[#fff8e6] px-4 py-2 text-xs text-[#7a5b00]">
++                Sample mail for {account}. Click Connect Outlook to load your real inbox here.
++              </p>
++            )}
++            <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
++              {visible.map((message) => {
++                const label = senderLabel(message)
++                const active = selectedId === message.id
++                return (
+                   <button
+                     key={message.id}
+                     type="button"
+                     data-testid={`email-row-${message.id}`}
+                     onClick={() => openMessage(message)}
+-                    className={`flex w-full gap-2 border-b border-border px-3 py-3 text-left ${
+-                      selectedId === message.id ? 'bg-accent-soft' : 'bg-surface hover:bg-canvas'
++                    className={`relative flex w-full gap-3 border-b border-[#f0f0f0] px-4 py-2.5 text-left ${
++                      active ? 'bg-[#e6eef8]' : 'hover:bg-[#f5f5f5]'
+                     }`}
+                   >
+-                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${message.read ? 'bg-transparent' : 'bg-accent'}`} />
++                    {!message.read && <span className="absolute top-0 bottom-0 left-0 w-0.5 bg-[#0f6cbd]" />}
++                    <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarTone(label)}`}>
++                      {initialsOf(label)}
++                    </span>
+                     <span className="min-w-0 flex-1">
+                       <span className="flex items-baseline justify-between gap-2">
+-                        <span className={`truncate text-sm ${message.read ? 'text-ink-muted' : 'font-semibold text-navy-900'}`}>
+-                          {senderLabel(message)}
++                        <span className={`truncate text-sm ${message.read ? '' : 'font-semibold'}`}>{label}</span>
++                        <span className={`shrink-0 text-[11px] ${message.read ? 'text-[#616161]' : 'font-semibold text-[#0f6cbd]'}`}>
++                          {formatMailTime(message.at)}
+                         </span>
+-                        <span className="shrink-0 text-[11px] text-ink-subtle">{formatMailTime(message.at)}</span>
+                       </span>
+                       <span className="mt-0.5 flex items-center gap-1">
+-                        <span className={`min-w-0 flex-1 truncate text-sm ${message.read ? 'text-ink' : 'font-semibold text-ink'}`}>
++                        <span className={`min-w-0 flex-1 truncate text-sm ${message.read ? '' : 'font-semibold text-[#0f6cbd]'}`}>
+                           {message.subject}
+                         </span>
+                         {(message.hasAttachments || (message.attachments && message.attachments.length > 0)) && (
+-                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-ink-subtle" aria-label="Has attachments" />
++                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-[#616161]" aria-label="Has attachments" />
+                         )}
+                       </span>
+-                      <span className="block truncate text-xs text-ink-subtle">
+-                        {message.pending ? 'Sending…' : message.preview}
+-                      </span>
++                      <span className="block truncate text-xs text-[#616161]">{message.pending ? 'Sending…' : message.preview}</span>
+                     </span>
+                   </button>
+-                ))}
+-                {visible.length === 0 && (
+-                  <p className="p-4 text-sm text-ink-muted">{query.trim() ? 'No messages match.' : 'Nothing in this folder.'}</p>
+-                )}
+-              </div>
++                )
++              })}
++              {visible.length === 0 && (
++                <div className="flex flex-col items-center px-4 py-12 text-center text-sm text-[#616161]">
++                  <Inbox className="mb-2 h-8 w-8 text-[#c0c0c0]" />
++                  {query.trim() ? 'No messages match your search.' : listFilter === 'unread' ? 'No unread mail.' : 'Nothing in this folder.'}
++                </div>
++              )}
+             </div>
+-          )}
++          </div>
++        )}
+ 
+-          {showReader && (
+-            <section className="custom-scroll min-h-0 overflow-y-auto bg-surface p-4 sm:p-5">
+-              {narrow && (
+-                <button
+-                  type="button"
+-                  onClick={() => {
+-                    setMobilePane('list')
+-                    setComposing(null)
+-                  }}
+-                  className="mb-3 inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2 text-sm font-semibold lg:hidden"
+-                >
+-                  <ArrowLeft className="h-4 w-4" />
+-                  Back
+-                </button>
+-              )}
+-              {composing ? (
+-                <div className="space-y-2" data-testid="email-compose-form">
+-                  <p className="text-xs font-semibold text-ink-muted">From {account}</p>
+-                  <input data-testid="email-to" className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="To — any address, including gmail.com" value={composing.to} onChange={(event) => setComposing({ ...composing, to: event.target.value })} />
+-                  <input data-testid="email-cc" className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="Cc" value={composing.cc} onChange={(event) => setComposing({ ...composing, cc: event.target.value })} />
+-                  <input data-testid="email-bcc" className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="Bcc" value={composing.bcc} onChange={(event) => setComposing({ ...composing, bcc: event.target.value })} />
+-                  <input data-testid="email-subject" className="h-10 w-full rounded-lg border border-border px-3 text-sm" placeholder="Subject" value={composing.subject} onChange={(event) => setComposing({ ...composing, subject: event.target.value })} />
+-                  <textarea data-testid="email-body" className="min-h-40 w-full rounded-lg border border-border px-3 py-2 text-sm" placeholder="Write your message" value={composing.body} onChange={(event) => setComposing({ ...composing, body: event.target.value })} />
+-                  <div className="flex flex-wrap gap-2">
+-                    <button type="button" data-testid="email-send" onClick={sendCurrent} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white">
+-                      <Send className="h-4 w-4" />
+-                      Send
+-                    </button>
+-                    <button type="button" data-testid="email-save-draft" onClick={saveDraft} className="h-10 rounded-lg border border-border px-3 text-sm font-semibold">
+-                      Save draft
+-                    </button>
++        {/* Reading pane */}
++        {showReader && (
++          <section className="custom-scroll min-h-0 overflow-y-auto bg-white lg:m-2 lg:rounded-lg lg:border lg:border-[#e0e0e0]">
++            {narrow && (
++              <button
++                type="button"
++                onClick={() => {
++                  setMobilePane('list')
++                  setComposing(null)
++                }}
++                className="m-3 inline-flex h-8 items-center gap-1 rounded-md border border-[#e0e0e0] px-2 text-sm lg:hidden"
++              >
++                <ArrowLeft className="h-4 w-4" />
++                Back
++              </button>
++            )}
++            {composing ? (
++              <div className="space-y-2 p-4 sm:p-5" data-testid="email-compose-form">
++                <div className="flex items-center justify-between">
++                  <p className="text-sm font-semibold">
++                    {composing.mode === 'reply' || composing.mode === 'replyAll' ? 'Reply' : composing.mode === 'forward' ? 'Forward' : 'New message'}
++                  </p>
++                  <button type="button" aria-label="Discard" onClick={() => setComposing(null)} className="rounded p-1 text-[#616161] hover:bg-[#f0f0f0]">
++                    <X className="h-4 w-4" />
++                  </button>
++                </div>
++                <p className="text-xs text-[#616161]">From {account}</p>
++                <input data-testid="email-to" className="h-9 w-full border-b border-[#e0e0e0] px-1 text-sm outline-none focus:border-[#0f6cbd]" placeholder="To" value={composing.to} onChange={(event) => setComposing({ ...composing, to: event.target.value })} />
++                <input data-testid="email-cc" className="h-9 w-full border-b border-[#e0e0e0] px-1 text-sm outline-none focus:border-[#0f6cbd]" placeholder="Cc" value={composing.cc} onChange={(event) => setComposing({ ...composing, cc: event.target.value })} />
++                <input data-testid="email-bcc" className="h-9 w-full border-b border-[#e0e0e0] px-1 text-sm outline-none focus:border-[#0f6cbd]" placeholder="Bcc" value={composing.bcc} onChange={(event) => setComposing({ ...composing, bcc: event.target.value })} />
++                <input data-testid="email-subject" className="h-9 w-full border-b border-[#e0e0e0] px-1 text-sm outline-none focus:border-[#0f6cbd]" placeholder="Add a subject" value={composing.subject} onChange={(event) => setComposing({ ...composing, subject: event.target.value })} />
++                <textarea data-testid="email-body" className="min-h-64 w-full rounded-md border border-[#e0e0e0] px-3 py-2 text-sm outline-none focus:border-[#0f6cbd]" placeholder="Write your message" value={composing.body} onChange={(event) => setComposing({ ...composing, body: event.target.value })} />
++                <div className="flex flex-wrap gap-2">
++                  <button type="button" data-testid="email-send" onClick={sendCurrent} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0f6cbd] px-4 text-sm font-semibold text-white hover:bg-[#115ea3]">
++                    <Send className="h-4 w-4" />
++                    Send
++                  </button>
++                  <button type="button" data-testid="email-save-draft" onClick={saveDraft} className="h-8 rounded-md border border-[#e0e0e0] px-3 text-sm font-semibold hover:bg-[#f5f5f5]">
++                    Save draft
++                  </button>
++                  <button type="button" onClick={() => setComposing(null)} className="h-8 rounded-md px-3 text-sm text-[#616161] hover:bg-[#f5f5f5]">
++                    Discard
++                  </button>
++                </div>
++              </div>
++            ) : selected ? (
++              <article className="p-4 sm:p-6">
++                <h2 className="text-xl font-semibold">{selected.subject}</h2>
++                <div className="mt-4 flex items-start gap-3">
++                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarTone(selected.from || account)}`}>
++                    {initialsOf(selected.from || account)}
++                  </span>
++                  <div className="min-w-0 flex-1">
++                    <div className="flex flex-wrap items-baseline justify-between gap-2">
++                      <p className="truncate text-sm font-semibold">{selected.from || account}</p>
++                      <p className="text-xs text-[#616161]">{new Date(selected.at).toLocaleString()}</p>
++                    </div>
++                    {selected.to && <p className="truncate text-xs text-[#616161]">To: {selected.to}</p>}
++                    {selected.cc && <p className="truncate text-xs text-[#616161]">Cc: {selected.cc}</p>}
++                    {(selected.demo || selected.pending) && (
++                      <p className="mt-1 text-[11px] font-semibold text-[#7a5b00] uppercase">{selected.demo ? 'Sample' : 'Sending'}</p>
++                    )}
+                   </div>
+                 </div>
+-              ) : selected ? (
+-                <article>
+-                  <p className="text-xs font-semibold tracking-wide text-ink-muted uppercase">
+-                    {selected.demo ? 'Fictional' : selected.pending ? 'Sending' : 'Microsoft mailbox'}
+-                  </p>
+-                  <h2 className="mt-1 font-brand text-2xl font-bold text-navy-900">{selected.subject}</h2>
+-                  <p className="mt-2 text-sm text-ink-muted">From {selected.from || account}</p>
+-                  {selected.to && <p className="text-sm text-ink-muted">To {selected.to}</p>}
+-                  {selected.cc && <p className="text-sm text-ink-muted">Cc {selected.cc}</p>}
+-                  <p className="text-xs text-ink-subtle">{new Date(selected.at).toLocaleString()}</p>
++                {selected.folder === 'drafts' && (
+                   <div className="mt-4 flex flex-wrap gap-2">
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => startCompose({ mode: 'reply', ...replyFields(selected, account, false), bcc: '', subject: subjectWith('Re', selected.subject), body: '', replyToId: selected.id })}>
+-                      <Reply className="h-4 w-4" /> Reply
++                    <button type="button" className="inline-flex h-8 items-center rounded-md border border-[#e0e0e0] px-3 text-sm font-semibold hover:bg-[#f5f5f5]" onClick={() => startCompose({ mode: 'draft', to: selected.to, cc: selected.cc ?? '', bcc: selected.bcc ?? '', subject: selected.subject, body: selected.body, replyToId: selected.id })}>
++                      Edit draft
+                     </button>
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => startCompose({ mode: 'replyAll', ...replyFields(selected, account, true), bcc: '', subject: subjectWith('Re', selected.subject), body: '', replyToId: selected.id })}>
+-                      <ReplyAll className="h-4 w-4" /> Reply all
++                    <button type="button" data-testid="email-send-draft" className="inline-flex h-8 items-center rounded-md bg-[#0f6cbd] px-3 text-sm font-semibold text-white" onClick={() => sendStoredDraft(selected)}>
++                      Send draft
+                     </button>
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => startCompose({ mode: 'forward', to: '', cc: '', bcc: '', subject: subjectWith('Fwd', selected.subject), body: quoted(selected), replyToId: selected.id })}>
+-                      <Forward className="h-4 w-4" /> Forward
+-                    </button>
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => moveMessage(selected, 'archive')}>
+-                      <Archive className="h-4 w-4" /> Archive
+-                    </button>
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => moveMessage(selected, 'deleted')}>
+-                      <Trash className="h-4 w-4" /> Delete
+-                    </button>
+-                    <button type="button" className="inline-flex h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => toggleRead(selected)}>
+-                      {selected.read ? <Mail className="h-4 w-4" /> : <MailOpen className="h-4 w-4" />}
+-                      {selected.read ? 'Mark unread' : 'Mark read'}
+-                    </button>
+-                    {selected.folder === 'drafts' && (
+-                      <>
+-                        <button type="button" className="inline-flex h-9 items-center rounded-lg border border-border px-2.5 text-sm font-semibold" onClick={() => startCompose({ mode: 'draft', to: selected.to, cc: selected.cc ?? '', bcc: selected.bcc ?? '', subject: selected.subject, body: selected.body, replyToId: selected.id })}>
+-                          Edit draft
+-                        </button>
+-                        <button type="button" data-testid="email-send-draft" className="inline-flex h-9 items-center rounded-lg bg-navy-900 px-2.5 text-sm font-semibold text-white" onClick={() => sendStoredDraft(selected)}>
+-                          Send draft
+-                        </button>
+-                      </>
+-                    )}
+                   </div>
+-                  {selected.attachments && selected.attachments.length > 0 && (
+-                    <ul className="mt-4 space-y-1">
+-                      {selected.attachments.map((file) => (
+-                        <li key={file.id}>
+-                          <button type="button" onClick={() => downloadFile(selected, file)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline">
+-                            <Paperclip className="h-3.5 w-3.5" />
+-                            {file.name}
+-                            <span className="font-normal text-ink-subtle">{Math.max(1, Math.round(file.size / 1024))} KB</span>
+-                          </button>
+-                        </li>
+-                      ))}
+-                    </ul>
+-                  )}
+-                  <div
+-                    className="mt-4 text-sm leading-relaxed text-ink [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_p]:mb-3"
+-                    data-testid="email-body-html"
+-                    dangerouslySetInnerHTML={{ __html: html }}
+-                  />
+-                </article>
+-              ) : (
+-                <p className="text-sm text-ink-muted">Select a message.</p>
+-              )}
+-            </section>
+-          )}
+-        </div>
+-      )}
++                )}
++                {selected.attachments && selected.attachments.length > 0 && (
++                  <ul className="mt-4 flex flex-wrap gap-2">
++                    {selected.attachments.map((file) => (
++                      <li key={file.id}>
++                        <button type="button" onClick={() => downloadFile(selected, file)} className="inline-flex items-center gap-1.5 rounded-md border border-[#e0e0e0] px-3 py-1.5 text-sm hover:bg-[#f5f5f5]">
++                          <Paperclip className="h-3.5 w-3.5 text-[#616161]" />
++                          {file.name}
++                          <span className="text-xs text-[#616161]">{Math.max(1, Math.round(file.size / 1024))} KB</span>
++                        </button>
++                      </li>
++                    ))}
++                  </ul>
++                )}
++                <div
++                  className="mt-5 text-sm leading-relaxed [&_a]:text-[#0f6cbd] [&_blockquote]:border-l-2 [&_blockquote]:border-[#e0e0e0] [&_blockquote]:pl-3 [&_p]:mb-3"
++                  data-testid="email-body-html"
++                  dangerouslySetInnerHTML={{ __html: html }}
++                />
++                <div className="mt-6 flex flex-wrap gap-2">
++                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e0e0e0] px-3 text-sm hover:bg-[#f5f5f5]" onClick={() => startCompose({ mode: 'reply', ...replyFields(selected, account, false), bcc: '', subject: subjectWith('Re', selected.subject), body: '', replyToId: selected.id })}>
++                    <Reply className="h-4 w-4" /> Reply
++                  </button>
++                  <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e0e0e0] px-3 text-sm hover:bg-[#f5f5f5]" onClick={() => startCompose({ mode: 'forward', to: '', cc: '', bcc: '', subject: subjectWith('Fwd', selected.subject), body: quoted(selected), replyToId: selected.id })}>
++                    <Forward className="h-4 w-4" /> Forward
++                  </button>
++                </div>
++              </article>
++            ) : (
++              <div className="flex h-full min-h-60 flex-col items-center justify-center p-6 text-center text-[#616161]">
++                <MailOpen className="mb-3 h-10 w-10 text-[#c0c0c0]" />
++                <p className="text-sm font-semibold text-[#242424]">Select an item to read</p>
++                <p className="mt-1 text-xs">Nothing is selected</p>
++              </div>
++            )}
++          </section>
++        )}
++      </div>
++
++      {/* Status bar */}
++      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#e0e0e0] bg-white px-3 py-1 text-[11px] text-[#616161]">
++        <span data-testid="email-status" className="truncate">{status}</span>
++        {syncedAt && <span>Last checked {new Date(syncedAt).toLocaleString()}</span>}
++      </footer>
+     </div>
+   )
+ }
+-- 
+2.43.0
+

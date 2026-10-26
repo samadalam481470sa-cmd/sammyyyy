@@ -13,6 +13,8 @@ import {
   msalAuthority,
   msalClientId,
   microsoftAuthErrorCode,
+  microsoftBlockReason,
+  registeredBrowserUrl,
   MicrosoftAuthUnavailableError,
   spaRedirectUriFromLocation,
   stripAuthRedirectQuery,
@@ -144,5 +146,32 @@ describe('Microsoft 365 errors', () => {
         name: 'Sam',
       }).email,
     ).toBe('sam@outlook.com')
+  })
+})
+
+describe('Microsoft sign-in in Cursor / preview windows', () => {
+  const base = { href: 'http://localhost:5173/login', framed: false, hasCrypto: true }
+
+  it('runs normally in a real localhost tab', () => {
+    expect(microsoftBlockReason(base)).toBeNull()
+    expect(
+      microsoftBlockReason({ ...base, href: 'https://samadalam481470sa-cmd.github.io/sammyyyy/' }),
+    ).toBeNull()
+  })
+
+  it('hands off when the app is inside an editor preview iframe', () => {
+    expect(microsoftBlockReason({ ...base, framed: true })).toBe('embedded')
+  })
+
+  it('moves 127.0.0.1 and 0.0.0.0 to the registered localhost redirect', () => {
+    expect(microsoftBlockReason({ ...base, href: 'http://127.0.0.1:5173/' })).toBe('loopback-alias')
+    expect(registeredBrowserUrl('http://127.0.0.1:5173/login')).toBe('http://localhost:5173/login')
+    expect(registeredBrowserUrl('http://0.0.0.0:5173/')).toBe('http://localhost:5173/')
+  })
+
+  it('flags plain-http LAN pages that have no WebCrypto', () => {
+    expect(
+      microsoftBlockReason({ href: 'http://192.168.1.20:5173/', framed: false, hasCrypto: false }),
+    ).toBe('insecure')
   })
 })

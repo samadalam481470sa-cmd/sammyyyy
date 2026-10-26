@@ -1,0 +1,206 @@
+From 33358f05ee5b40ecdcd85f66af1ac20a209ddb54 Mon Sep 17 00:00:00 2001
+From: samadalam481470sa-cmd <samadalam481470sa-cmd@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 17:24:58 -0500
+Subject: [PATCH] Fix Microsoft sign-in lag and silent failure in Cursor
+ preview
+
+- Render the app immediately; only wait for MSAL when returning from Microsoft.
+- Skip MSAL init inside preview iframes and insecure http pages (it hung or failed).
+- In the Cursor/VS Code preview, open the app in the real browser to sign in.
+- Move 127.0.0.1 / 0.0.0.0 to the registered localhost redirect.
+- Show a clear message instead of 'Microsoft cloud sign-in is not connected'.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KpwQi1koQyAcMumJxBKyKw
+---
+ src/auth/msal.test.ts | 29 ++++++++++++++++
+ src/auth/msal.ts      | 78 +++++++++++++++++++++++++++++++++++++++++++
+ src/main.tsx          | 18 +++++++---
+ 3 files changed, 120 insertions(+), 5 deletions(-)
+
+diff --git a/src/auth/msal.test.ts b/src/auth/msal.test.ts
+index c118cbe..549d9b0 100644
+--- a/src/auth/msal.test.ts
++++ b/src/auth/msal.test.ts
+@@ -13,6 +13,8 @@ import {
+   msalAuthority,
+   msalClientId,
+   microsoftAuthErrorCode,
++  microsoftBlockReason,
++  registeredBrowserUrl,
+   MicrosoftAuthUnavailableError,
+   spaRedirectUriFromLocation,
+   stripAuthRedirectQuery,
+@@ -146,3 +148,30 @@ describe('Microsoft 365 errors', () => {
+     ).toBe('sam@outlook.com')
+   })
+ })
++
++describe('Microsoft sign-in in Cursor / preview windows', () => {
++  const base = { href: 'http://localhost:5173/login', framed: false, hasCrypto: true }
++
++  it('runs normally in a real localhost tab', () => {
++    expect(microsoftBlockReason(base)).toBeNull()
++    expect(
++      microsoftBlockReason({ ...base, href: 'https://samadalam481470sa-cmd.github.io/sammyyyy/' }),
++    ).toBeNull()
++  })
++
++  it('hands off when the app is inside an editor preview iframe', () => {
++    expect(microsoftBlockReason({ ...base, framed: true })).toBe('embedded')
++  })
++
++  it('moves 127.0.0.1 and 0.0.0.0 to the registered localhost redirect', () => {
++    expect(microsoftBlockReason({ ...base, href: 'http://127.0.0.1:5173/' })).toBe('loopback-alias')
++    expect(registeredBrowserUrl('http://127.0.0.1:5173/login')).toBe('http://localhost:5173/login')
++    expect(registeredBrowserUrl('http://0.0.0.0:5173/')).toBe('http://localhost:5173/')
++  })
++
++  it('flags plain-http LAN pages that have no WebCrypto', () => {
++    expect(
++      microsoftBlockReason({ href: 'http://192.168.1.20:5173/', framed: false, hasCrypto: false }),
++    ).toBe('insecure')
++  })
++})
+diff --git a/src/auth/msal.ts b/src/auth/msal.ts
+index e16d03c..9cd4348 100644
+--- a/src/auth/msal.ts
++++ b/src/auth/msal.ts
+@@ -39,6 +39,79 @@ export class MicrosoftAuthUnavailableError extends Error {
+   }
+ }
+ 
++/** Thrown when sign-in was handed to the real browser because this window cannot run it. */
++export class MicrosoftOpenedElsewhereError extends Error {
++  constructor(message: string) {
++    super(message)
++    this.name = 'MicrosoftOpenedElsewhereError'
++  }
++}
++
++/** Loopback hosts that are not registered as Entra redirect URIs. Only "localhost" is. */
++const LOOPBACK_ALIASES = new Set(['127.0.0.1', '0.0.0.0', '[::1]', '::1'])
++
++export type MicrosoftBlockReason = 'embedded' | 'insecure' | 'loopback-alias' | null
++
++/**
++ * Why Microsoft sign-in cannot run in this window:
++ * - embedded: inside an iframe (Cursor / VS Code preview). Microsoft's page refuses to load in frames.
++ * - insecure: plain http on a LAN IP. The browser hides WebCrypto, so MSAL cannot start.
++ * - loopback-alias: 127.0.0.1 / 0.0.0.0. Entra only accepts the registered http://localhost:5173/.
++ */
++export function microsoftBlockReason(
++  env: { href: string; framed: boolean; hasCrypto: boolean } | null = null,
++): MicrosoftBlockReason {
++  let href = env?.href
++  let framed = env?.framed
++  let hasCrypto = env?.hasCrypto
++  if (!env) {
++    if (typeof window === 'undefined') return null
++    href = window.location.href
++    try {
++      framed = window.self !== window.top
++    } catch {
++      framed = true
++    }
++    hasCrypto = Boolean(window.isSecureContext !== false && window.crypto?.subtle)
++  }
++  let host = ''
++  try {
++    host = new URL(href ?? '').hostname
++  } catch {
++    return null
++  }
++  if (framed) return 'embedded'
++  if (LOOPBACK_ALIASES.has(host)) return 'loopback-alias'
++  if (!hasCrypto) return 'insecure'
++  return null
++}
++
++/** Same page on the registered "localhost" host, so Entra accepts the redirect. */
++export function registeredBrowserUrl(href: string): string {
++  const url = new URL(href)
++  if (LOOPBACK_ALIASES.has(url.hostname)) url.hostname = 'localhost'
++  return url.toString()
++}
++
++/** Open the app in the real browser (or move to localhost) instead of failing silently. */
++function handOffMicrosoftSignIn(reason: Exclude<MicrosoftBlockReason, null>): never {
++  const target = registeredBrowserUrl(window.location.href)
++  if (reason === 'loopback-alias') {
++    window.location.assign(target)
++    throw new MicrosoftOpenedElsewhereError('Moving to localhost so Microsoft accepts the sign-in…')
++  }
++  if (reason === 'embedded') {
++    window.open(target, '_blank', 'noopener,noreferrer')
++    throw new MicrosoftOpenedElsewhereError(
++      'Microsoft sign-in cannot run inside the Cursor preview. The app opened in your browser — sign in there. If nothing opened, copy this address into Chrome or Edge: ' +
++        target,
++    )
++  }
++  throw new MicrosoftOpenedElsewhereError(
++    'Microsoft sign-in needs a secure address. Open http://localhost:5173 on this computer, or the live link https://samadalam481470sa-cmd.github.io/sammyyyy/.',
++  )
++}
++
+ const COMMON_AUTHORITY = 'https://login.microsoftonline.com/common'
+ 
+ /** Public SPA client ID. Not a secret. Work + personal Microsoft accounts. */
+@@ -340,6 +413,9 @@ export function userFromMicrosoftAccount(account: AccountInfo): AuthUser {
+ export async function ensureMsal(): Promise<PublicClientApplication | null> {
+   if (pca) return pca
+   if (!msalClientId()) return null
++  // MSAL cannot start (or would hang) in a preview iframe or an insecure page. Skip it fast.
++  const blocked = microsoftBlockReason()
++  if (blocked === 'embedded' || blocked === 'insecure') return null
+   if (initPromise) return initPromise
+   initPromise = (async () => {
+     const clientId = msalClientId()
+@@ -431,6 +507,8 @@ export function purgeMicrosoftAuthStorage(): void {
+ }
+ 
+ export async function startMicrosoftLogin(loginHint?: string): Promise<MicrosoftLoginResult> {
++  const blocked = microsoftBlockReason()
++  if (blocked) handOffMicrosoftSignIn(blocked)
+   const instance = await ensureMsal()
+   if (!instance) throw new MicrosoftAuthUnavailableError()
+ 
+diff --git a/src/main.tsx b/src/main.tsx
+index e3ba228..0f2ecd0 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
+ import { createRoot } from 'react-dom/client'
+ import './index.css'
+ import App from './App.tsx'
+-import { ensureMsal, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
++import { ensureMsal, hasEntraRedirectReturn, loadEntraConfig, microsoftLoginInProgress } from '@/auth/msal'
+ import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
+ import { installClientLogging } from '@/lib/clientLog'
+ 
+@@ -36,10 +36,18 @@ function registerServiceWorker(): void {
+     .catch(() => undefined)
+ }
+ 
+-void Promise.race([
+-  loadEntraConfig().then(() => ensureMsal()),
+-  new Promise((resolve) => window.setTimeout(resolve, 8000)),
+-])
++const msalWarmup = loadEntraConfig()
++  .then(() => ensureMsal())
++  .catch(() => null)
++
++// Only hold the first paint while Microsoft is handing back a sign-in (?code=…), so the
++// router cannot strip the response before MSAL reads it. Normal loads render at once.
++const waitForMicrosoft = hasEntraRedirectReturn()
++
++void (waitForMicrosoft
++  ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 5000))])
++  : Promise.resolve()
++)
+   .catch(() => undefined)
+   .finally(() => {
+     render()
+-- 
+2.43.0
+
