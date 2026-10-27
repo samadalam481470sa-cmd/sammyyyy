@@ -3,6 +3,7 @@ import { ensureMsal } from '@/auth/msal'
 import {
   Archive,
   ArrowLeft,
+  CalendarPlus,
   FileText,
   Forward,
   Inbox,
@@ -22,6 +23,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
+import { AddToCalendarDialog } from '@/components/email/AddToCalendarDialog'
+import { meetingFromMail, meetingLabel, type MailMeetingDraft } from '@/lib/mailMeeting'
 import { normalizeEmail } from '@/lib/emailIdentity'
 import { parseAddresses, uniqueAddresses } from '@/lib/mailAddress'
 import { renderMailHtml } from '@/lib/mailHtml'
@@ -155,6 +158,9 @@ export function EmailPage() {
     return listFilter === 'unread' ? rows.filter((message) => !message.read) : rows
   }, [messages, folder, query, listFilter])
   const selected = messages.find((message) => message.id === selectedId) ?? null
+  const [calendarDraft, setCalendarDraft] = useState<MailMeetingDraft | null>(null)
+  // A meeting date found in the open email, offered as "Add to calendar".
+  const meetingSuggestion = useMemo(() => (selected ? meetingFromMail(selected) : null), [selected])
   const folderLabel = MAIL_FOLDERS.find((item) => item.id === folder)?.label ?? 'Inbox'
   const showList = !narrow || (mobilePane === 'list' && !composing)
   const showReader = !narrow || mobilePane === 'read' || Boolean(composing)
@@ -568,6 +574,15 @@ export function EmailPage() {
         >
           <Forward className="h-4 w-4" /> Forward
         </button>
+        <button
+          type="button"
+          data-testid="email-add-to-calendar"
+          className={ribbonButton}
+          disabled={!selected}
+          onClick={() => meetingSuggestion && setCalendarDraft(meetingSuggestion)}
+        >
+          <CalendarPlus className="h-4 w-4" /> Add to calendar
+        </button>
         {graphMode === 'demo' && (
           <button
             type="button"
@@ -747,6 +762,21 @@ export function EmailPage() {
             ) : selected ? (
               <article className="p-4 sm:p-6">
                 <h2 className="text-xl font-semibold">{selected.subject}</h2>
+                {meetingSuggestion?.found && (
+                  <div data-testid="email-meeting-found" className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-[#c7dcf0] bg-[#ebf3fc] px-3 py-2 text-sm text-[#0f548c]">
+                    <CalendarPlus className="h-4 w-4 shrink-0" />
+                    <span className="flex-1">
+                      {meetingSuggestion.meetingLike ? 'Meeting' : 'Date'} found: {meetingLabel(meetingSuggestion.date, meetingSuggestion.time)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarDraft(meetingSuggestion)}
+                      className="h-7 rounded-md bg-[#0f6cbd] px-3 text-xs font-semibold text-white hover:bg-[#115ea3]"
+                    >
+                      Add to calendar
+                    </button>
+                  </div>
+                )}
                 <div className="mt-4 flex items-start gap-3">
                   <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarTone(selected.from || account)}`}>
                     {initialsOf(selected.from || account)}
@@ -816,6 +846,17 @@ export function EmailPage() {
         <span data-testid="email-status" className="truncate">{status}</span>
         {syncedAt && <span>Last checked {new Date(syncedAt).toLocaleString()}</span>}
       </footer>
+      {calendarDraft && (
+        <AddToCalendarDialog
+          draft={calendarDraft}
+          outlookConnected={graphMode === 'graph'}
+          onClose={() => setCalendarDraft(null)}
+          onSaved={(message) => {
+            setCalendarDraft(null)
+            setStatus(message)
+          }}
+        />
+      )}
     </div>
   )
 }
