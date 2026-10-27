@@ -364,12 +364,16 @@ export async function listGmailFolder(
   folder: MailFolder,
   known: Map<string, MailMessage>,
   max = 20,
+  beforeIso?: string,
 ): Promise<MailMessage[]> {
   const token = requireToken(owner)
   const spec = GMAIL_FOLDERS[folder]
   const params = new URLSearchParams({ maxResults: String(max) })
   for (const label of spec.labelIds ?? []) params.append('labelIds', label)
-  if (spec.q) params.set('q', spec.q)
+  // Older mail: Gmail search "before:" takes seconds since 1970.
+  const before = beforeIso ? `before:${Math.floor(new Date(beforeIso).getTime() / 1000)}` : ''
+  const q = [spec.q, before].filter(Boolean).join(' ')
+  if (q) params.set('q', q)
   if (spec.spamTrash) params.set('includeSpamTrash', 'true')
   const res = await ok(await gmailFetch(token, `/messages?${params}`), `list ${folder}`)
   const ids = (((await res.json()) as { messages?: { id: string }[] }).messages ?? []).map((row) => row.id)

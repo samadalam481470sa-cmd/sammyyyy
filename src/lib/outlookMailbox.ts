@@ -261,9 +261,12 @@ export function mergeMailbox(existing: MailMessage[], patch: MailMergePatch): Ma
   if (patch.replaceFolder && patch.folder) {
     const incomingIds = new Set(patch.incoming.map((message) => message.id))
     const folder = patch.folder
+    // Older mail loaded with "Load older emails" sits outside the newest-page window. Keep it.
+    const oldestIncoming = patch.incoming.reduce((min, message) => (message.at < min ? message.at : min), '\uffff')
     next = next.filter((message) => {
       if (message.folder !== folder) return true
       if (message.pending || message.id.startsWith('pending-')) return true
+      if (patch.incoming.length > 0 && message.at < oldestIncoming) return true
       return incomingIds.has(message.id)
     })
   }

@@ -2,7 +2,7 @@ import { useState, type ChangeEvent } from 'react'
 import { Settings } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { useData } from '@/data/DataContext'
-import { launcherHref } from '@/lib/desktopApp'
+import { InstallAppButton } from '@/components/shared/InstallAppButton'
 import { calendarOwnerLabel } from '@/lib/meetingCalendar'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { SCHEMA_VERSION } from '@/lib/portableDatabase'
@@ -13,7 +13,6 @@ export function SettingsPage() {
   const owner = sessionOwnerKey(user)
   const [importError, setImportError] = useState<string | null>(null)
   const [importNote, setImportNote] = useState<string | null>(null)
-  const base = import.meta.env.BASE_URL
 
   const onImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -82,7 +81,7 @@ export function SettingsPage() {
             Schema version {SCHEMA_VERSION}. This device keeps its own database.
           </p>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-            The Windows and Mac download opens the live app, so a code change applies the next time the app opens and the database migrates itself.
+            The installed app opens the live site in its own window, so updates apply the next time it opens and the database migrates itself.
           </p>
           <div className="mt-4 flex flex-col gap-3">
             <button
@@ -116,24 +115,7 @@ export function SettingsPage() {
                 {importNote}
               </p>
             ) : null}
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <a
-                data-testid="download-windows"
-                href={launcherHref('windows', base)}
-                download
-                className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas sm:w-auto"
-              >
-                Download for Windows
-              </a>
-              <a
-                data-testid="download-mac"
-                href={launcherHref('mac', base)}
-                download
-                className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-ink hover:bg-canvas sm:w-auto"
-              >
-                Download for Mac
-              </a>
-            </div>
+            <InstallAppButton />
           </div>
         </section>
       </div>

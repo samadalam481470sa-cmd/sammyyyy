@@ -5,6 +5,7 @@ import { EditorGuardProvider } from '@/components/shared/EditorGuardContext'
 import { SpreadsheetColumnProvider, useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { useAuth } from '@/auth/AuthContext'
 import { installOutlookSync } from '@/lib/outlookSync'
+import { NewMailToast } from '@/components/email/NewMailToast'
 import { sidebarOffset } from '@/lib/dashboardSpreadsheets'
 import { calendarOwnerKey, loadCalendarEvents } from '@/lib/meetingCalendar'
 import { pushCalendarReminders } from '@/lib/calendarReminders'
@@ -64,6 +65,7 @@ function AppFrame() {
       >
         <Outlet context={{ sidebarCollapsed: collapsed }} />
       </div>
+      <NewMailToast />
     </div>
   )
 }

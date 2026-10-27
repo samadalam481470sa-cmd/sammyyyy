@@ -236,6 +236,19 @@ export async function listOutlookFolder(token: string, folder: MailFolder): Prom
   return (json.value ?? []).map((row) => toMail(row, folder)).filter((row): row is MailMessage => row != null)
 }
 
+/** Older mail in one folder: the 25 messages received before `beforeIso`. */
+export async function listOutlookFolderBefore(token: string, folder: MailFolder, beforeIso: string): Promise<MailMessage[]> {
+  const name = GRAPH_WELL_KNOWN_FOLDERS[folder]
+  const filter = encodeURIComponent(`receivedDateTime lt ${new Date(beforeIso).toISOString()}`)
+  const res = await graphFetch(
+    token,
+    `/me/mailFolders/${name}/messages?$top=25&$select=${LIST_SELECT}&$filter=${filter}&$orderby=receivedDateTime desc`,
+  )
+  if (!res.ok) throw new Error(`Outlook ${folder} failed (${res.status}).`)
+  const json = (await res.json()) as { value?: GraphMessage[] }
+  return (json.value ?? []).map((row) => toMail(row, folder)).filter((row): row is MailMessage => row != null)
+}
+
 export interface OutlookFolderPage {
   messages: MailMessage[]
   removedIds: string[]

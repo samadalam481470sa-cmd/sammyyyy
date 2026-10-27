@@ -72,6 +72,7 @@ import {
   readSyncDetail,
   saveDraftMail,
   sendDraftMail,
+  loadOlderMail,
   setOutlookMailSurfaceActive,
   syncOutlookNow,
 } from '@/lib/outlookSync'
@@ -172,9 +173,13 @@ export function EmailPage() {
   const selected = messages.find((message) => message.id === selectedId) ?? null
   const [calendarDraft, setCalendarDraft] = useState<MailMeetingDraft | null>(null)
   const [gmailOn, setGmailOn] = useState(() => isGmailConnected(account))
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [noOlder, setNoOlder] = useState<Record<string, boolean>>({})
+  const [alerts, setAlerts] = useState(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
   const provider = gmailOn ? 'Gmail' : 'Outlook'
   useEffect(() => {
     setGmailOn(isGmailConnected(account))
+    setNoOlder({})
     // Load Google's sign-in script ahead of time so Connect Gmail opens Google's window at once.
     void gmailClientId().then((id) => {
       if (id) void preloadGmail()
@@ -297,6 +302,26 @@ export function EmailPage() {
   useEffect(() => {
     void ensureMsal()
   }, [])
+
+  const loadOlder = () => {
+    setLoadingOlder(true)
+    loadOlderMail(email, folder)
+      .then((added) => {
+        refreshFromStore()
+        if (added === 0) setNoOlder((prev) => ({ ...prev, [folder]: true }))
+        setStatus(added ? `Loaded ${added} older emails.` : 'No older emails in this folder.')
+      })
+      .catch((err) => setStatus(err instanceof Error ? err.message : 'Older emails could not be loaded.'))
+      .finally(() => setLoadingOlder(false))
+  }
+
+  const turnOnAlerts = () => {
+    if (typeof Notification === 'undefined') return
+    void Notification.requestPermission().then((result) => {
+      setAlerts(result)
+      setStatus(result === 'granted' ? 'Desktop alerts are on. New mail shows even when this window is in the background.' : 'Desktop alerts stay off.')
+    })
+  }
 
   const connectGmailNow = () => {
     setSyncing(true)
@@ -800,6 +825,17 @@ export function EmailPage() {
                   </button>
                 )
               })}
+              {!query.trim() && listFilter === 'all' && (graphMode === 'graph' || gmailOn) && visible.length > 0 && !noOlder[folder] && (
+                <button
+                  type="button"
+                  data-testid="email-load-older"
+                  onClick={loadOlder}
+                  disabled={loadingOlder}
+                  className="w-full py-3 text-sm font-semibold text-[#0f6cbd] hover:bg-[#f5f5f5] disabled:opacity-60"
+                >
+                  {loadingOlder ? 'Loading older emails…' : 'Load older emails'}
+                </button>
+              )}
               {visible.length === 0 && (
                 <div className="flex flex-col items-center px-4 py-12 text-center text-sm text-[#616161]">
                   <Inbox className="mb-2 h-8 w-8 text-[#c0c0c0]" />
@@ -940,6 +976,11 @@ export function EmailPage() {
       {/* Status bar */}
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[#e0e0e0] bg-white px-3 py-1 text-[11px] text-[#616161]">
         <span data-testid="email-status" className="truncate">{status}</span>
+        {alerts === 'default' && (
+          <button type="button" data-testid="email-alerts" onClick={turnOnAlerts} className="font-semibold text-[#0f6cbd] hover:underline">
+            Turn on desktop alerts
+          </button>
+        )}
         {syncedAt && <span>Last checked {new Date(syncedAt).toLocaleString()}</span>}
       </footer>
       {calendarDraft && (

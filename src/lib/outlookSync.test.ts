@@ -245,9 +245,9 @@ describe('Outlook send and sync', () => {
   })
 
   it('polls quickly only while the mailbox is visible', () => {
-    expect(mailPollDelay(true)).toBe(12_000)
+    expect(mailPollDelay(true)).toBe(5_000)
     expect(mailPollDelay(false)).toBeNull()
-    expect(OUTLOOK_BACKGROUND_SYNC_MS).toBeGreaterThanOrEqual(20_000)
-    expect(OUTLOOK_BACKGROUND_SYNC_MS).toBeLessThanOrEqual(45_000)
+    expect(OUTLOOK_BACKGROUND_SYNC_MS).toBeGreaterThanOrEqual(10_000)
+    expect(OUTLOOK_BACKGROUND_SYNC_MS).toBeLessThanOrEqual(30_000)
   })
 })

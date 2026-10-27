@@ -127,3 +127,12 @@ describe('per-account Outlook mailbox', () => {
     expect(loadDeltaLinks('mary@outlook.com').sent).toBeUndefined()
   })
 })
+
+describe('older mail stays after a refresh', () => {
+  it('keeps messages older than the newest page when a folder is replaced', () => {
+    const row = (id: string, at: string) => ({ id, folder: 'inbox' as const, from: 'a@x.com', to: 'b@x.com', subject: id, preview: '', body: '', at, read: true, demo: false })
+    const existing = [row('old', '2026-01-01T00:00:00Z'), row('gone', '2026-10-25T00:00:00Z')]
+    const next = mergeMailbox(existing, { folder: 'inbox', incoming: [row('new', '2026-10-26T00:00:00Z'), row('mid', '2026-10-20T00:00:00Z')], replaceFolder: true })
+    expect(next.map((m) => m.id).sort()).toEqual(['mid', 'new', 'old'])
+  })
+})

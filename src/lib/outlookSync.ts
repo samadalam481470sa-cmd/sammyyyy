@@ -5,6 +5,7 @@ import {
   forwardOutlookMail,
   listOutlookEvents,
   listOutlookFolder,
+  listOutlookFolderBefore,
   moveOutlookMessage,
   outlookToken,
   replyAllOutlookMail,
@@ -43,8 +44,12 @@ import {
 } from '@/lib/gmail'
 
 export const OUTLOOK_SYNCED_EVENT = 'newport-outlook-synced'
-export const OUTLOOK_BACKGROUND_SYNC_MS = 30_000
-export const OUTLOOK_VISIBLE_SYNC_MS = 12_000
+/** App-wide check while logged in (any page). Browsers slow hidden tabs to about once a minute. */
+export const OUTLOOK_BACKGROUND_SYNC_MS = 15_000
+/** Email page open and visible: near-instant new mail. Delta queries keep this cheap. */
+export const OUTLOOK_VISIBLE_SYNC_MS = 5_000
+/** Quick checks look at these folders; a full refresh covers all of them. */
+const QUICK_FOLDERS: MailFolder[] = ['inbox', 'sent', 'drafts']
 
 const MAIL_FOLDERS: MailFolder[] = ['inbox', 'sent', 'drafts', 'junk', 'deleted', 'archive']
 
@@ -130,7 +135,7 @@ async function syncGmailNow(account: string, incremental: boolean): Promise<'gra
   try {
     let mailbox = loadMailbox(account)
     const known = new Map(mailbox.map((message) => [message.id, message]))
-    const folders: MailFolder[] = incremental ? ['inbox'] : ['inbox', 'sent', 'drafts', 'junk', 'deleted', 'archive']
+    const folders: MailFolder[] = incremental ? QUICK_FOLDERS : MAIL_FOLDERS
     const results = await Promise.all(
       folders.map(async (folder) => {
         try {
@@ -187,7 +192,7 @@ export async function syncOutlookNow(
       const incremental = options?.incremental === true
       const links = loadDeltaLinks(account)
       const results = await Promise.all(
-        MAIL_FOLDERS.map(async (folder) => {
+        (incremental ? QUICK_FOLDERS : MAIL_FOLDERS).map(async (folder) => {
           try {
             const page = await pullFolder(token, folder, incremental ? links[folder] : undefined)
             return { folder, page, ok: true as const }
@@ -232,6 +237,26 @@ export async function syncOutlookNow(
     }
     return 'demo'
   }
+}
+
+/** Load the next 25 older emails in a folder. Returns how many were added. */
+export async function loadOlderMail(email: string, folder: MailFolder): Promise<number> {
+  const account = accountEmail(email)
+  const mailbox = loadMailbox(account)
+  const inFolder = mailbox.filter((message) => message.folder === folder && !message.pending)
+  const oldest = inFolder.reduce((min, message) => (message.at < min ? message.at : min), new Date().toISOString())
+  let older: MailMessage[]
+  if (isGmailConnected(account)) {
+    const known = new Map(mailbox.map((message) => [message.id, message]))
+    older = await listGmailFolder(account, folder, known, 25, oldest)
+  } else {
+    const token = await outlookToken(false)
+    if (!token) throw new Error('Connect Outlook to load older emails.')
+    older = await listOutlookFolderBefore(token, folder, oldest)
+  }
+  const fresh = older.filter((message) => !mailbox.some((row) => row.id === message.id))
+  saveMailbox(account, mergeMailbox(loadMailbox(account), { folder, incoming: fresh }))
+  return fresh.length
 }
 
 export async function deliverMail(input: {
@@ -414,19 +439,66 @@ export function isOutlookMailSurfaceActive(): boolean {
   return mailSurfaceActive
 }
 
+export const NEW_MAIL_EVENT = 'newport-new-mail'
+
+function unreadInbox(account: string): MailMessage[] {
+  return loadMailbox(account).filter((message) => message.folder === 'inbox' && !message.read && !message.demo)
+}
+
+/**
+ * Keeps the logged-in user's mail current on every page: a check every 15 seconds, plus an
+ * immediate check when the window regains focus, becomes visible, or comes back online.
+ * Shows the unread count in the tab title and announces new mail. Stops at logout.
+ */
 export function installOutlookSync(email: string): () => void {
   const account = accountEmail(email)
-  const onRequest = () => {
-    void syncOutlookNow(account, { incremental: false, mail: true })
+  const baseTitle = typeof document !== 'undefined' ? document.title.replace(/^\(\d+\)\s*/, '') : ''
+  let seen = new Set(unreadInbox(account).map((message) => message.id))
+  let running = false
+  let lastRun = 0
+
+  const afterSync = () => {
+    const unread = unreadInbox(account)
+    const fresh = unread.filter((message) => !seen.has(message.id))
+    seen = new Set(unread.map((message) => message.id))
+    if (typeof document !== 'undefined') document.title = unread.length ? `(${unread.length}) ${baseTitle}` : baseTitle
+    if (fresh.length) window.dispatchEvent(new CustomEvent(NEW_MAIL_EVENT, { detail: { count: fresh.length, latest: fresh[0] } }))
   }
-  const tick = () => {
-    void syncOutlookNow(account, { incremental: true, mail: !mailSurfaceActive })
+  const run = (incremental: boolean, mail: boolean) => {
+    if (running) return
+    running = true
+    lastRun = Date.now()
+    void syncOutlookNow(account, { incremental, mail })
+      .catch(() => 'demo')
+      .finally(() => {
+        running = false
+        afterSync()
+      })
   }
+  const onRequest = () => run(false, true)
+  const tick = () => run(true, !mailSurfaceActive)
+  // Back to the window: check right away (at most once every 3 seconds).
+  const onWake = () => {
+    if (document.visibilityState === 'hidden') return
+    if (Date.now() - lastRun < 3_000) return
+    run(true, true)
+  }
+  const onSynced = () => afterSync()
   window.addEventListener(OUTLOOK_SYNC_EVENT, onRequest)
+  window.addEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
+  window.addEventListener('focus', onWake)
+  window.addEventListener('online', onWake)
+  document.addEventListener('visibilitychange', onWake)
   const timer = window.setInterval(tick, OUTLOOK_BACKGROUND_SYNC_MS)
+  run(true, true)
   return () => {
     window.removeEventListener(OUTLOOK_SYNC_EVENT, onRequest)
+    window.removeEventListener(OUTLOOK_SYNCED_EVENT, onSynced)
+    window.removeEventListener('focus', onWake)
+    window.removeEventListener('online', onWake)
+    document.removeEventListener('visibilitychange', onWake)
     window.clearInterval(timer)
+    if (typeof document !== 'undefined') document.title = baseTitle
   }
 }
 

@@ -11,8 +11,10 @@ import {
 } from '@/auth/msal'
 import { AppErrorBoundary } from '@/components/shared/AppErrorBoundary'
 import { installClientLogging } from '@/lib/clientLog'
+import { captureInstallPrompt } from '@/lib/installApp'
 
 installClientLogging()
+captureInstallPrompt()
 
 let rendered = false
 function render() {
