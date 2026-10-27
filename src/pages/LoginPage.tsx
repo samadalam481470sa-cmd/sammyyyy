@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
-import { InstallAppButton } from '@/components/shared/InstallAppButton'
 import { dashboardPathAfterLogin } from '@/lib/loginDestination'
 import {
   consumeMicrosoftReturnErrorMessage,
@@ -205,10 +204,6 @@ export function LoginPage() {
       <div className="relative mt-3 flex max-w-[28rem] flex-col items-center gap-2 text-center">
         <p className="text-[10px] leading-snug text-white/70">
           Secured by Microsoft. Password entry stays on login.microsoftonline.com. This screen does not remember the last account.
-        </p>
-        <InstallAppButton variant="dark" />
-        <p className="max-w-sm text-[10px] leading-snug text-white/50">
-          Installs as a real app with its own window and icon. Updates arrive automatically. Each person signs in with their own account.
         </p>
       </div>
     </div>
