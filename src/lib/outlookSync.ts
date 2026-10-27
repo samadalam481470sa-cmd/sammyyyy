@@ -30,6 +30,17 @@ import {
   type MailFolder,
   type MailMessage,
 } from '@/lib/outlookMailbox'
+import {
+  gmailAddress,
+  isGmailConnected,
+  isGmailId,
+  listGmailFolder,
+  markGmailRead,
+  moveGmail,
+  saveGmailDraft,
+  sendGmail,
+  sendGmailDraft,
+} from '@/lib/gmail'
 
 export const OUTLOOK_SYNCED_EVENT = 'newport-outlook-synced'
 export const OUTLOOK_BACKGROUND_SYNC_MS = 30_000
@@ -104,12 +115,59 @@ async function syncCalendar(token: string, account: string): Promise<void> {
   window.dispatchEvent(new CustomEvent('newport-calendar-updated'))
 }
 
+/** Email of the CRM user logged in to this tab. */
+function sessionOwner(): string {
+  try {
+    const raw = sessionStorage.getItem('newport_crm_session_user')
+    return raw ? accountEmail(String((JSON.parse(raw) as { email?: string }).email ?? '')) : ''
+  } catch {
+    return ''
+  }
+}
+
+/** Gmail sync: newest mail in each folder from the connected Gmail account. */
+async function syncGmailNow(account: string, incremental: boolean): Promise<'graph' | 'demo'> {
+  try {
+    let mailbox = loadMailbox(account)
+    const known = new Map(mailbox.map((message) => [message.id, message]))
+    const folders: MailFolder[] = incremental ? ['inbox'] : ['inbox', 'sent', 'drafts', 'junk', 'deleted', 'archive']
+    const results = await Promise.all(
+      folders.map(async (folder) => {
+        try {
+          return { folder, rows: await listGmailFolder(account, folder, known), ok: true as const }
+        } catch (err) {
+          return { folder, ok: false as const, err }
+        }
+      }),
+    )
+    const succeeded = results.flatMap((result) => (result.ok ? [result] : []))
+    if (!succeeded.length) {
+      const first = results.find((result) => !result.ok)
+      throw first && !first.ok ? first.err : new Error('Gmail sync failed.')
+    }
+    // Outlook mail from an earlier session is not mixed into the Gmail view.
+    mailbox = mailbox.filter((message) => isGmailId(message.id) || message.pending)
+    for (const result of succeeded) {
+      mailbox = mergeMailbox(mailbox, { folder: result.folder, incoming: result.rows, replaceFolder: !incremental, dropDemo: true })
+    }
+    saveMailbox(account, mailbox)
+    markOutlookSynced(account)
+    publish(`Mailbox refreshed from Gmail (${gmailAddress(account) || account}).`, 'graph')
+    return 'graph'
+  } catch (err) {
+    markOutlookSynced(account)
+    publish(`${err instanceof Error ? err.message : 'Gmail sync failed.'} Saved mail for ${account} is still on screen.`, 'demo')
+    return 'demo'
+  }
+}
+
 export async function syncOutlookNow(
   email: string,
   options?: { incremental?: boolean; mail?: boolean },
 ): Promise<'graph' | 'demo'> {
   const account = accountEmail(email)
   const includeMail = options?.mail !== false
+  if (includeMail && isGmailConnected(account)) return syncGmailNow(account, options?.incremental === true)
   const token = await outlookToken(false)
   if (!token) {
     markOutlookSynced(account)
@@ -190,6 +248,15 @@ export async function deliverMail(input: {
 }): Promise<'graph' | 'demo'> {
   const account = accountEmail(input.email)
   const action = input.action ?? (input.replyToId ? 'reply' : 'send')
+  if (isGmailConnected(account)) {
+    if (!input.to.includes('@')) throw new Error('Add a recipient. Nothing was sent.')
+    try {
+      await sendGmail(account, input)
+      return 'graph'
+    } catch (err) {
+      throw new Error(`Gmail did not send the message. Nothing was delivered. ${err instanceof Error ? err.message : ''}`.trim())
+    }
+  }
   if (!input.skipGraph) {
     const token = await outlookToken(false)
     const graphId = input.replyToId && !isLocalMailId(input.replyToId) ? input.replyToId : ''
@@ -233,6 +300,7 @@ export async function deliverMail(input: {
 
 export async function pushMailMove(id: string, folder: 'deleted' | 'archive'): Promise<void> {
   if (isLocalMailId(id)) return
+  if (isGmailId(id)) return moveGmail(sessionOwner(), id, folder)
   const token = await outlookToken(false)
   if (!token) return
   await moveOutlookMessage(token, id, folder === 'deleted' ? 'deleteditems' : 'archive')
@@ -240,6 +308,7 @@ export async function pushMailMove(id: string, folder: 'deleted' | 'archive'): P
 
 export async function pushMailRead(id: string, read: boolean): Promise<void> {
   if (isLocalMailId(id)) return
+  if (isGmailId(id)) return markGmailRead(sessionOwner(), id, read)
   const token = await outlookToken(false)
   if (!token) return
   await setOutlookRead(token, id, read)
@@ -271,7 +340,17 @@ export async function saveDraftMail(input: {
     demo: true,
     bodyLoaded: true,
   }
-  if (!input.localOnly) {
+  if (!input.localOnly && isGmailConnected(account)) {
+    try {
+      const id = await saveGmailDraft(account, input)
+      const saved: MailMessage = { ...base, id, demo: false, preview: base.preview || '(draft)' }
+      const without = loadMailbox(account).filter((message) => message.id !== input.id && message.id !== id)
+      saveMailbox(account, [saved, ...without])
+      return saved
+    } catch {
+      // Gmail refused the draft; keep it in this browser only (marked local).
+    }
+  } else if (!input.localOnly) {
     const token = await outlookToken(false)
     const graphId = input.id && !isLocalMailId(input.id) ? input.id : ''
     if (token) {
@@ -294,6 +373,18 @@ export async function saveDraftMail(input: {
 
 export async function sendDraftMail(email: string, message: MailMessage): Promise<'graph' | 'demo'> {
   const account = accountEmail(email)
+  if (!message.demo && isGmailId(message.id)) {
+    try {
+      await sendGmailDraft(account, message.id)
+      const next = relocateMessage(loadMailbox(account), message.id, 'sent').map((row) =>
+        row.id === message.id ? { ...row, read: true } : row,
+      )
+      saveMailbox(account, next)
+      return 'graph'
+    } catch (err) {
+      throw new Error(`Gmail did not send the draft. ${err instanceof Error ? err.message : ''}`.trim())
+    }
+  }
   if (!message.demo && !isLocalMailId(message.id)) {
     const token = await outlookToken(false)
     if (token) {

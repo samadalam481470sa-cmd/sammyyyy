@@ -25,6 +25,18 @@ import {
 import { useAuth } from '@/auth/AuthContext'
 import { AddToCalendarDialog } from '@/components/email/AddToCalendarDialog'
 import { meetingFromMail, meetingLabel, type MailMeetingDraft } from '@/lib/mailMeeting'
+import {
+  GmailSetupError,
+  connectGmail,
+  disconnectGmail,
+  downloadGmailAttachment,
+  getGmailMessage,
+  gmailAddress,
+  gmailClientId,
+  isGmailConnected,
+  isGmailId,
+  preloadGmail,
+} from '@/lib/gmail'
 import { normalizeEmail } from '@/lib/emailIdentity'
 import { parseAddresses, uniqueAddresses } from '@/lib/mailAddress'
 import { renderMailHtml } from '@/lib/mailHtml'
@@ -159,6 +171,15 @@ export function EmailPage() {
   }, [messages, folder, query, listFilter])
   const selected = messages.find((message) => message.id === selectedId) ?? null
   const [calendarDraft, setCalendarDraft] = useState<MailMeetingDraft | null>(null)
+  const [gmailOn, setGmailOn] = useState(() => isGmailConnected(account))
+  const provider = gmailOn ? 'Gmail' : 'Outlook'
+  useEffect(() => {
+    setGmailOn(isGmailConnected(account))
+    // Load Google's sign-in script ahead of time so Connect Gmail opens Google's window at once.
+    void gmailClientId().then((id) => {
+      if (id) void preloadGmail()
+    })
+  }, [account])
   // A meeting date found in the open email, offered as "Add to calendar".
   const meetingSuggestion = useMemo(() => (selected ? meetingFromMail(selected) : null), [selected])
   const folderLabel = MAIL_FOLDERS.find((item) => item.id === folder)?.label ?? 'Inbox'
@@ -228,6 +249,16 @@ export function EmailPage() {
     if (!message || message.demo || message.pending || message.bodyLoaded) return
     let cancel = false
     void (async () => {
+      if (isGmailId(message.id)) {
+        const gmailFull = await getGmailMessage(account, message.id, message.folder)
+        if (!gmailFull || cancel) return
+        setMessages((prev) => {
+          const next = prev.map((row) => (row.id === gmailFull.id ? { ...row, ...gmailFull, folder: row.folder } : row))
+          saveMailbox(email, next)
+          return next
+        })
+        return
+      }
       const token = await outlookToken(false)
       if (!token || cancel) return
       const full = await getOutlookMessage(token, message.id, message.folder)
@@ -245,7 +276,7 @@ export function EmailPage() {
     return () => {
       cancel = true
     }
-  }, [selectedId, email])
+  }, [selectedId, email, account])
 
   const openMessage = (message: MailMessage) => {
     setComposing(null)
@@ -266,6 +297,32 @@ export function EmailPage() {
   useEffect(() => {
     void ensureMsal()
   }, [])
+
+  const connectGmailNow = () => {
+    setSyncing(true)
+    setStatus('Connecting Gmail…')
+    connectGmail(account, email)
+      .then((address) => {
+        setGmailOn(true)
+        setStatus(`Gmail connected${address ? ` (${address})` : ''}. Loading mail…`)
+        void syncOutlookNow(email, { incremental: false, mail: true })
+      })
+      .catch((err) => {
+        setSyncing(false)
+        setStatus(err instanceof GmailSetupError || err instanceof Error ? err.message : 'Google did not connect Gmail.')
+      })
+  }
+
+  const disconnectGmailNow = () => {
+    disconnectGmail(account)
+    setGmailOn(false)
+    const outlookOnly = loadMailbox(email).filter((message) => !isGmailId(message.id))
+    saveMailbox(email, outlookOnly)
+    setMessages(outlookOnly)
+    setSelectedId(null)
+    setStatus('Gmail disconnected. Switching back to Outlook.')
+    void syncOutlookNow(email, { incremental: false, mail: true })
+  }
 
   const connectOutlook = () => {
     setSyncing(true)
@@ -298,7 +355,7 @@ export function EmailPage() {
     setFolder('sent')
     setStatus(
       mode === 'graph'
-        ? `Sent from ${account} through Microsoft Graph.`
+        ? `Sent from ${gmailOn ? gmailAddress(account) || account : account} through ${provider}.`
         : `Outlook is not connected. Nothing was sent for ${account}.`,
     )
     if (mode === 'graph') void syncOutlookNow(email, { incremental: true, mail: true })
@@ -379,7 +436,7 @@ export function EmailPage() {
         setStatus(`Saved in the fictional Sent folder for ${account}. Microsoft did not deliver this message.`)
         return
       }
-      setStatus(`Sent from ${account} through Microsoft Graph.`)
+      setStatus(`Sent from ${gmailOn ? gmailAddress(account) || account : account} through ${provider}.`)
       void syncOutlookNow(email, { incremental: true, mail: true })
     }).catch((err) => {
       const stored = loadMailbox(email).filter((message) => message.id !== pending.id)
@@ -442,6 +499,14 @@ export function EmailPage() {
 
   const downloadFile = (message: MailMessage, file: MailAttachment) => {
     void (async () => {
+      if (isGmailId(message.id)) {
+        try {
+          await downloadGmailAttachment(account, message.id, file)
+        } catch (err) {
+          setStatus(err instanceof Error ? err.message : 'Gmail did not download that file.')
+        }
+        return
+      }
       const token = await outlookToken(false)
       if (!token) {
         setStatus(`Connect Outlook to download ${file.name}.`)
@@ -496,7 +561,7 @@ export function EmailPage() {
       <header className="flex h-12 shrink-0 items-center gap-3 bg-[#0f6cbd] px-3 text-white sm:px-4">
         <div className="flex shrink-0 items-center gap-2">
           <Mail className="h-5 w-5" />
-          <h1 className="text-base font-semibold">Outlook</h1>
+          <h1 className="text-base font-semibold">{provider}</h1>
         </div>
         <div className="relative mx-auto w-full max-w-xl">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#0f6cbd]" />
@@ -583,15 +648,39 @@ export function EmailPage() {
         >
           <CalendarPlus className="h-4 w-4" /> Add to calendar
         </button>
-        {graphMode === 'demo' && (
-          <button
-            type="button"
-            data-testid="email-connect"
-            onClick={connectOutlook}
-            className="ml-auto inline-flex h-8 items-center rounded-md border border-[#0f6cbd] px-3 text-sm font-semibold text-[#0f6cbd] hover:bg-[#ebf3fc]"
-          >
-            Connect Outlook
-          </button>
+        {gmailOn ? (
+          <span className="ml-auto inline-flex items-center gap-2 text-xs text-[#616161]">
+            Gmail: {gmailAddress(account) || 'connected'}
+            <button
+              type="button"
+              data-testid="email-gmail-disconnect"
+              onClick={disconnectGmailNow}
+              className="h-7 rounded-md border border-[#e0e0e0] px-2 font-semibold text-[#242424] hover:bg-[#f5f5f5]"
+            >
+              Disconnect
+            </button>
+          </span>
+        ) : (
+          <span className="ml-auto inline-flex gap-2">
+            {graphMode === 'demo' && (
+              <button
+                type="button"
+                data-testid="email-connect"
+                onClick={connectOutlook}
+                className="inline-flex h-8 items-center rounded-md border border-[#0f6cbd] px-3 text-sm font-semibold text-[#0f6cbd] hover:bg-[#ebf3fc]"
+              >
+                Connect Outlook
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="email-connect-gmail"
+              onClick={connectGmailNow}
+              className="inline-flex h-8 items-center rounded-md border border-[#c5221f] px-3 text-sm font-semibold text-[#c5221f] hover:bg-[#fce8e6]"
+            >
+              Connect Gmail
+            </button>
+          </span>
         )}
       </div>
 
@@ -651,10 +740,10 @@ export function EmailPage() {
             </div>
             {graphMode === 'demo' && (
               <div data-testid="outlook-not-connected" className="border-b border-[#e0e0e0] bg-[#fff8e6] px-4 py-3 text-xs text-[#7a5b00]">
-                <p className="font-semibold">Outlook not connected</p>
+                <p className="font-semibold">Mail not connected</p>
                 <p className="mt-1">
-                  No mail has been retrieved for {account}. Click Connect Outlook and sign in with this account on
-                  Microsoft&apos;s page. Microsoft asks you to approve mail access the first time.
+                  No mail has been retrieved for {account}. Click Connect Outlook for a Microsoft mailbox, or Connect
+                  Gmail for a Google mailbox. You approve mail access on the provider&apos;s own page the first time.
                 </p>
                 {graphTokenError() && <p className="mt-1">Last error: {graphTokenError()}</p>}
                 <button
@@ -663,6 +752,13 @@ export function EmailPage() {
                   className="mt-2 inline-flex h-7 items-center rounded-md bg-[#0f6cbd] px-3 font-semibold text-white hover:bg-[#115ea3]"
                 >
                   Connect Outlook
+                </button>
+                <button
+                  type="button"
+                  onClick={connectGmailNow}
+                  className="mt-2 ml-2 inline-flex h-7 items-center rounded-md bg-[#c5221f] px-3 font-semibold text-white hover:bg-[#a50e0e]"
+                >
+                  Connect Gmail
                 </button>
               </div>
             )}
