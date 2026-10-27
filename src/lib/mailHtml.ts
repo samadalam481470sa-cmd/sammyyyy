@@ -41,3 +41,34 @@ export function renderMailHtml(message: Pick<MailMessage, 'body' | 'bodyHtml'>):
   const source = rich ? message.bodyHtml ?? '' : plainToHtml(message.body || '')
   return sanitizeMailHtml(source)
 }
+
+/**
+ * A complete, isolated document for a sandboxed iframe (guide p82). Scripts cannot run, links
+ * open in a new tab, and remote images stay blocked until the user chooses to show them.
+ */
+export function mailDocument(
+  message: Pick<MailMessage, 'body' | 'bodyHtml'>,
+  options: { showImages: boolean },
+): { html: string; blockedImages: number } {
+  let body = renderMailHtml(message)
+  let blockedImages = 0
+  if (!options.showImages) {
+    body = body.replace(/(<img\b[^>]*?)\s(src|srcset)\s*=\s*(["'])\s*(https?:)?\/\/[^"']*\3/gi, (_m, start: string) => {
+      blockedImages += 1
+      return `${start} data-blocked="1" alt="[image blocked]"`
+    })
+    body = body.replace(/url\(\s*(["']?)\s*(https?:)?\/\/[^)]*\)/gi, () => {
+      blockedImages += 1
+      return 'none'
+    })
+  }
+  const imgSrc = options.showImages ? 'data: https: http:' : 'data:'
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; font-src data:">
+<base target="_blank"><style>
+body{margin:0;font:14px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#242424;word-wrap:break-word;overflow-wrap:anywhere}
+a{color:#0f6cbd}img{max-width:100%;height:auto}img[data-blocked]{display:inline-block;min-width:16px;min-height:16px;background:#f0f0f0}
+blockquote{border-left:2px solid #e0e0e0;margin:0 0 0 4px;padding-left:12px;color:#424242}table{max-width:100%}p{margin:0 0 12px}pre{white-space:pre-wrap}
+</style></head><body>${body}</body></html>`
+  return { html, blockedImages }
+}

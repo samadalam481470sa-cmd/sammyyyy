@@ -13,7 +13,7 @@ function productionCsp(): Plugin {
     "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src https://fonts.gstatic.com",
-    "img-src 'self' data: blob: https://login.microsoftonline.com https://graph.microsoft.com",
+    "img-src 'self' data: blob: https:",
     "connect-src 'self' https://login.microsoftonline.com https://login.live.com https://login.microsoft.com https://graph.microsoft.com https://aadcdn.msauth.net https://aadcdn.msftauth.net https://accounts.google.com https://oauth2.googleapis.com https://gmail.googleapis.com https://www.googleapis.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",

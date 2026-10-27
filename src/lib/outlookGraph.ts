@@ -4,7 +4,7 @@ export { connectedMailboxAddress, disconnectOutlookMailbox }
 
 export { graphTokenError }
 import { parseAddresses } from '@/lib/mailAddress'
-import type { MailAttachment, MailFolder, MailMessage } from '@/lib/outlookMailbox'
+import type { MailAttachment, MailFolder, MailMessage, OutgoingAttachment } from '@/lib/outlookMailbox'
 import type { CalendarEvent } from '@/lib/meetingCalendar'
 
 export const OUTLOOK_SCOPES = [
@@ -38,6 +38,7 @@ const LIST_SELECT = [
   'toRecipients',
   'ccRecipients',
   'hasAttachments',
+  'flag',
 ].join(',')
 
 export function folderMessagesPath(folder: MailFolder, kind: 'list' | 'delta'): string {
@@ -141,6 +142,7 @@ interface GraphMessage {
   toRecipients?: GraphAddress[]
   ccRecipients?: GraphAddress[]
   bccRecipients?: GraphAddress[]
+  flag?: { flagStatus?: string }
   '@removed'?: { reason?: string }
 }
 
@@ -185,6 +187,7 @@ function toMail(row: GraphMessage, folder: MailFolder): MailMessage | null {
     bodyHtml: html || undefined,
     at: row.receivedDateTime || row.sentDateTime || new Date().toISOString(),
     read: Boolean(row.isRead),
+    ...(row.flag ? { flagged: row.flag.flagStatus === 'flagged' } : {}),
     demo: false,
     hasAttachments: Boolean(row.hasAttachments),
     bodyLoaded: Boolean(row.body?.content),
@@ -216,6 +219,8 @@ export function parseGraphDelta(
 async function graphFetch(token: string, path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
   headers.set('Authorization', `Bearer ${token}`)
+  // Permanent message ids: an Outlook message keeps its id when it moves between folders (guide p37).
+  headers.set('Prefer', 'IdType="ImmutableId"')
   if (init?.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const url = path.startsWith('https://') ? path : `https://graph.microsoft.com/v1.0${path}`
   const timeout = AbortSignal.timeout(15_000)
@@ -299,7 +304,7 @@ export async function deltaOutlookFolder(
 }
 
 export async function getOutlookMessage(token: string, id: string, folder: MailFolder): Promise<MailMessage | null> {
-  const select = 'id,subject,body,bodyPreview,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments'
+  const select = 'id,subject,body,bodyPreview,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,flag'
   const res = await graphFetch(token, `/me/messages/${encodeURIComponent(id)}?$select=${select}`)
   if (!res.ok) return null
   const json = (await res.json()) as GraphMessage
@@ -460,4 +465,147 @@ export async function listOutlookEvents(token: string, now = new Date()): Promis
       remind: true,
     }]
   })
+}
+
+// ── Mailbox checks and extra actions (guide p4, p11, p34, p61-64) ───────────
+
+const CONSUMER_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad'
+
+export interface OutlookMailboxProfile {
+  address: string
+  signInName: string
+  displayName: string
+  personal: boolean
+}
+
+/** The mailbox behind this token, as Microsoft reports it. */
+export async function outlookMailboxProfile(token: string): Promise<OutlookMailboxProfile> {
+  const res = await graphFetch(token, '/me?$select=mail,userPrincipalName,displayName,id')
+  if (!res.ok) throw new Error(`Microsoft did not return the mailbox profile (${res.status}).`)
+  const json = (await res.json()) as { mail?: string; userPrincipalName?: string; displayName?: string; id?: string }
+  let personal = false
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as { tid?: string }
+    personal = payload.tid === CONSUMER_TENANT
+  } catch {
+    // Personal Microsoft tokens are not always readable JWTs; a short user id also marks them.
+    personal = Boolean(json.id && !json.id.includes('-'))
+  }
+  return { address: json.mail || json.userPrincipalName || '', signInName: json.userPrincipalName || '', displayName: json.displayName || '', personal }
+}
+
+export interface FolderCount {
+  total: number
+  unread: number
+}
+
+/** Total and unread counts for each standard folder, straight from Outlook. */
+export async function outlookFolderCounts(token: string): Promise<Partial<Record<MailFolder, FolderCount>>> {
+  const out: Partial<Record<MailFolder, FolderCount>> = {}
+  await Promise.all(
+    (Object.keys(GRAPH_WELL_KNOWN_FOLDERS) as MailFolder[]).map(async (folder) => {
+      const res = await graphFetch(token, `/me/mailFolders/${GRAPH_WELL_KNOWN_FOLDERS[folder]}?$select=totalItemCount,unreadItemCount`)
+      if (!res.ok) return
+      const json = (await res.json()) as { totalItemCount?: number; unreadItemCount?: number }
+      out[folder] = { total: json.totalItemCount ?? 0, unread: json.unreadItemCount ?? 0 }
+    }),
+  )
+  return out
+}
+
+/** Move to any standard folder, including back to Inbox (restore, not junk) or to Junk. */
+export async function moveOutlookTo(token: string, id: string, folder: MailFolder): Promise<void> {
+  const res = await graphFetch(token, `/me/messages/${encodeURIComponent(id)}/move`, {
+    method: 'POST',
+    body: JSON.stringify({ destinationId: GRAPH_WELL_KNOWN_FOLDERS[folder] }),
+  })
+  if (!res.ok) throw new Error(`Outlook did not move this message (${res.status}).`)
+}
+
+export async function setOutlookFlag(token: string, id: string, flagged: boolean): Promise<void> {
+  const res = await graphFetch(token, `/me/messages/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ flag: { flagStatus: flagged ? 'flagged' : 'notFlagged' } }),
+  })
+  if (!res.ok) throw new Error(`Outlook did not update the flag (${res.status}).`)
+}
+
+/** Search the whole Outlook mailbox on Microsoft's servers (not only mail already loaded). */
+export async function searchOutlook(token: string, query: string): Promise<MailMessage[]> {
+  const q = query.replace(/"/g, '').trim()
+  if (!q) return []
+  const res = await graphFetch(token, `/me/messages?$search="${encodeURIComponent(q)}"&$top=25&$select=${LIST_SELECT},parentFolderId`)
+  if (!res.ok) throw new Error(`Outlook search failed (${res.status}).`)
+  const json = (await res.json()) as { value?: (GraphMessage & { parentFolderId?: string })[] }
+  const folderIds = await outlookFolderIds(token)
+  return (json.value ?? [])
+    .map((row) => toMail(row, folderIds.get(row.parentFolderId ?? '') ?? 'archive'))
+    .filter((row): row is MailMessage => row != null)
+}
+
+let folderIdCache: { token: string; ids: Map<string, MailFolder> } | null = null
+
+async function outlookFolderIds(token: string): Promise<Map<string, MailFolder>> {
+  if (folderIdCache?.token === token) return folderIdCache.ids
+  const ids = new Map<string, MailFolder>()
+  await Promise.all(
+    (Object.keys(GRAPH_WELL_KNOWN_FOLDERS) as MailFolder[]).map(async (folder) => {
+      const res = await graphFetch(token, `/me/mailFolders/${GRAPH_WELL_KNOWN_FOLDERS[folder]}?$select=id`)
+      if (res.ok) ids.set(((await res.json()) as { id: string }).id, folder)
+    }),
+  )
+  folderIdCache = { token, ids }
+  return ids
+}
+
+/**
+ * Send with attachments: create the message or reply/forward draft, attach each file, then send it.
+ * A failed upload stops before sending, so an incomplete message is never sent (guide p67).
+ */
+export async function sendOutlookWithAttachments(
+  token: string,
+  input: {
+    action: 'send' | 'reply' | 'replyAll' | 'forward'
+    replyToId?: string
+    to: string
+    cc?: string
+    bcc?: string
+    subject: string
+    body: string
+    attachments: OutgoingAttachment[]
+  },
+): Promise<void> {
+  let draftId = ''
+  if (input.action !== 'send' && input.replyToId) {
+    const verb = input.action === 'reply' ? 'createReply' : input.action === 'replyAll' ? 'createReplyAll' : 'createForward'
+    const res = await graphFetch(token, `/me/messages/${encodeURIComponent(input.replyToId)}/${verb}`, { method: 'POST', body: '{}' })
+    if (!res.ok) throw new Error(`Outlook could not start the ${input.action} (${res.status}). Nothing was sent.`)
+    const draft = (await res.json()) as { id: string; body?: { content?: string; contentType?: string } }
+    draftId = draft.id
+    const quotedHtml = draft.body?.contentType?.toLowerCase() === 'html' ? draft.body.content ?? '' : ''
+    const escaped = input.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    const patch: Record<string, unknown> = {
+      body: { contentType: 'HTML', content: `<div>${escaped}</div>${quotedHtml}` },
+      ...(input.action === 'forward' || input.action === 'replyAll' || input.to
+        ? { toRecipients: parseAddresses(input.to).map((address) => ({ emailAddress: { address } })) }
+        : {}),
+      ...(input.cc ? { ccRecipients: parseAddresses(input.cc).map((address) => ({ emailAddress: { address } })) } : {}),
+      ...(input.bcc ? { bccRecipients: parseAddresses(input.bcc).map((address) => ({ emailAddress: { address } })) } : {}),
+    }
+    const updated = await graphFetch(token, `/me/messages/${encodeURIComponent(draftId)}`, { method: 'PATCH', body: JSON.stringify(patch) })
+    if (!updated.ok) throw new Error(`Outlook could not prepare the message (${updated.status}). Nothing was sent.`)
+  } else {
+    draftId = await createOutlookDraft(token, { to: input.to, cc: input.cc, bcc: input.bcc, subject: input.subject, body: input.body })
+  }
+  for (const file of input.attachments) {
+    const res = await graphFetch(token, `/me/messages/${encodeURIComponent(draftId)}/attachments`, {
+      method: 'POST',
+      body: JSON.stringify({ '@odata.type': '#microsoft.graph.fileAttachment', name: file.name, contentType: file.contentType || 'application/octet-stream', contentBytes: file.base64 }),
+    })
+    if (!res.ok) {
+      await graphFetch(token, `/me/messages/${encodeURIComponent(draftId)}`, { method: 'DELETE' }).catch(() => undefined)
+      throw new Error(`Outlook did not accept ${file.name} (${res.status}). Nothing was sent.`)
+    }
+  }
+  await sendOutlookDraft(token, draftId)
 }

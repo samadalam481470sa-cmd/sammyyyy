@@ -8,7 +8,7 @@
  * The access token lives only in this tab (sessionStorage, keyed by the CRM login) and is
  * erased at logout with the rest of the personal mail data.
  */
-import type { MailAttachment, MailFolder, MailMessage } from '@/lib/outlookMailbox'
+import type { MailAttachment, MailFolder, MailMessage, OutgoingAttachment } from '@/lib/outlookMailbox'
 
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
 export const GMAIL_ID_PREFIX = 'gmail:'
@@ -292,7 +292,7 @@ export function encodeBase64Url(text: string): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function folderFromLabels(labels: string[] | undefined, fallback: MailFolder): MailFolder {
+export function folderFromLabels(labels: string[] | undefined, fallback: MailFolder): MailFolder {
   const set = new Set(labels ?? [])
   if (set.has('TRASH')) return 'deleted'
   if (set.has('SPAM')) return 'junk'
@@ -316,6 +316,7 @@ export function toMailMessage(raw: GmailRawMessage, folder: MailFolder): MailMes
     body: snippet,
     at,
     read: !(raw.labelIds ?? []).includes('UNREAD'),
+    flagged: (raw.labelIds ?? []).includes('STARRED'),
     demo: false,
     bodyLoaded: false,
   }
@@ -436,8 +437,9 @@ export function buildRawMessage(input: {
   subject: string
   body: string
   inReplyTo?: string
+  attachments?: OutgoingAttachment[]
 }): string {
-  const lines = [
+  const headers = [
     ...(input.from ? [`From: ${input.from}`] : []),
     `To: ${input.to}`,
     ...(input.cc ? [`Cc: ${input.cc}`] : []),
@@ -445,12 +447,32 @@ export function buildRawMessage(input: {
     `Subject: ${encodeHeader(input.subject.trim() || '(no subject)')}`,
     ...(input.inReplyTo ? [`In-Reply-To: ${input.inReplyTo}`, `References: ${input.inReplyTo}`] : []),
     'MIME-Version: 1.0',
+  ]
+  const files = input.attachments ?? []
+  if (!files.length) {
+    const lines = [...headers, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: 8bit', '', input.body]
+    return encodeBase64Url(lines.join('\r\n'))
+  }
+  const boundary = `newport-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+  const safeName = (name: string) => encodeHeader(name.replace(/["\r\n\\/]/g, '_'))
+  const wrap = (base64: string) => base64.replace(/.{1,76}/g, '$&\r\n').trimEnd()
+  const parts = [
+    `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
     'Content-Transfer-Encoding: 8bit',
     '',
     input.body,
+    ...files.flatMap((file) => [
+      `--${boundary}`,
+      `Content-Type: ${file.contentType || 'application/octet-stream'}; name="${safeName(file.name)}"`,
+      `Content-Disposition: attachment; filename="${safeName(file.name)}"`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      wrap(file.base64),
+    ]),
+    `--${boundary}--`,
   ]
-  return encodeBase64Url(lines.join('\r\n'))
+  return encodeBase64Url([...headers, `Content-Type: multipart/mixed; boundary="${boundary}"`, '', ...parts].join('\r\n'))
 }
 
 async function threadInfo(token: string, id: string): Promise<{ threadId?: string; messageId?: string }> {
@@ -463,7 +485,7 @@ async function threadInfo(token: string, id: string): Promise<{ threadId?: strin
 /** Send from the connected Gmail. Replies and forwards stay in the original thread. */
 export async function sendGmail(
   owner: string,
-  input: { to: string; cc?: string; bcc?: string; subject: string; body: string; replyToId?: string },
+  input: { to: string; cc?: string; bcc?: string; subject: string; body: string; replyToId?: string; attachments?: OutgoingAttachment[] },
 ): Promise<void> {
   const token = requireToken(owner)
   const thread = input.replyToId && isGmailId(input.replyToId) ? await threadInfo(token, input.replyToId) : {}
@@ -532,4 +554,169 @@ export async function markGmailRead(owner: string, id: string, read: boolean): P
     }),
     'update the read state',
   )
+}
+
+// ── incremental sync (Gmail history, guide p47/p49) ──────────────────────────
+
+function cursorKey(owner: string): string {
+  return `newport_outlook_gmail_cursor:${owner.trim().toLowerCase()}`
+}
+
+/** Last committed Gmail history id for this CRM user (an opaque string, never incremented by hand). */
+export function readGmailCursor(owner: string): string | null {
+  try {
+    return localStorage.getItem(cursorKey(owner))
+  } catch {
+    return null
+  }
+}
+
+export function saveGmailCursor(owner: string, historyId: string | null): void {
+  try {
+    if (historyId) localStorage.setItem(cursorKey(owner), historyId)
+    else localStorage.removeItem(cursorKey(owner))
+  } catch {
+    // storage blocked; the next check runs a full refresh
+  }
+}
+
+/** The mailbox's current history id, taken before a full refresh so nothing that arrives during it is missed. */
+export async function gmailHistoryAnchor(owner: string): Promise<string | null> {
+  const token = requireToken(owner)
+  const res = await gmailFetch(token, '/profile')
+  if (!res.ok) return null
+  return String(((await res.json()) as { historyId?: string | number }).historyId ?? '') || null
+}
+
+export type GmailChanges =
+  | { kind: 'changes'; changed: MailMessage[]; removedIds: string[]; historyId: string }
+  | { kind: 'expired' }
+
+/** Everything that changed since `startHistoryId`: new mail, deletions, and label (read, star, folder) changes. */
+export async function gmailChangesSince(owner: string, startHistoryId: string): Promise<GmailChanges> {
+  const token = requireToken(owner)
+  const changedIds = new Set<string>()
+  const removed = new Set<string>()
+  let pageToken = ''
+  let latest = startHistoryId
+  for (let page = 0; page < 10; page += 1) {
+    const params = new URLSearchParams({ startHistoryId, maxResults: '200' })
+    for (const type of ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved']) params.append('historyTypes', type)
+    if (pageToken) params.set('pageToken', pageToken)
+    const res = await gmailFetch(token, `/history?${params}`)
+    if (res.status === 404) return { kind: 'expired' }
+    await ok(res, 'list mailbox changes')
+    const json = (await res.json()) as {
+      history?: {
+        messagesAdded?: { message: { id: string } }[]
+        messagesDeleted?: { message: { id: string } }[]
+        labelsAdded?: { message: { id: string } }[]
+        labelsRemoved?: { message: { id: string } }[]
+      }[]
+      historyId?: string | number
+      nextPageToken?: string
+    }
+    for (const row of json.history ?? []) {
+      for (const item of [...(row.messagesAdded ?? []), ...(row.labelsAdded ?? []), ...(row.labelsRemoved ?? [])]) {
+        changedIds.add(item.message.id)
+      }
+      for (const item of row.messagesDeleted ?? []) removed.add(item.message.id)
+    }
+    if (json.historyId != null) latest = String(json.historyId)
+    if (!json.nextPageToken) break
+    pageToken = json.nextPageToken
+  }
+  for (const id of removed) changedIds.delete(id)
+  const changed: MailMessage[] = []
+  for (const id of changedIds) {
+    // The current state of each changed message collapses repeated changes into one.
+    const raw = await getMetadata(token, id)
+    if (!raw) {
+      removed.add(id)
+      continue
+    }
+    const labels = raw.labelIds ?? []
+    if (labels.includes('CHAT')) continue
+    changed.push(toMailMessage(raw, folderFromLabels(labels, 'archive')))
+  }
+  return { kind: 'changes', changed, removedIds: [...removed].map((id) => `${GMAIL_ID_PREFIX}${id}`), historyId: latest }
+}
+
+// ── Mailbox checks and extra actions (guide p45, p46, p61-64) ───────────────
+
+/** The Gmail mailbox behind this token, as Google reports it. */
+export async function gmailProfile(owner: string): Promise<{ address: string; total: number }> {
+  const token = requireToken(owner)
+  const res = await ok(await gmailFetch(token, '/profile'), 'return the mailbox profile')
+  const json = (await res.json()) as { emailAddress?: string; messagesTotal?: number }
+  return { address: json.emailAddress ?? '', total: json.messagesTotal ?? 0 }
+}
+
+const LABEL_FOR_FOLDER: Partial<Record<MailFolder, string>> = {
+  inbox: 'INBOX',
+  sent: 'SENT',
+  drafts: 'DRAFT',
+  junk: 'SPAM',
+  deleted: 'TRASH',
+}
+
+/** Total and unread counts per folder from Gmail's system labels. */
+export async function gmailFolderCounts(owner: string): Promise<Partial<Record<MailFolder, { total: number; unread: number }>>> {
+  const token = requireToken(owner)
+  const out: Partial<Record<MailFolder, { total: number; unread: number }>> = {}
+  await Promise.all(
+    (Object.entries(LABEL_FOR_FOLDER) as [MailFolder, string][]).map(async ([folder, label]) => {
+      const res = await gmailFetch(token, `/labels/${label}`)
+      if (!res.ok) return
+      const json = (await res.json()) as { messagesTotal?: number; messagesUnread?: number }
+      out[folder] = { total: json.messagesTotal ?? 0, unread: json.messagesUnread ?? 0 }
+    }),
+  )
+  return out
+}
+
+/** Move a Gmail message into a CRM folder using Gmail's own operations. */
+export async function moveGmailTo(owner: string, id: string, folder: MailFolder): Promise<void> {
+  const token = requireToken(owner)
+  const path = `/messages/${encodeURIComponent(gmailId(id))}`
+  if (folder === 'deleted') {
+    await ok(await gmailFetch(token, `${path}/trash`, { method: 'POST' }), 'move it to Deleted')
+    return
+  }
+  // Out of Trash first (restore), then set the labels for the destination.
+  if (folder === 'inbox') await gmailFetch(token, `${path}/untrash`, { method: 'POST' })
+  const body =
+    folder === 'inbox'
+      ? { addLabelIds: ['INBOX'], removeLabelIds: ['SPAM', 'TRASH'] }
+      : folder === 'junk'
+        ? { addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] }
+        : folder === 'archive'
+          ? { removeLabelIds: ['INBOX', 'SPAM'] }
+          : null
+  if (!body) throw new Error('Gmail cannot move mail into that folder.')
+  await ok(await gmailFetch(token, `${path}/modify`, { method: 'POST', body: JSON.stringify(body) }), 'move the message')
+}
+
+export async function setGmailStar(owner: string, id: string, starred: boolean): Promise<void> {
+  const token = requireToken(owner)
+  await ok(
+    await gmailFetch(token, `/messages/${encodeURIComponent(gmailId(id))}/modify`, {
+      method: 'POST',
+      body: JSON.stringify(starred ? { addLabelIds: ['STARRED'] } : { removeLabelIds: ['STARRED'] }),
+    }),
+    'update the star',
+  )
+}
+
+/** Search the whole Gmail mailbox on Google's servers (Gmail search syntax). */
+export async function searchGmail(owner: string, query: string): Promise<MailMessage[]> {
+  const token = requireToken(owner)
+  const q = query.trim()
+  if (!q) return []
+  const res = await ok(await gmailFetch(token, `/messages?maxResults=25&q=${encodeURIComponent(q)}`), 'search')
+  const ids = (((await res.json()) as { messages?: { id: string }[] }).messages ?? []).map((row) => row.id)
+  const rows = await Promise.all(ids.map((id) => getMetadata(token, id)))
+  return rows
+    .filter((raw): raw is NonNullable<typeof raw> => raw != null)
+    .map((raw) => toMailMessage(raw, folderFromLabels(raw.labelIds, 'archive')))
 }

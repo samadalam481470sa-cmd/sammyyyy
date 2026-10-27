@@ -6,6 +6,13 @@ import {
   listOutlookEvents,
   listOutlookFolder,
   listOutlookFolderBefore,
+  moveOutlookTo,
+  outlookFolderCounts,
+  outlookMailboxProfile,
+  searchOutlook,
+  setOutlookFlag,
+  sendOutlookWithAttachments,
+  type FolderCount,
   moveOutlookMessage,
   outlookToken,
   replyAllOutlookMail,
@@ -22,18 +29,28 @@ import {
   isLocalMailId,
   loadDeltaLinks,
   loadMailbox,
-  mailboxIsFictional,
   markOutlookSynced,
   mergeMailbox,
   relocateMessage,
   saveDeltaLink,
   saveMailbox,
+  mailProvider,
   type MailFolder,
   type MailMessage,
+  type MailProvider,
+  type OutgoingAttachment,
 } from '@/lib/outlookMailbox'
 import {
-  gmailAddress,
+  gmailChangesSince,
+  gmailFolderCounts,
+  gmailProfile,
+  moveGmailTo,
+  searchGmail,
+  setGmailStar,
+  gmailHistoryAnchor,
   isGmailConnected,
+  readGmailCursor,
+  saveGmailCursor,
   isGmailId,
   listGmailFolder,
   markGmailRead,
@@ -130,113 +147,190 @@ function sessionOwner(): string {
   }
 }
 
-/** Gmail sync: newest mail in each folder from the connected Gmail account. */
-async function syncGmailNow(account: string, incremental: boolean): Promise<'graph' | 'demo'> {
+export type MailSyncState = 'not_connected' | 'loading' | 'current' | 'failed'
+
+export interface ProviderHealth {
+  state: MailSyncState
+  /** Last successful sync (ISO). */
+  at?: string
+  error?: string
+}
+
+const health: Record<string, Partial<Record<MailProvider, ProviderHealth>>> = {}
+
+/** Per-account sync state for the mailbox check and status bar (guide p15). */
+export function mailSyncHealth(email: string): Partial<Record<MailProvider, ProviderHealth>> {
+  return health[accountEmail(email)] ?? {}
+}
+
+function setHealth(account: string, provider: MailProvider, next: ProviderHealth): void {
+  const prev = health[account]?.[provider]
+  health[account] = { ...health[account], [provider]: { at: prev?.at, ...next } }
+}
+
+/** Gmail: a full refresh lists each folder; quick checks replay Gmail's change history (guide p47, p49). */
+async function syncGmailMail(account: string, incremental: boolean): Promise<void> {
+  const cursor = readGmailCursor(account)
+  if (incremental && cursor) {
+    const changes = await gmailChangesSince(account, cursor)
+    if (changes.kind === 'changes') {
+      if (changes.changed.length || changes.removedIds.length) {
+        saveMailbox(account, mergeMailbox(loadMailbox(account), { incoming: changes.changed, removedIds: changes.removedIds }))
+      }
+      saveGmailCursor(account, changes.historyId)
+      return
+    }
+    // History no longer available: rebuild with a full refresh below.
+  }
+  // Anchor first, so mail that arrives during the refresh is caught by the next quick check.
+  const anchor = await gmailHistoryAnchor(account)
+  let mailbox = loadMailbox(account)
+  const known = new Map(mailbox.map((message) => [message.id, message]))
+  const results = await Promise.all(
+    MAIL_FOLDERS.map(async (folder) => {
+      try {
+        return { folder, rows: await listGmailFolder(account, folder, known), ok: true as const }
+      } catch (err) {
+        return { folder, ok: false as const, err }
+      }
+    }),
+  )
+  const succeeded = results.flatMap((result) => (result.ok ? [result] : []))
+  if (!succeeded.length) {
+    const first = results.find((result) => !result.ok)
+    throw first && !first.ok ? first.err : new Error('Gmail sync failed.')
+  }
+  for (const result of succeeded) {
+    mailbox = mergeMailbox(mailbox, { folder: result.folder, incoming: result.rows, replaceFolder: true, dropDemo: true, provider: 'gmail' })
+  }
+  saveMailbox(account, mailbox)
+  if (succeeded.length === results.length) saveGmailCursor(account, anchor)
+}
+
+/** Outlook: delta queries per folder; quick checks cover Inbox, Sent, and Drafts. */
+async function syncOutlookMail(account: string, token: string, incremental: boolean): Promise<void> {
+  // One-time switch to permanent ids: older rows used ids that change when mail moves.
+  const migrated = `newport_outlook_idv2:${account}`
+  let fresh = false
   try {
-    let mailbox = loadMailbox(account)
-    const known = new Map(mailbox.map((message) => [message.id, message]))
-    const folders: MailFolder[] = incremental ? QUICK_FOLDERS : MAIL_FOLDERS
-    const results = await Promise.all(
-      folders.map(async (folder) => {
-        try {
-          return { folder, rows: await listGmailFolder(account, folder, known), ok: true as const }
-        } catch (err) {
-          return { folder, ok: false as const, err }
-        }
-      }),
-    )
-    const succeeded = results.flatMap((result) => (result.ok ? [result] : []))
-    if (!succeeded.length) {
-      const first = results.find((result) => !result.ok)
-      throw first && !first.ok ? first.err : new Error('Gmail sync failed.')
+    fresh = localStorage.getItem(migrated) == null
+  } catch {
+    fresh = false
+  }
+  const links = fresh ? {} : loadDeltaLinks(account)
+  const quick = incremental && !fresh
+  const results = await Promise.all(
+    (quick ? QUICK_FOLDERS : MAIL_FOLDERS).map(async (folder) => {
+      try {
+        const page = await pullFolder(token, folder, quick ? links[folder] : undefined)
+        return { folder, page, ok: true as const }
+      } catch (err) {
+        return { folder, ok: false as const, err }
+      }
+    }),
+  )
+  const succeeded = results.flatMap((result) => (result.ok ? [result] : []))
+  if (!succeeded.length) {
+    const first = results.find((result) => !result.ok)
+    throw first && !first.ok ? first.err : new Error('Outlook sync failed.')
+  }
+  let mailbox = loadMailbox(account)
+  if (fresh) mailbox = mailbox.filter((message) => mailProvider(message) !== 'outlook' || message.pending)
+  for (const result of succeeded) {
+    saveDeltaLink(account, result.folder, result.page.deltaLink)
+    mailbox = mergeMailbox(mailbox, {
+      folder: result.folder,
+      incoming: result.page.messages,
+      removedIds: result.page.removedIds,
+      replaceFolder: result.page.full,
+      dropDemo: true,
+      provider: 'outlook',
+    })
+  }
+  saveMailbox(account, mailbox)
+  if (fresh && succeeded.length === results.length) {
+    try {
+      localStorage.setItem(migrated, '1')
+    } catch {
+      // ignore
     }
-    // Outlook mail from an earlier session is not mixed into the Gmail view.
-    mailbox = mailbox.filter((message) => isGmailId(message.id) || message.pending)
-    for (const result of succeeded) {
-      mailbox = mergeMailbox(mailbox, { folder: result.folder, incoming: result.rows, replaceFolder: !incremental, dropDemo: true })
-    }
-    saveMailbox(account, mailbox)
-    markOutlookSynced(account)
-    publish(`Mailbox refreshed from Gmail (${gmailAddress(account) || account}).`, 'graph')
-    return 'graph'
-  } catch (err) {
-    markOutlookSynced(account)
-    publish(`${err instanceof Error ? err.message : 'Gmail sync failed.'} Saved mail for ${account} is still on screen.`, 'demo')
-    return 'demo'
   }
 }
 
+function describe(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback
+}
+
+/**
+ * Refresh every mailbox this CRM user connected: Outlook and Gmail sync independently and
+ * show up together in one inbox. One account failing never hides the other's mail.
+ */
 export async function syncOutlookNow(
   email: string,
   options?: { incremental?: boolean; mail?: boolean },
 ): Promise<'graph' | 'demo'> {
   const account = accountEmail(email)
   const includeMail = options?.mail !== false
-  if (includeMail && isGmailConnected(account)) return syncGmailNow(account, options?.incremental === true)
+  const incremental = options?.incremental === true
+  const gmailOn = isGmailConnected(account)
   const token = await outlookToken(false)
-  if (!token) {
-    markOutlookSynced(account)
-    if (includeMail) {
-      const fictional = mailboxIsFictional(loadMailbox(account))
+  const parts: string[] = []
+  let anyLive = false
+
+  const outlookJob = (async () => {
+    if (!token) {
+      setHealth(account, 'outlook', { state: 'not_connected' })
+      return
+    }
+    try {
+      if (includeMail) {
+        if (!health[account]?.outlook?.at) setHealth(account, 'outlook', { state: 'loading' })
+        await syncOutlookMail(account, token, incremental)
+        setHealth(account, 'outlook', { state: 'current', at: new Date().toISOString() })
+        parts.push('Outlook up to date')
+      }
+      anyLive = true
+      await syncCalendar(token, account).catch(() => undefined)
+    } catch (err) {
+      setHealth(account, 'outlook', { state: 'failed', error: describe(err, 'Outlook sync failed.') })
+      parts.push(`Outlook: ${describe(err, 'sync failed')}`)
+    }
+  })()
+
+  const gmailJob = (async () => {
+    if (!includeMail) return
+    if (!gmailOn) {
+      setHealth(account, 'gmail', { state: 'not_connected' })
+      return
+    }
+    try {
+      if (!health[account]?.gmail?.at) setHealth(account, 'gmail', { state: 'loading' })
+      await syncGmailMail(account, incremental)
+      setHealth(account, 'gmail', { state: 'current', at: new Date().toISOString() })
+      parts.push('Gmail up to date')
+      anyLive = true
+    } catch (err) {
+      setHealth(account, 'gmail', { state: 'failed', error: describe(err, 'Gmail sync failed.') })
+      parts.push(`Gmail: ${describe(err, 'sync failed')}`)
+    }
+  })()
+
+  await Promise.all([outlookJob, gmailJob])
+  markOutlookSynced(account)
+  if (includeMail) {
+    if (!token && !gmailOn) {
+      const saved = loadMailbox(account).some((message) => !message.demo)
       publish(
-        fictional
-          ? `Outlook not connected for ${account}. No mail was retrieved.`
-          : `Outlook not connected for ${account}. Showing mail saved in this browser from the last sync.`,
+        saved
+          ? `No mailbox connected for ${account}. Showing mail saved on this device from the last sync.`
+          : `No mailbox connected for ${account}. Connect Outlook or Gmail to load mail.`,
         'demo',
       )
+    } else {
+      publish(`${parts.join(' · ') || 'Mail checked'}.`, anyLive ? 'graph' : 'demo')
     }
-    return 'demo'
   }
-  try {
-    if (includeMail) {
-      const incremental = options?.incremental === true
-      const links = loadDeltaLinks(account)
-      const results = await Promise.all(
-        (incremental ? QUICK_FOLDERS : MAIL_FOLDERS).map(async (folder) => {
-          try {
-            const page = await pullFolder(token, folder, incremental ? links[folder] : undefined)
-            return { folder, page, ok: true as const }
-          } catch (err) {
-            return { folder, ok: false as const, err }
-          }
-        }),
-      )
-      const succeeded = results.flatMap((result) => (result.ok ? [result] : []))
-      if (!succeeded.length) {
-        const first = results.find((result) => !result.ok)
-        throw first && !first.ok ? first.err : new Error('Outlook sync failed.')
-      }
-      let mailbox = loadMailbox(account)
-      for (const result of succeeded) {
-        saveDeltaLink(account, result.folder, result.page.deltaLink)
-        mailbox = mergeMailbox(mailbox, {
-          folder: result.folder,
-          incoming: result.page.messages,
-          removedIds: result.page.removedIds,
-          replaceFolder: result.page.full,
-          dropDemo: true,
-        })
-      }
-      saveMailbox(account, mailbox)
-    }
-    await syncCalendar(token, account)
-    markOutlookSynced(account)
-    if (includeMail) publish(`Mailbox refreshed from Microsoft Graph for ${account}.`, 'graph')
-    return 'graph'
-  } catch (err) {
-    markOutlookSynced(account)
-    if (includeMail) {
-      const message = err instanceof Error ? err.message : 'Outlook sync failed.'
-      const fictional = mailboxIsFictional(loadMailbox(account))
-      publish(
-        fictional
-          ? `${message} Showing the fictional mailbox for ${account}.`
-          : `${message} Saved mail for ${account} is still on screen.`,
-        'demo',
-      )
-    }
-    return 'demo'
-  }
+  return anyLive ? 'graph' : 'demo'
 }
 
 /** Load the next 25 older emails in a folder. Returns how many were added. */
@@ -268,18 +362,35 @@ export async function deliverMail(input: {
   body: string
   replyToId?: string
   action?: 'send' | 'reply' | 'replyAll' | 'forward'
+  /** Sending account. Replies default to the account the original message is in. */
+  via?: MailProvider
+  attachments?: OutgoingAttachment[]
   /** Replies to fictional samples stay in that login's demo Sent folder. */
   skipGraph?: boolean
 }): Promise<'graph' | 'demo'> {
   const account = accountEmail(input.email)
   const action = input.action ?? (input.replyToId ? 'reply' : 'send')
-  if (isGmailConnected(account)) {
+  const via: MailProvider =
+    input.via ?? (input.replyToId && !isLocalMailId(input.replyToId) ? mailProvider({ id: input.replyToId }) : isGmailConnected(account) && !(await outlookToken(false)) ? 'gmail' : 'outlook')
+  if (via === 'gmail') {
+    if (!isGmailConnected(account)) throw new Error('Gmail is not connected. Nothing was sent. Click Connect Gmail first.')
     if (!input.to.includes('@')) throw new Error('Add a recipient. Nothing was sent.')
     try {
       await sendGmail(account, input)
       return 'graph'
     } catch (err) {
       throw new Error(`Gmail did not send the message. Nothing was delivered. ${err instanceof Error ? err.message : ''}`.trim())
+    }
+  }
+  if (!input.skipGraph && input.attachments?.length) {
+    const token = await outlookToken(false)
+    if (!token) throw new Error('Outlook is not connected. Nothing was sent. Click Connect Outlook first.')
+    const graphId = input.replyToId && !isLocalMailId(input.replyToId) ? input.replyToId : undefined
+    try {
+      await sendOutlookWithAttachments(token, { ...input, action: graphId ? action : 'send', replyToId: graphId, attachments: input.attachments })
+      return 'graph'
+    } catch (err) {
+      throw new Error(describe(err, 'Outlook did not send the message. Nothing was delivered.'))
     }
   }
   if (!input.skipGraph) {
@@ -348,6 +459,7 @@ export async function saveDraftMail(input: {
   subject: string
   body: string
   localOnly?: boolean
+  via?: MailProvider
 }): Promise<MailMessage> {
   const account = accountEmail(input.email)
   const base: MailMessage = {
@@ -365,7 +477,9 @@ export async function saveDraftMail(input: {
     demo: true,
     bodyLoaded: true,
   }
-  if (!input.localOnly && isGmailConnected(account)) {
+  const draftVia: MailProvider =
+    input.via ?? (input.id && isGmailId(input.id) ? 'gmail' : isGmailConnected(account) && !(await outlookToken(false)) ? 'gmail' : 'outlook')
+  if (!input.localOnly && draftVia === 'gmail' && isGmailConnected(account)) {
     try {
       const id = await saveGmailDraft(account, input)
       const saved: MailMessage = { ...base, id, demo: false, preview: base.preview || '(draft)' }
@@ -504,4 +618,143 @@ export function installOutlookSync(email: string): () => void {
 
 export function graphCalendarIds(events: CalendarEvent[]): string[] {
   return events.filter((event) => event.id.startsWith('graph-')).map((event) => event.id)
+}
+
+// ── Account-neutral actions for the Email page ──────────────────────────────
+
+/** Move a message to any folder in its own account: restore to Inbox, Junk, Not junk, Archive, Deleted. */
+export async function pushMailMoveTo(id: string, folder: MailFolder): Promise<void> {
+  if (isLocalMailId(id)) return
+  if (isGmailId(id)) return moveGmailTo(sessionOwner(), id, folder)
+  const token = await outlookToken(false)
+  if (!token) throw new Error('Outlook is not connected.')
+  await moveOutlookTo(token, id, folder)
+}
+
+/** Outlook follow-up flag or Gmail star. */
+export async function pushMailFlag(id: string, flagged: boolean): Promise<void> {
+  if (isLocalMailId(id)) return
+  if (isGmailId(id)) return setGmailStar(sessionOwner(), id, flagged)
+  const token = await outlookToken(false)
+  if (!token) throw new Error('Outlook is not connected.')
+  await setOutlookFlag(token, id, flagged)
+}
+
+export interface MailSearchResult {
+  messages: MailMessage[]
+  /** Accounts that were searched on the provider's servers. */
+  searched: MailProvider[]
+  failed: { provider: MailProvider; error: string }[]
+}
+
+/** Search the full mailboxes on Microsoft's and Google's servers, not only mail already loaded (guide p63). */
+export async function searchMailboxes(email: string, query: string): Promise<MailSearchResult> {
+  const account = accountEmail(email)
+  const result: MailSearchResult = { messages: [], searched: [], failed: [] }
+  const token = await outlookToken(false)
+  await Promise.all([
+    (async () => {
+      if (!token) return
+      try {
+        result.messages.push(...(await searchOutlook(token, query)))
+        result.searched.push('outlook')
+      } catch (err) {
+        result.failed.push({ provider: 'outlook', error: describe(err, 'search failed') })
+      }
+    })(),
+    (async () => {
+      if (!isGmailConnected(account)) return
+      try {
+        result.messages.push(...(await searchGmail(account, query)))
+        result.searched.push('gmail')
+      } catch (err) {
+        result.failed.push({ provider: 'gmail', error: describe(err, 'search failed') })
+      }
+    })(),
+  ])
+  result.messages.sort((a, b) => b.at.localeCompare(a.at))
+  return result
+}
+
+export type FolderCounts = Partial<Record<MailProvider, Partial<Record<MailFolder, FolderCount>>>>
+
+/** Server-side total and unread counts per folder for each connected account. */
+export async function mailboxFolderCounts(email: string): Promise<FolderCounts> {
+  const account = accountEmail(email)
+  const out: FolderCounts = {}
+  const token = await outlookToken(false)
+  await Promise.all([
+    token ? outlookFolderCounts(token).then((counts) => (out.outlook = counts)).catch(() => undefined) : undefined,
+    isGmailConnected(account) ? gmailFolderCounts(account).then((counts) => (out.gmail = counts)).catch(() => undefined) : undefined,
+  ])
+  return out
+}
+
+export interface MailboxCheckRow {
+  provider: MailProvider
+  connected: boolean
+  /** Mailbox address the provider reports for this connection. */
+  address?: string
+  signInName?: string
+  personal?: boolean
+  warning?: string
+  state: MailSyncState
+  lastSync?: string
+  error?: string
+  /** Messages the provider holds vs. messages loaded here, per folder. */
+  folders: { folder: MailFolder; serverTotal?: number; serverUnread?: number; loaded: number }[]
+}
+
+const CONSUMER_DOMAINS = /@(outlook|hotmail|live|msn|passport)\.[a-z.]+$/i
+
+/**
+ * Read-only mailbox check (guide p4, p11): which mailbox each connection really reads, how many
+ * messages the provider holds, how many are loaded here, and the last sync result. No tokens or
+ * message contents are shown.
+ */
+export async function mailboxCheck(email: string): Promise<MailboxCheckRow[]> {
+  const account = accountEmail(email)
+  const loaded = loadMailbox(account)
+  const counts = await mailboxFolderCounts(account)
+  const rows: MailboxCheckRow[] = []
+  const folderRows = (provider: MailProvider) =>
+    MAIL_FOLDERS.map((folder) => ({
+      folder,
+      serverTotal: counts[provider]?.[folder]?.total,
+      serverUnread: counts[provider]?.[folder]?.unread,
+      loaded: loaded.filter((message) => message.folder === folder && mailProvider(message) === provider && !message.demo).length,
+    }))
+  const h = mailSyncHealth(account)
+
+  const token = await outlookToken(false)
+  if (token) {
+    const row: MailboxCheckRow = { provider: 'outlook', connected: true, state: h.outlook?.state ?? 'loading', lastSync: h.outlook?.at, error: h.outlook?.error, folders: folderRows('outlook') }
+    try {
+      const profile = await outlookMailboxProfile(token)
+      row.address = profile.address
+      row.signInName = profile.signInName
+      row.personal = profile.personal
+      if (profile.personal && profile.signInName && !CONSUMER_DOMAINS.test(profile.signInName)) {
+        row.warning = `This personal Microsoft account signs in with ${profile.signInName}. Mail sent to that address goes to its own provider (for example Gmail), not to this Outlook mailbox. Connect Gmail to read it, or switch to a work, school, or Outlook.com mailbox.`
+      }
+    } catch (err) {
+      row.error = describe(err, 'Microsoft did not return the mailbox profile.')
+    }
+    rows.push(row)
+  } else {
+    rows.push({ provider: 'outlook', connected: false, state: 'not_connected', folders: folderRows('outlook') })
+  }
+
+  if (isGmailConnected(account)) {
+    const row: MailboxCheckRow = { provider: 'gmail', connected: true, state: h.gmail?.state ?? 'loading', lastSync: h.gmail?.at, error: h.gmail?.error, folders: folderRows('gmail') }
+    try {
+      row.address = (await gmailProfile(account)).address
+    } catch (err) {
+      row.error = describe(err, 'Google did not return the mailbox profile.')
+    }
+    rows.push(row)
+  } else {
+    rows.push({ provider: 'gmail', connected: false, state: 'not_connected', folders: folderRows('gmail') })
+  }
+  return rows
 }

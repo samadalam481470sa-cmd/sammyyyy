@@ -10,6 +10,14 @@ export interface MailAttachment {
   size: number
 }
 
+/** A file attached to an outgoing message, already read into base64 (no data: prefix). */
+export interface OutgoingAttachment {
+  name: string
+  contentType: string
+  size: number
+  base64: string
+}
+
 export interface MailMessage {
   id: string
   folder: MailFolder
@@ -30,6 +38,8 @@ export interface MailMessage {
   bodyLoaded?: boolean
   /** Shown in Sent immediately, then replaced when Graph returns the real item. */
   pending?: boolean
+  /** Outlook follow-up flag or Gmail star. */
+  flagged?: boolean
 }
 
 export const MAIL_FOLDERS: { id: MailFolder; label: string }[] = [
@@ -56,7 +66,7 @@ function syncKey(email: string): string {
 }
 
 function deltaKey(email: string): string {
-  return `newport_outlook_delta_v1:${accountEmail(email)}`
+  return `newport_outlook_delta_v2:${accountEmail(email)}`
 }
 
 /** Fictional samples used only when this login has no Graph mailbox yet. */
@@ -216,14 +226,25 @@ export interface MailMergePatch {
   replaceFolder?: boolean
   /** Real Graph mail replaces the fictional sample mailbox. */
   dropDemo?: boolean
+  /** Which account this snapshot came from. A refresh of one account never removes the other's mail. */
+  provider?: MailProvider
+}
+
+export type MailProvider = 'outlook' | 'gmail'
+
+/** Gmail rows carry a "gmail:" id prefix; everything else came from Outlook (Microsoft Graph). */
+export function mailProvider(message: Pick<MailMessage, 'id'>): MailProvider {
+  return message.id.startsWith('gmail:') ? 'gmail' : 'outlook'
 }
 
 function mergeMailFields(prev: MailMessage, row: MailMessage): MailMessage {
   return {
     ...prev,
     ...row,
-    body: row.body?.trim() ? row.body : prev.body,
-    bodyHtml: row.bodyHtml?.trim() ? row.bodyHtml : prev.bodyHtml,
+    // A list refresh carries only a preview. Never let it overwrite a body that was already loaded.
+    body: prev.bodyLoaded && !row.bodyLoaded ? prev.body : row.body?.trim() ? row.body : prev.body,
+    bodyHtml: prev.bodyLoaded && !row.bodyLoaded ? prev.bodyHtml : row.bodyHtml?.trim() ? row.bodyHtml : prev.bodyHtml,
+    flagged: row.flagged ?? prev.flagged,
     preview: row.preview?.trim() ? row.preview : prev.preview,
     cc: row.cc ?? prev.cc,
     bcc: row.bcc ?? prev.bcc,
@@ -265,6 +286,7 @@ export function mergeMailbox(existing: MailMessage[], patch: MailMergePatch): Ma
     const oldestIncoming = patch.incoming.reduce((min, message) => (message.at < min ? message.at : min), '\uffff')
     next = next.filter((message) => {
       if (message.folder !== folder) return true
+      if (patch.provider && !message.demo && !message.pending && mailProvider(message) !== patch.provider) return true
       if (message.pending || message.id.startsWith('pending-')) return true
       if (patch.incoming.length > 0 && message.at < oldestIncoming) return true
       return incomingIds.has(message.id)
