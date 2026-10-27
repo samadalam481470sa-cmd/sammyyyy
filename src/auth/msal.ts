@@ -200,7 +200,15 @@ export function clientIdFromEntraDocument(
 }
 
 /** Load entra.json on top of the built-in client ID so the Azure app can be swapped later. */
-export async function loadEntraConfig(): Promise<void> {
+let entraConfigPromise: Promise<void> | null = null
+
+/** One settings download per page load. Sign-in used to fetch it three times. */
+export function loadEntraConfig(): Promise<void> {
+  if (!entraConfigPromise) entraConfigPromise = fetchEntraConfig()
+  return entraConfigPromise
+}
+
+async function fetchEntraConfig(): Promise<void> {
   if (typeof fetch === 'undefined' || typeof document === 'undefined') return
   try {
     const res = await fetch(new URL('entra.json', document.baseURI).href, { cache: 'no-store' })
@@ -560,7 +568,9 @@ export function buildMicrosoftLoginRequest(loginHint?: string): PopupRequest & R
   const hint = loginHint?.trim()
   return {
     scopes: LOGIN_SCOPES,
-    prompt: 'login',
+    // Account picker: one click on an account already signed in to Microsoft,
+    // instead of typing the password every time.
+    prompt: 'select_account',
     ...(hint ? { loginHint: hint } : {}),
   }
 }

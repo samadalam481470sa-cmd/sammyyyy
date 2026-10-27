@@ -65,13 +65,13 @@ describe('Microsoft 365 SPA URLs', () => {
     expect(request).not.toHaveProperty('prompt')
   })
 
-  it('forces the hosted Microsoft password page and prefills the typed email', () => {
+  it('opens the Microsoft account picker and prefills the typed email', () => {
     expect(buildMicrosoftLoginRequest('ada@outlook.com')).toEqual({
       scopes: LOGIN_SCOPES,
-      prompt: 'login',
+      prompt: 'select_account',
       loginHint: 'ada@outlook.com',
     })
-    expect(buildMicrosoftLoginRequest('  ')).toMatchObject({ prompt: 'login' })
+    expect(buildMicrosoftLoginRequest('  ')).toMatchObject({ prompt: 'select_account' })
   })
 
   it('turns Microsoft cloud return errors into a login message', () => {

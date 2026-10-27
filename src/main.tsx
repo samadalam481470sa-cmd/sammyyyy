@@ -43,13 +43,16 @@ function registerServiceWorker(): void {
 }
 
 function boot(): void {
-  const msalWarmup = loadEntraConfig()
-    .then(() => ensureMsal())
-    .catch(() => null)
-
   // Only hold the first paint while Microsoft is handing back a sign-in, so the
   // router cannot strip the response before MSAL reads it. Normal loads render at once.
   const waitForMicrosoft = hasEntraRedirectReturn()
+
+  // Returning from Microsoft: finish sign-in right away with the built-in app ID
+  // instead of waiting for the settings download first.
+  const msalWarmup = (waitForMicrosoft ? ensureMsal() : loadEntraConfig().then(() => ensureMsal())).catch(
+    () => null,
+  )
+  if (waitForMicrosoft) void loadEntraConfig()
 
   void (waitForMicrosoft
     ? Promise.race([msalWarmup, new Promise((resolve) => window.setTimeout(resolve, 8000))])
