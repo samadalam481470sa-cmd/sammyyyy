@@ -1,4 +1,6 @@
-import { getGraphAccessToken, graphTokenError } from '@/auth/msal'
+import { connectedMailboxAddress, disconnectOutlookMailbox, getGraphAccessToken, graphTokenError } from '@/auth/msal'
+
+export { connectedMailboxAddress, disconnectOutlookMailbox }
 
 export { graphTokenError }
 import { parseAddresses } from '@/lib/mailAddress'

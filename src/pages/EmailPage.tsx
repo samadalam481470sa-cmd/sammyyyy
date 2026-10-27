@@ -57,6 +57,8 @@ import {
   type MailMessage,
 } from '@/lib/outlookMailbox'
 import {
+  connectedMailboxAddress,
+  disconnectOutlookMailbox,
   downloadOutlookAttachment,
   getOutlookMessage,
   listOutlookAttachments,
@@ -174,6 +176,17 @@ export function EmailPage() {
   const [calendarDraft, setCalendarDraft] = useState<MailMeetingDraft | null>(null)
   const [gmailOn, setGmailOn] = useState(() => isGmailConnected(account))
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [mailboxAddress, setMailboxAddress] = useState('')
+  useEffect(() => {
+    if (graphMode !== 'graph' || gmailOn) return
+    let cancel = false
+    void connectedMailboxAddress().then((address) => {
+      if (!cancel) setMailboxAddress(address)
+    })
+    return () => {
+      cancel = true
+    }
+  }, [graphMode, gmailOn, account])
   const [noOlder, setNoOlder] = useState<Record<string, boolean>>({})
   const [alerts, setAlerts] = useState(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
   const provider = gmailOn ? 'Gmail' : 'Outlook'
@@ -302,6 +315,18 @@ export function EmailPage() {
   useEffect(() => {
     void ensureMsal()
   }, [])
+
+  const switchOutlookAccount = () => {
+    setStatus('Opening Microsoft to pick a different account…')
+    void disconnectOutlookMailbox().then(() => {
+      const outlookCleared = loadMailbox(email).filter((message) => isGmailId(message.id) || message.pending)
+      saveMailbox(email, outlookCleared)
+      setMessages(outlookCleared)
+      setSelectedId(null)
+      setMailboxAddress('')
+      connectOutlook()
+    })
+  }
 
   const loadOlder = () => {
     setLoadingOlder(true)
@@ -686,7 +711,20 @@ export function EmailPage() {
             </button>
           </span>
         ) : (
-          <span className="ml-auto inline-flex gap-2">
+          <span className="ml-auto inline-flex items-center gap-2">
+            {graphMode === 'graph' && (
+              <span className="inline-flex items-center gap-2 text-xs text-[#616161]">
+                Outlook: {mailboxAddress || 'connected'}
+                <button
+                  type="button"
+                  data-testid="email-outlook-switch"
+                  onClick={switchOutlookAccount}
+                  className="h-7 rounded-md border border-[#e0e0e0] px-2 font-semibold text-[#242424] hover:bg-[#f5f5f5]"
+                >
+                  Switch account
+                </button>
+              </span>
+            )}
             {graphMode === 'demo' && (
               <button
                 type="button"

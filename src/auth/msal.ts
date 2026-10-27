@@ -787,6 +787,42 @@ async function graphRedirect(
 
 const MAIL_BINDING_KEY = 'newport_msal_mail_account'
 
+/** Address of the Microsoft mailbox this CRM user connected (or signed in with). */
+export async function connectedMailboxAddress(): Promise<string> {
+  const instance = await ensureMsal()
+  if (!instance) return ''
+  const owner = crmOwnerEmail()
+  const boundId = owner ? readMailBinding(owner) : null
+  const accounts = instance.getAllAccounts()
+  const account =
+    accounts.find((row) => boundId !== null && row.homeAccountId === boundId) ??
+    accounts.find((row) => owner !== '' && sameMailbox(row.username, owner))
+  return account?.username ?? ''
+}
+
+/** Forget the connected Outlook mailbox so a different account can be connected. The CRM sign-in stays. */
+export async function disconnectOutlookMailbox(): Promise<void> {
+  const instance = await ensureMsal()
+  const owner = crmOwnerEmail()
+  const boundId = owner ? readMailBinding(owner) : null
+  try {
+    sessionStorage.removeItem(MAIL_BINDING_KEY)
+  } catch {
+    // ignore
+  }
+  if (!instance) return
+  for (const account of instance.getAllAccounts()) {
+    const isBound = boundId !== null && account.homeAccountId === boundId
+    const isLogin = owner !== '' && sameMailbox(account.username, owner)
+    if (!isBound && !isLogin) continue
+    try {
+      await instance.clearCache({ account })
+    } catch {
+      // stale entry; ignore
+    }
+  }
+}
+
 /** Email of the person logged in to the CRM in this tab. */
 function crmOwnerEmail(): string {
   try {
