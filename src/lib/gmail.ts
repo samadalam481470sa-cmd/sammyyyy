@@ -90,7 +90,37 @@ export function gmailAddress(owner: string): string {
   return readToken(owner)?.address ?? ''
 }
 
+// The Gmail address this CRM user connected before (no token). Kept across tabs so an
+// expired one-hour token shows "Reconnect Gmail" and renews on the next click.
+function rememberKey(owner: string): string {
+  return `newport_gmail_remembered:${owner.trim().toLowerCase()}`
+}
+
+/** Gmail address this CRM user connected earlier, even if the token has expired. */
+export function rememberedGmail(owner: string): string {
+  try {
+    return localStorage.getItem(rememberKey(owner)) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function rememberGmail(owner: string, address: string): void {
+  try {
+    if (address) localStorage.setItem(rememberKey(owner), address)
+    else localStorage.removeItem(rememberKey(owner))
+  } catch {
+    // storage blocked
+  }
+}
+
+/** True when Gmail was connected before but the token is gone (expired or a new tab). */
+export function gmailNeedsRenewal(owner: string): boolean {
+  return !isGmailConnected(owner) && rememberedGmail(owner) !== ''
+}
+
 export function disconnectGmail(owner: string): void {
+  rememberGmail(owner, '')
   const token = readToken(owner)
   try {
     sessionStorage.removeItem(tokenKey(owner))
@@ -194,6 +224,7 @@ export async function connectGmail(owner: string, hint?: string): Promise<string
   const profile = await gmailFetch(response.access_token, '/profile')
   const address = profile.ok ? String(((await profile.json()) as { emailAddress?: string }).emailAddress ?? '') : ''
   writeToken(owner, { accessToken: response.access_token, expiresAt: Date.now() + expiresIn * 1000, address })
+  rememberGmail(owner, address || hint || 'connected')
   return address
 }
 

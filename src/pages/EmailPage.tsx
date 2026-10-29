@@ -53,6 +53,8 @@ import {
 import { meetingFromMail, meetingLabel, type MailMeetingDraft } from '@/lib/mailMeeting'
 import {
   GmailSetupError,
+  gmailNeedsRenewal,
+  rememberedGmail,
   connectGmail,
   disconnectGmail,
   downloadGmailAttachment,
@@ -622,11 +624,21 @@ export function EmailPage() {
 
   const connectGmailNow = () => {
     setSyncing(true)
-    setStatus('Connecting Gmail…')
-    connectGmail(account, email)
+    const renewing = gmailNeedsRenewal(account)
+    setStatus(renewing ? 'Reconnecting Gmail…' : 'Connecting Gmail…')
+    const known = rememberedGmail(account)
+    connectGmail(account, known.includes('@') ? known : email)
       .then((address) => {
         setGmailOn(true)
-        setStatus(`Gmail connected${address ? ` (${address})` : ''}. Loading mail…`)
+        // Show the whole inbox right away: Inbox folder, every account, no filters.
+        setFolder('inbox')
+        setListFilter('all')
+        setAccountFilter('all')
+        setQuery('')
+        setSearchResult(null)
+        setSelectedId(null)
+        setMobilePane('list')
+        setStatus(`Gmail connected${address ? ` (${address})` : ''}. Syncing your inbox and every folder…`)
         void syncOutlookNow(email, { incremental: false, mail: true })
         refreshCounts()
       })
@@ -649,6 +661,11 @@ export function EmailPage() {
   }
 
   const syncNow = () => {
+    // Gmail tokens last one hour. If it expired, this click renews it, then syncs.
+    if (gmailNeedsRenewal(account)) {
+      connectGmailNow()
+      return
+    }
     setSyncing(true)
     setStatus('Refreshing every connected mailbox…')
     void syncOutlookNow(email, { incremental: false, mail: true })
@@ -1085,7 +1102,7 @@ export function EmailPage() {
             </span>
           ) : (
             <button type="button" data-testid="email-connect-gmail" onClick={connectGmailNow} className="inline-flex h-8 items-center rounded-md border border-[#c5221f] px-3 text-sm font-semibold text-[#c5221f] hover:bg-[#fce8e6]">
-              Connect Gmail
+              {gmailNeedsRenewal(account) ? 'Reconnect Gmail' : 'Connect Gmail'}
             </button>
           )}
           <button type="button" title="Mailbox check" aria-label="Mailbox check" data-testid="email-check" onClick={() => setDialog('check')} className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-[#f0f0f0]">

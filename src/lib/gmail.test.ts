@@ -51,3 +51,32 @@ describe('Gmail messages', () => {
     expect(raw.endsWith('\r\n\r\nHi')).toBe(true)
   })
 })
+
+describe('Gmail reconnect', () => {
+  it('asks for a reconnect when Gmail was connected before but the token is gone', async () => {
+    const store = (): Storage => {
+      const rows = new Map<string, string>()
+      return {
+        getItem: (k: string) => rows.get(k) ?? null,
+        setItem: (k: string, v: string) => void rows.set(k, v),
+        removeItem: (k: string) => void rows.delete(k),
+        clear: () => rows.clear(),
+        key: () => null,
+        get length() {
+          return rows.size
+        },
+      }
+    }
+    const g = globalThis as unknown as { localStorage: Storage; sessionStorage: Storage }
+    g.localStorage = store()
+    g.sessionStorage = store()
+    const { gmailNeedsRenewal, rememberedGmail, disconnectGmail } = await import('./gmail')
+    expect(gmailNeedsRenewal('sam@utd.edu')).toBe(false)
+    g.localStorage.setItem('newport_gmail_remembered:sam@utd.edu', 'sam@gmail.com')
+    expect(rememberedGmail('SAM@utd.edu')).toBe('sam@gmail.com')
+    expect(gmailNeedsRenewal('sam@utd.edu')).toBe(true)
+    ;(globalThis as unknown as { window: object }).window = {}
+    disconnectGmail('sam@utd.edu')
+    expect(gmailNeedsRenewal('sam@utd.edu')).toBe(false)
+  })
+})
