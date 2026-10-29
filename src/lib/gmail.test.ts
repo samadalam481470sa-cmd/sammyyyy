@@ -72,7 +72,7 @@ describe('Gmail reconnect', () => {
     g.sessionStorage = store()
     const { gmailNeedsRenewal, rememberedGmail, disconnectGmail } = await import('./gmail')
     expect(gmailNeedsRenewal('sam@utd.edu')).toBe(false)
-    g.localStorage.setItem('newport_gmail_remembered:sam@utd.edu', 'sam@gmail.com')
+    g.localStorage.setItem('newport_outlook_gmail_remembered:sam@utd.edu', 'sam@gmail.com')
     expect(rememberedGmail('SAM@utd.edu')).toBe('sam@gmail.com')
     expect(gmailNeedsRenewal('sam@utd.edu')).toBe(true)
     ;(globalThis as unknown as { window: object }).window = {}

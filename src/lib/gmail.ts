@@ -93,7 +93,7 @@ export function gmailAddress(owner: string): string {
 // The Gmail address this CRM user connected before (no token). Kept across tabs so an
 // expired one-hour token shows "Reconnect Gmail" and renews on the next click.
 function rememberKey(owner: string): string {
-  return `newport_gmail_remembered:${owner.trim().toLowerCase()}`
+  return `newport_outlook_gmail_remembered:${owner.trim().toLowerCase()}`
 }
 
 /** Gmail address this CRM user connected earlier, even if the token has expired. */
