@@ -7,6 +7,7 @@ import {
   type NotificationItem,
 } from '@/lib/api'
 import { isLocalPersistence } from '@/lib/persistenceMode'
+import { deliverMail } from '@/lib/outlookSync'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { useAuth } from '@/auth/AuthContext'
@@ -113,11 +114,17 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
     setBusy(true)
     setMessage(null)
     try {
+      // Send through the CRM's own Outlook or Gmail connection. Mail never opens
+      // in another app, tab, or window.
+      const sender = user?.email ?? ''
+      if (!sender) throw new Error('Sign in first. Nothing was sent.')
+      const route = await deliverMail({ email: sender, to, subject, body })
+      if (route !== 'graph') throw new Error('Connect Outlook or Gmail on the Email page first. Nothing was sent.')
       if (isLocalPersistence()) {
         const created: NotificationItem = {
           id: `local_${Date.now()}`,
           direction: 'outbound',
-          from: 'dennis@newportspecialty.demo',
+          from: sender,
           to,
           subject,
           body,
@@ -128,17 +135,11 @@ export function NotificationsPanel({ open, onClose }: NotificationsPanelProps) {
         const next = [created, ...items]
         saveOwnedCollection('notifications', sessionOwnerKey(user), next)
         setItems(next)
-        window.open(
-          `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-          '_blank',
-        )
-        setMessage('Logged outbound note and opened your work mailbox compose window.')
       } else {
         const created = await sendNotification({ to, subject, body })
         setItems((prev) => [created, ...prev])
-        if (created.mailto) window.open(created.mailto, '_blank')
-        setMessage('Notification logged. Work mailbox compose opened when available.')
       }
+      setMessage(`Sent to ${to} from ${sender}.`)
       setTo('')
       setSubject('')
       setBody('')

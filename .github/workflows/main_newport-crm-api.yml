@@ -23,6 +23,11 @@ jobs:
         with:
           node-version: '24.x'
 
+      # Install packages here so Azure gets a ready-to-run app (better-sqlite3 is built
+      # for this Node version, tsx runs the TypeScript server). Azure starts it with `npm start`.
+      - name: Install packages
+        run: npm ci
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:

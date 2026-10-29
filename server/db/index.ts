@@ -21,7 +21,10 @@ const dbPath = process.env.CRM_DB_PATH
   : path.join(
       process.env.CRM_DATA_DIR
         ? path.resolve(process.env.CRM_DATA_DIR)
-        : path.resolve(__dirname, '../../data'),
+        : process.env.WEBSITE_SITE_NAME
+          ? // Azure App Service: /home persists, and a deploy does not wipe it.
+            '/home/data'
+          : path.resolve(__dirname, '../../data'),
       'newport-crm.db',
     )
 const dataDir = path.dirname(dbPath)

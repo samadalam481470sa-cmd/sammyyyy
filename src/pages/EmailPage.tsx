@@ -684,6 +684,19 @@ export function EmailPage() {
     setMobilePane('read')
   }
 
+  // Start a new message from a link elsewhere in the CRM (?to=<address>&subject=<text>),
+  // so contact emails open the built-in composer instead of an outside mail app.
+  const toParam = params.get('to')
+  useEffect(() => {
+    if (!toParam) return
+    startCompose({ mode: 'new', to: toParam, cc: '', bcc: '', subject: params.get('subject') ?? '', body: '' })
+    const next = new URLSearchParams(params)
+    next.delete('to')
+    next.delete('subject')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toParam])
+
   const reply = (message: MailMessage, all: boolean) =>
     startCompose({ mode: all ? 'replyAll' : 'reply', ...replyFields(message, selfAddresses, all), bcc: '', subject: subjectWith('Re', message.subject), body: '', replyToId: message.id })
   const forward = (message: MailMessage) =>

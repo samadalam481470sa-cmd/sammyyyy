@@ -303,7 +303,7 @@ export function OpportunityProfilePage() {
                         <td className="truncate px-5 py-3.5 font-semibold text-navy-900">{contact.name}</td>
                         <td className="truncate px-3 py-3.5 text-ink-muted">{[contact.title, contact.category].filter(Boolean).join(' · ') || '—'}</td>
                         <td className="truncate px-3 py-3.5 text-ink-muted">{contact.company || '—'}</td>
-                        <td className="truncate px-3 py-3.5 text-ink-muted">{contact.email ? <a className="text-navy-900 hover:underline" href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()}>{contact.email}</a> : '—'}</td>
+                        <td className="truncate px-3 py-3.5 text-ink-muted">{contact.email ? <button type="button" className="text-navy-900 hover:underline" title="Write an email in the CRM" onClick={(e) => { e.stopPropagation(); navigate(`/email?to=${encodeURIComponent(contact.email)}&subject=${encodeURIComponent(opportunity.projectName)}`) }}>{contact.email}</button> : '—'}</td>
                         <td className="truncate px-5 py-3.5 text-ink-muted">{contact.phone || '—'}</td>
                       </tr>
                     ))}

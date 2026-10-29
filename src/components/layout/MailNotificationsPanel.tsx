@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Inbox, Mail, X } from 'lucide-react'
+import { AlertTriangle, Inbox, Mail, X } from 'lucide-react'
+import type { TaskRecord } from '@/data/mockModules'
 import { useNavigate } from 'react-router-dom'
 import { formatMailTime, loadMailbox, mailProvider, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
 import { graphTokenError, outlookToken } from '@/lib/outlookGraph'
@@ -41,17 +42,37 @@ export function useUnreadMail(email: string): UnreadMailState {
   return state
 }
 
+/** Open tasks that are overdue or due by tomorrow, soonest first. */
+export function dueTasks(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
+  const limit = new Date(now)
+  limit.setDate(limit.getDate() + 1)
+  const cutoff = limit.toISOString().slice(0, 10)
+  return tasks
+    .filter(
+      (task) =>
+        task.dueDate &&
+        task.dueDate.slice(0, 10) <= cutoff &&
+        !task.completedAt &&
+        !task.archivedAt &&
+        !task.deletedAt &&
+        !/complete|done|closed|cancel/i.test(task.status),
+    )
+    .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+}
+
 interface MailNotificationsPanelProps {
   open: boolean
   onClose: () => void
   email: string
+  /** Tasks to flag in the bell (see dueTasks). */
+  tasks?: TaskRecord[]
 }
 
 /**
  * Bell drawer: the five most recent UNREAD incoming emails. Opening the bell does not mark
  * anything read; opening a message in Email does, through the mail provider.
  */
-export function MailNotificationsPanel({ open, onClose, email }: MailNotificationsPanelProps) {
+export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: MailNotificationsPanelProps) {
   const navigate = useNavigate()
   const { unread, available } = useUnreadMail(email)
   const [connecting, setConnecting] = useState(false)
@@ -101,7 +122,8 @@ export function MailNotificationsPanel({ open, onClose, email }: MailNotificatio
           <div>
             <h2 className="font-brand text-lg font-bold text-navy-900">Notifications</h2>
             <p className="text-xs text-ink-muted">
-              {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'} in your inbox` : 'Incoming email'}
+              {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'}` : 'Incoming email'}
+              {tasks.length > 0 && ` · ${tasks.length} task${tasks.length === 1 ? '' : 's'} due`}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close notifications" className="rounded-lg border border-border p-2 text-ink-muted hover:bg-canvas">
@@ -110,6 +132,48 @@ export function MailNotificationsPanel({ open, onClose, email }: MailNotificatio
         </div>
 
         <div className="custom-scroll flex-1 overflow-y-auto">
+          {tasks.length > 0 && (
+            <div className="border-b border-border" data-testid="task-notifications">
+              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Tasks due</p>
+              <ul className="divide-y divide-border">
+                {tasks.slice(0, 5).map((task) => {
+                  const overdue = (task.dueDate ?? '').slice(0, 10) < new Date().toISOString().slice(0, 10)
+                  return (
+                    <li key={task.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose()
+                          navigate('/tasks')
+                        }}
+                        className="flex w-full items-start gap-2 px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                      >
+                        <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${overdue ? 'text-attention' : 'text-ink-subtle'}`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-navy-900">{task.action || 'Task'}</span>
+                          <span className="block truncate text-xs text-ink-muted">
+                            {task.projectName || 'No project'} · {overdue ? 'Overdue' : 'Due'} {task.dueDate?.slice(0, 10)}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+              {tasks.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    navigate('/tasks')
+                  }}
+                  className="w-full px-5 py-2 text-left text-xs font-semibold text-navy-900 hover:underline"
+                >
+                  View all {tasks.length} in Tasks
+                </button>
+              )}
+            </div>
+          )}
           {!available ? (
             <div className="flex flex-col items-center px-6 py-12 text-center">
               <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />

@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Bell, Plus, Search } from 'lucide-react'
 import { getGreeting } from '@/utils/dashboard'
 import { useAuth } from '@/auth/AuthContext'
-import { MailNotificationsPanel, useUnreadMail } from '@/components/layout/MailNotificationsPanel'
+import { MailNotificationsPanel, dueTasks, useUnreadMail } from '@/components/layout/MailNotificationsPanel'
+import { useData } from '@/data/DataContext'
 import { ProfileMenu } from '@/components/layout/ProfileMenu'
 
 interface TopHeaderProps {
@@ -19,7 +20,10 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const { unread } = useUnreadMail(user?.email ?? '')
+  const { tasks } = useData()
+  const taskAlerts = useMemo(() => dueTasks(tasks), [tasks])
   const unreadCount = unread.length
+  const alertCount = unreadCount + taskAlerts.length
 
   return (
     <>
@@ -60,12 +64,12 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
                 setProfileOpen(false)
               }}
               className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-              aria-label={unreadCount ? `Notifications: ${unreadCount} unread email${unreadCount === 1 ? '' : 's'}` : 'Notifications: no unread email'}
-              title={unreadCount ? `${unreadCount} unread email${unreadCount === 1 ? '' : 's'}` : 'No unread email'}
+              aria-label={alertCount ? `Notifications: ${unreadCount} unread email${unreadCount === 1 ? '' : 's'}, ${taskAlerts.length} task${taskAlerts.length === 1 ? '' : 's'} due` : 'Notifications: nothing new'}
+              title={alertCount ? `${unreadCount} unread email${unreadCount === 1 ? '' : 's'} · ${taskAlerts.length} task${taskAlerts.length === 1 ? '' : 's'} due` : 'Nothing new'}
               data-testid="notification-bell"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
-              {unreadCount > 0 && (
+              {alertCount > 0 && (
                 <span data-testid="notification-dot" className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-[#f5b301]" />
               )}
             </button>
@@ -99,7 +103,7 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
         </div>
       </header>
 
-      <MailNotificationsPanel open={notifyOpen} onClose={() => setNotifyOpen(false)} email={user?.email ?? ''} />
+      <MailNotificationsPanel open={notifyOpen} onClose={() => setNotifyOpen(false)} email={user?.email ?? ''} tasks={taskAlerts} />
     </>
   )
 }

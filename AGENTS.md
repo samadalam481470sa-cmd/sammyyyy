@@ -9,7 +9,7 @@ Whenever you finish a code change for this CRM, **also update the live GitHub Pa
 - Live URL: https://samadalam481470sa-cmd.github.io/sammyyyy/
 - Pages source branch: `gh-pages` (legacy Pages, not GitHub Actions — the Actions workflow has been unreliable)
 
-One command does all of the steps below: `npm run deploy:pages` (builds, then pushes `dist/` to `gh-pages`).
+Pushing to `main` now publishes automatically: `.github/workflows/deploy-pages.yml` builds and pushes `dist/` to `gh-pages`. To publish by hand, one command does all of the steps below: `npm run deploy:pages` (builds, then pushes `dist/` to `gh-pages`).
 
 Deploy steps (run after the feature is committed on the working branch):
 
