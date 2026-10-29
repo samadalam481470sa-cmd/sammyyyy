@@ -31,6 +31,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { ensureMsal } from '@/auth/msal'
 import { useAuth } from '@/auth/AuthContext'
 import { AddToCalendarDialog } from '@/components/email/AddToCalendarDialog'
@@ -472,6 +473,22 @@ export function EmailPage() {
   }, [selected?.id, selected?.bodyLoaded, account, bodyRetry])
 
   // ── actions ───────────────────────────────────────────────────────────────
+  // Open a message requested from the notification bell (?open=<id>); opening marks it read.
+  const [params, setParams] = useSearchParams()
+  const openParam = params.get('open')
+  useEffect(() => {
+    if (!openParam) return
+    const message = messages.find((row) => row.id === openParam)
+    if (!message) return
+    setFolder(message.folder)
+    setSearchResult(null)
+    openMessage(message)
+    const next = new URLSearchParams(params)
+    next.delete('open')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openParam, messages])
+
   const openMessage = (message: MailMessage) => {
     setComposing(null)
     setSelectedId(message.id)

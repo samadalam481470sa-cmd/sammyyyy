@@ -13,6 +13,8 @@ import { NewportAI } from '@/components/dashboard/NewportAI'
 import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
 import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
+import { NewTaskDrawer } from '@/components/tasks/NewTaskDrawer'
+import { NewRelationshipDrawer } from '@/components/relationships/NewRelationshipDrawer'
 import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
@@ -65,6 +67,8 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [selected, setSelected] = useState<Opportunity | null>(null)
+  const [taskOpen, setTaskOpen] = useState(false)
+  const [relationshipOpen, setRelationshipOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [excelOpen, setExcelOpen] = useState(false)
   const { addSheet } = useSpreadsheetColumns()
@@ -274,10 +278,12 @@ export function Dashboard() {
                     return
                   }
                   if (action === 'add-task') {
-                    void navigate('/tasks?new=1')
+                    setTaskOpen(true)
                     return
                   }
-                  showToast(`${action.replace(/-/g, ' ')} — open the matching module to continue`)
+                  if (action === 'new-relationship') {
+                    setRelationshipOpen(true)
+                  }
                 }}
               />
               <NewportAI />
@@ -345,6 +351,13 @@ export function Dashboard() {
       />
 
       <OpportunityDrawer opportunity={selected} onClose={() => setSelected(null)} />
+
+      <NewTaskDrawer open={taskOpen} onClose={() => setTaskOpen(false)} onCreated={(task) => showToast(`Created task: ${task.action}`)} />
+      <NewRelationshipDrawer
+        open={relationshipOpen}
+        onClose={() => setRelationshipOpen(false)}
+        onCreated={(contact) => showToast(`Created relationship: ${contact.name}`)}
+      />
 
       <ConfirmDialog
         open={Boolean(activityNotice)}

@@ -11,6 +11,7 @@ import {
 } from '@/lib/documentSlots'
 import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
 import { DocumentWorkspace } from '@/components/documents/DocumentWorkspace'
+import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
 
@@ -23,6 +24,8 @@ export function DocumentsPage() {
   const [statusFilter, setStatusFilter] = useState<OpportunityStatus | ''>('')
   const [stageFilter, setStageFilter] = useState<AcquisitionStage | ''>('')
   const [filterOpen, setFilterOpen] = useState(false)
+  const [creatingDoc, setCreatingDoc] = useState(false)
+  const [cancelCreate, setCancelCreate] = useState(0)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
 
@@ -59,6 +62,16 @@ export function DocumentsPage() {
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
+
+  // "Add New Document" dims the rest of the CRM like other creation drawers; Escape or the backdrop leaves creation.
+  useEffect(() => {
+    if (!creatingDoc) return
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setCancelCreate((n) => n + 1)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [creatingDoc])
 
   const activate = (id: string) => {
     if (selectedId === id) {
@@ -197,15 +210,34 @@ export function DocumentsPage() {
             })}
           </div>
         </div>
+        {selected && creatingDoc && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-testid="document-create-backdrop"
+            aria-label="Cancel new document"
+            className="fixed inset-0 z-[60] bg-navy-950/40"
+            onClick={() => setCancelCreate((n) => n + 1)}
+          />
+        )}
         {selected && (
-          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
+          <aside
+            className={`min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)] ${creatingDoc ? 'relative z-[65] shadow-(--shadow-drawer)' : ''}`}
+            role={creatingDoc ? 'dialog' : undefined}
+            aria-modal={creatingDoc ? true : undefined}
+            aria-label={creatingDoc ? 'New document' : undefined}
+          >
             <DocumentWorkspace
               ref={editorRef}
               opportunity={selected}
               initialDocumentId={selectDocId}
+              onCreatingChange={setCreatingDoc}
+              cancelCreateRequest={cancelCreate}
+              footerExtra={<ProfileLinkButton opportunityId={selected.id} />}
               onClose={() => {
                 setSelectedId(null)
                 setSelectDocId(null)
+                setCreatingDoc(false)
               }}
             />
           </aside>

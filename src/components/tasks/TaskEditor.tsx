@@ -9,7 +9,7 @@ import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { useEditorGuard, type OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import { registerPendingCommit } from '@/lib/userVault'
-import { forwardRef, useCallback, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useRef, type ReactNode } from 'react'
 
 export type TaskDraft = {
   action: string
@@ -52,10 +52,12 @@ interface TaskEditorProps {
   onClose: () => void
   onSaved?: (task: TaskRecord) => void
   onDeleted?: () => void
+  /** Shown at the very bottom, below Delete Task (for example the profile link). */
+  footerExtra?: ReactNode
 }
 
 export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
-  function TaskEditor({ mode, task, draftSeed, onClose, onSaved, onDeleted }, ref) {
+  function TaskEditor({ mode, task, draftSeed, onClose, onSaved, onDeleted, footerExtra }, ref) {
     const { opportunities, users, saveTask, createTask, deleteTask } = useData()
     const guard = useEditorGuard()
     const [draft, setDraft] = useState<TaskDraft>(
@@ -74,13 +76,15 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
     useEffect(() => {
       const next = draftSeed ?? (task ? snapshotTask(task) : emptyTaskDraft())
       setDraft(next)
-      setSaved(mode === 'draft' ? emptyTaskDraft() : next)
+      setSaved(next)
       setError(null)
       setMessage(null)
       setPendingLeave(null)
     }, [task?.id, mode])
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+    const valid = draft.action.trim().length > 0
+    const canSave = dirty && valid && !saving
 
     const requestLeave = useCallback(
       (next: () => void) => {
@@ -182,7 +186,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
               {mode === 'draft' ? 'Unsaved draft' : 'Task'}
             </p>
             <h2 className="mt-1 font-brand text-xl font-bold text-navy-900">
-              {draft.action.trim() || (mode === 'draft' ? 'New task' : 'Task')}
+              {mode === 'draft' ? 'New Task' : draft.action.trim() || 'Task'}
             </h2>
             <p className="text-sm text-ink-muted">
               {[linked?.projectName, linked?.entityName].filter(Boolean).join(' · ') || 'No project linked'}
@@ -297,23 +301,30 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
         <div className="space-y-2 border-t border-border bg-canvas px-5 py-3">
           {error && <p className="text-xs text-attention">{error}</p>}
           {message && <p className="text-xs text-success">{message}</p>}
+          {dirty && !valid && <p className="text-xs text-ink-muted">Add an action to save this task.</p>}
           <button
             type="button"
-            disabled={saving || !dirty}
+            data-testid="task-save"
+            disabled={!canSave}
             onClick={() => void persist()}
             className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
-              dirty && !saving ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
+              canSave ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
             }`}
           >
             {saveButtonLabel(saving)}
           </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="h-10 w-full rounded-lg border border-attention-border bg-attention-bg text-sm font-semibold text-attention hover:bg-attention-bg/80"
-          >
-            Delete Task
-          </button>
+          {mode !== 'draft' && (
+            <button
+              type="button"
+              data-testid="task-delete"
+              disabled={saving}
+              onClick={() => setConfirmDelete(true)}
+              className="h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] disabled:opacity-60"
+            >
+              Delete Task
+            </button>
+          )}
+          {footerExtra}
         </div>
 
         <UnsavedChangesDialog
@@ -354,7 +365,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
               <div className="mt-5 flex flex-col gap-2">
                 <button
                   type="button"
-                  className="h-10 rounded-lg bg-navy-900 text-sm font-semibold text-white"
+                  className="h-10 rounded-lg bg-[var(--color-danger)] text-sm font-semibold text-white"
                   onClick={() => void handleDelete()}
                 >
                   {mode === 'draft' ? 'Discard draft' : 'Delete Task'}

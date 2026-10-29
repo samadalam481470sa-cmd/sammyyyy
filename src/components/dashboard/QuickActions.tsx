@@ -1,4 +1,4 @@
-import { FileSpreadsheet, ListPlus, Plus, ScrollText } from 'lucide-react'
+import { FileSpreadsheet, ListPlus, Plus, UserPlus } from 'lucide-react'
 
 interface QuickActionsProps {
   onAction: (action: string) => void
@@ -7,7 +7,7 @@ interface QuickActionsProps {
 const ACTIONS = [
   { id: 'new-opportunity', label: 'New Opportunity', icon: Plus },
   { id: 'add-task', label: 'Add Task', icon: ListPlus },
-  { id: 'log-activity', label: 'Log Activity', icon: ScrollText },
+  { id: 'new-relationship', label: 'New Relationship', icon: UserPlus },
   { id: 'import-excel', label: 'Import Excel', icon: FileSpreadsheet },
 ] as const
 
@@ -16,7 +16,7 @@ export function QuickActions({ onAction }: QuickActionsProps) {
     <section className="rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)">
       <h2 className="font-brand text-lg font-bold text-navy-900">Quick Actions</h2>
       <p className="mt-0.5 mb-4 text-sm text-ink-muted">
-        Import Excel, log work, and jump into core workflows
+        Import Excel, add records, and jump into core workflows
       </p>
       <div className="grid grid-cols-2 gap-2">
         {ACTIONS.map(({ id, label, icon: Icon }) => (

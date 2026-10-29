@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  type ReactNode,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -13,7 +14,6 @@ import {
   CONFIDENTIALITY_LEVELS,
   DOCUMENT_FILE_TYPES,
   DOCUMENT_STATUSES,
-  DOCUMENT_TYPES,
   type DocumentRecord,
 } from '@/data/mockModules'
 import { useData } from '@/data/DataContext'
@@ -35,6 +35,7 @@ import { deleteDocumentBlob, getDocumentBlob, putDocumentBlob } from '@/lib/docu
 import { uploadDealDocumentToOneDrive } from '@/lib/graphDocuments'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { CreatableSelect, matchExistingOption } from '@/components/shared/CreatableSelect'
 import { FileAttachmentField } from '@/components/documents/FileAttachmentField'
 import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
@@ -47,6 +48,35 @@ interface DocumentWorkspaceProps {
   opportunity: Opportunity
   onClose: () => void
   initialDocumentId?: string | null
+  /** Told when "Add New Document" creation starts or ends, so the page can dim behind it. */
+  onCreatingChange?: (creating: boolean) => void
+  /** Increment to ask the workspace to leave creation (backdrop click / Escape); unsaved work is confirmed first. */
+  cancelCreateRequest?: number
+  /** Shown at the very bottom, below Delete Document when it exists. */
+  footerExtra?: ReactNode
+}
+
+const CUSTOM_TYPES_KEY = 'newport_crm_custom_document_types'
+
+function storedCustomTypes(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TYPES_KEY)
+    const list = raw ? (JSON.parse(raw) as unknown) : []
+    return Array.isArray(list) ? list.filter((row): row is string => typeof row === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function rememberCustomType(type: string): void {
+  try {
+    const list = storedCustomTypes()
+    if (!list.some((row) => row.toLowerCase() === type.toLowerCase())) {
+      localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify([...list, type].slice(-200)))
+    }
+  } catch {
+    // storage blocked; the type is still saved on the document
+  }
 }
 
 type DocDraft = {
@@ -99,7 +129,7 @@ function emptyDraft(docType: string): DocDraft {
 }
 
 export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWorkspaceProps>(
-  function DocumentWorkspace({ opportunity, onClose, initialDocumentId }, ref) {
+  function DocumentWorkspace({ opportunity, onClose, initialDocumentId, onCreatingChange, cancelCreateRequest, footerExtra }, ref) {
     const { documents, createDocument, saveDocument, deleteDocument } = useData()
     const { user } = useAuth()
     const owner = sessionOwnerKey(user)
@@ -127,9 +157,29 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
     pendingFileRef.current = pendingFile
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(saved) || pendingFile != null
+    const typeText = draft.docType.trim()
+    const typeProblem =
+      mode === 'slot'
+        ? null
+        : !typeText
+          ? 'Enter a document type.'
+          : isDefaultDocumentSlot(typeText)
+            ? `${normalizeDocSlot(typeText)} has its own slot tab. Use that tab, or enter a more specific type.`
+            : null
+    const canSave = dirty && !typeProblem && !saving && !deleting
     const dirtyRef = useRef(dirty)
     dirtyRef.current = dirty
     const customDocs = customDocumentsForOpportunity(related, opportunity.id)
+    const knownCustomTypes = useMemo(
+      () => [...documents.map((doc) => doc.docType).filter((type) => type && !isDefaultDocumentSlot(type)), ...storedCustomTypes()],
+      [documents],
+    )
+    const onCreatingRef = useRef(onCreatingChange)
+    onCreatingRef.current = onCreatingChange
+    useEffect(() => {
+      onCreatingRef.current?.(mode === 'new')
+    }, [mode])
+    useEffect(() => () => onCreatingRef.current?.(false), [])
     const dealId = dealIdFromOpportunity(opportunity)
 
     const loadSlot = (slot: string) => {
@@ -174,6 +224,13 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
     }, [])
 
     useImperativeHandle(ref, () => ({ isDirty: () => dirtyRef.current, requestLeave }), [requestLeave])
+    const lastCancel = useRef(cancelCreateRequest ?? 0)
+    useEffect(() => {
+      if (cancelCreateRequest == null || cancelCreateRequest === lastCancel.current) return
+      lastCancel.current = cancelCreateRequest
+      if (mode === 'new') requestLeave(() => loadSlot('NDA'))
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cancelCreateRequest])
     useEffect(() => {
       guard?.register({ isDirty: () => dirtyRef.current, requestLeave })
       return () => guard?.register(null)
@@ -197,9 +254,11 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         else if (isOpenableDocumentUrl(draft.link)) storage = 'url'
         else if (!attachedName) storage = 'none'
 
+        const docType = mode === 'slot' ? draft.docType : matchExistingOption(draft.docType, knownCustomTypes)
+        if (mode !== 'slot') rememberCustomType(docType)
         const payload: Partial<DocumentRecord> = {
-          name: draft.name.trim() || `${opportunity.projectName} ${draft.docType}`,
-          docType: draft.docType,
+          name: draft.name.trim() || `${opportunity.projectName} ${docType}`,
+          docType,
           fileType: pendingFile ? fileTypeFromFileName(pendingFile.name) : draft.fileType,
           status: draft.status,
           confidentiality: draft.confidentiality,
@@ -274,9 +333,10 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         setMode('new')
         setEditingId(null)
         setTab('new')
-        const next = emptyDraft('Other')
+        // Untouched new form: nothing to save until the user enters a type or details.
+        const next = emptyDraft('')
         setDraft(next)
-        setSaved(emptyDraft('__unsaved__'))
+        setSaved(next)
         setPendingFile(null)
         setMessage(null)
         setError(null)
@@ -309,9 +369,6 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
       uploadedAt: '',
     } as DocumentRecord) || pendingFile != null
 
-    const typeOptions = DOCUMENT_TYPES.includes(draft.docType as (typeof DOCUMENT_TYPES)[number])
-      ? DOCUMENT_TYPES
-      : ([draft.docType, ...DOCUMENT_TYPES] as string[])
     const fileTypeOptions = [...new Set([...DOCUMENT_FILE_TYPES, draft.fileType].filter(Boolean))]
 
     return (
@@ -429,19 +486,31 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
             }}
             onOpen={() => void openAttached()}
           />
-          <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
-            Type
-            <select
-              className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm font-normal text-ink disabled:bg-canvas"
-              value={draft.docType}
-              disabled={mode === 'slot'}
-              onChange={(e) => setDraft((p) => ({ ...p, docType: e.target.value }))}
-            >
-              {typeOptions.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-          </label>
+          {mode === 'slot' ? (
+            <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
+              Type
+              <input
+                className="mt-1 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm font-normal text-ink-muted"
+                value={draft.docType}
+                readOnly
+                aria-readonly="true"
+                title="Standard slots keep their type"
+              />
+            </label>
+          ) : (
+            <div>
+              <span className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">Type</span>
+              <CreatableSelect
+                testId="document-type"
+                value={draft.docType}
+                options={knownCustomTypes}
+                onChange={(value) => setDraft((p) => ({ ...p, docType: value }))}
+                placeholder="e.g. Quality of Earnings Report"
+                createLabel={(value) => `Use “${value}” as a new type`}
+              />
+              {typeProblem && draft.docType.trim() && <p className="mt-1 text-[11px] text-attention normal-case">{typeProblem}</p>}
+            </div>
+          )}
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Status
             <select
@@ -516,12 +585,14 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         <div className="border-t border-border bg-canvas px-5 py-3">
           {error && <p className="mb-2 text-xs text-attention">{error}</p>}
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
+          {mode === 'new' && <p className="mb-2 text-xs text-ink-muted">New document for {opportunity.projectName}. Nothing is created until you save.</p>}
           <button
             type="button"
-            disabled={saving || deleting || !dirty}
+            data-testid="document-save"
+            disabled={!canSave}
             onClick={() => void persist()}
             className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
-              dirty && !saving ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
+              canSave ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
             }`}
           >
             {saveButtonLabel(saving)}
@@ -536,6 +607,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
               Delete Document
             </button>
           )}
+          {footerExtra && mode !== 'new' && <div className="mt-2">{footerExtra}</div>}
         </div>
 
         <UnsavedChangesDialog

@@ -10,6 +10,7 @@ import { SecurityPage } from '@/pages/SecurityPage'
 import { RelationshipsPage } from '@/pages/RelationshipsPage'
 import { TasksPage } from '@/pages/TasksPage'
 import { EmailPage } from '@/pages/EmailPage'
+import { OpportunityProfilePage } from '@/pages/OpportunityProfilePage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
@@ -36,6 +37,7 @@ export default function App() {
             >
               <Route index element={<Dashboard />} />
               <Route path="opportunities" element={<OpportunitiesPage />} />
+              <Route path="opportunities/:opportunityId" element={<OpportunityProfilePage />} />
               <Route path="projects" element={<Navigate to="/opportunities" replace />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />

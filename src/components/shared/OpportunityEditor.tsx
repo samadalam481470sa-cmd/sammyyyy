@@ -40,6 +40,8 @@ interface OpportunityEditorProps {
   onClose?: () => void
   onDeleted?: () => void
   tabs?: Array<{ id: string; label: string }>
+  /** Shown at the very bottom, below Delete Opportunity. */
+  footerExtra?: ReactNode
 }
 
 const DEFAULT_TABS = [
@@ -50,7 +52,7 @@ const DEFAULT_TABS = [
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
-  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS }, ref) {
+  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra }, ref) {
     const [tab, setTab] = useState(tabs[0]?.id ?? 'overview')
     const [saved, setSaved] = useState(() => snapshotOpportunityDraft(opportunity))
     const [draft, setDraft] = useState<OpportunityDraft>(() => snapshotOpportunityDraft(opportunity))
@@ -458,6 +460,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           >
             Delete Opportunity
           </button>
+          {footerExtra && <div className="mt-2">{footerExtra}</div>}
         </div>
 
         <UnsavedChangesDialog

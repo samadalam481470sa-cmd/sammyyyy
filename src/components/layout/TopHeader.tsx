@@ -1,12 +1,9 @@
-import { useMemo, useState } from 'react'
-import { Bell, Plus, RefreshCw, Search } from 'lucide-react'
-import { requestOutlookSync } from '@/lib/outlookMailbox'
+import { useState } from 'react'
+import { Bell, Plus, Search } from 'lucide-react'
 import { getGreeting } from '@/utils/dashboard'
 import { useAuth } from '@/auth/AuthContext'
-import { NotificationsPanel } from '@/components/layout/NotificationsPanel'
+import { MailNotificationsPanel, useUnreadMail } from '@/components/layout/MailNotificationsPanel'
 import { ProfileMenu } from '@/components/layout/ProfileMenu'
-import { calendarOwnerKey, loadCalendarEvents } from '@/lib/meetingCalendar'
-import { loadKeyCalendarNotifications, pushCalendarReminders } from '@/lib/calendarReminders'
 
 interface TopHeaderProps {
   search: string
@@ -21,11 +18,8 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
   const initials = user?.initials ?? 'NP'
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const hasReminder = useMemo(() => {
-    const events = loadCalendarEvents(calendarOwnerKey(user))
-    pushCalendarReminders(user, events)
-    return loadKeyCalendarNotifications(user).some((n) => !n.read)
-  }, [user, notifyOpen])
+  const { unread } = useUnreadMail(user?.email ?? '')
+  const unreadCount = unread.length
 
   return (
     <>
@@ -44,15 +38,6 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
           </div>
 
           <div className="relative flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => requestOutlookSync()}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted hover:bg-canvas hover:text-ink"
-              aria-label="Sync Outlook"
-              title="Sync Outlook"
-            >
-              <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
-            </button>
             <div className="relative">
               <Search
                 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle"
@@ -75,11 +60,13 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
                 setProfileOpen(false)
               }}
               className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-              aria-label="Notifications"
+              aria-label={unreadCount ? `Notifications: ${unreadCount} unread email${unreadCount === 1 ? '' : 's'}` : 'Notifications: no unread email'}
+              title={unreadCount ? `${unreadCount} unread email${unreadCount === 1 ? '' : 's'}` : 'No unread email'}
+              data-testid="notification-bell"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />
-              {hasReminder && (
-                <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+              {unreadCount > 0 && (
+                <span data-testid="notification-dot" className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-[#f5b301]" />
               )}
             </button>
 
@@ -112,7 +99,7 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
         </div>
       </header>
 
-      <NotificationsPanel open={notifyOpen} onClose={() => setNotifyOpen(false)} />
+      <MailNotificationsPanel open={notifyOpen} onClose={() => setNotifyOpen(false)} email={user?.email ?? ''} />
     </>
   )
 }

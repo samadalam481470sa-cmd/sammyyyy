@@ -13,6 +13,17 @@ import { mergeMissingById } from '@/data/sprintSeed'
 
 const API_BASE = '/api/resources'
 
+/** Other screens using the same collection update at once when one saves (no manual refresh). */
+const RESOURCE_CHANGED = 'newport-resource-changed'
+let instanceSeq = 0
+
+interface ResourceChangedDetail {
+  resource: string
+  owner: string
+  source: number
+  items: unknown[]
+}
+
 function isLocalDemo() {
   return isLocalPersistence()
 }
@@ -65,15 +76,32 @@ export function useResource<T extends { id: string }>(
   const [error, setError] = useState<string | null>(null)
   const localMode = useRef(false)
   const itemsRef = useRef<T[]>([])
+  const instanceId = useRef(0)
+  if (!instanceId.current) instanceId.current = ++instanceSeq
 
   const writeLocal = useCallback(
     (next: T[]) => {
       if (persistLocal || localMode.current || isLocalDemo()) {
         saveOwnedCollection(resource, owner, next)
       }
+      if (typeof window !== 'undefined') {
+        const detail: ResourceChangedDetail = { resource, owner, source: instanceId.current, items: next }
+        window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+      }
     },
     [persistLocal, resource, owner],
   )
+
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<ResourceChangedDetail>).detail
+      if (!detail || detail.resource !== resource || detail.owner !== owner || detail.source === instanceId.current) return
+      itemsRef.current = detail.items as T[]
+      setItems(detail.items as T[])
+    }
+    window.addEventListener(RESOURCE_CHANGED, onChanged)
+    return () => window.removeEventListener(RESOURCE_CHANGED, onChanged)
+  }, [resource, owner])
 
   const loadLocal = useCallback(() => {
     const stored = loadOwnedCollection(resource, owner, mock)

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
+import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import type { Opportunity } from '@/types'
 import { formatCurrency, formatDate } from '@/utils/dashboard'
 
@@ -106,9 +107,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
         </div>
 
         <div className="border-t border-border bg-canvas px-5 py-4">
-          <p className="text-center text-sm font-medium text-ink-muted">
-            Full Opportunity Profile — Coming in next sprint
-          </p>
+          <ProfileLinkButton opportunityId={opportunity.id} onNavigate={onClose} />
         </div>
       </aside>
 

@@ -8,6 +8,7 @@ import {
 } from '@/components/shared/OpportunityEditor'
 import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm'
 import { WarningTriangle } from '@/components/shared/WarningTriangle'
+import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
 import { formatCurrency } from '@/utils/dashboard'
 import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
@@ -344,6 +345,7 @@ export function OpportunitiesPage() {
               onClose={closeEditor}
               onDeleted={closeEditor}
               onSave={(patch) => saveOpportunity(selected.id, patch).then(() => undefined)}
+              footerExtra={<ProfileLinkButton opportunityId={selected.id} />}
             />
           </aside>
         )}

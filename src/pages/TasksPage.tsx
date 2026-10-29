@@ -9,12 +9,12 @@ import {
   isOverdueUnfinishedTask,
   sortVisibleTasks,
 } from '@/lib/taskSort'
+import { taskWarning } from '@/lib/taskWarning'
+import { NewTaskDrawer } from '@/components/tasks/NewTaskDrawer'
+import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import { formatDate } from '@/utils/dashboard'
 import { WarningTriangle } from '@/components/shared/WarningTriangle'
-import {
-  emptyTaskDraft,
-  TaskEditor,
-} from '@/components/tasks/TaskEditor'
+import { TaskEditor } from '@/components/tasks/TaskEditor'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 
 const PRIORITY_BADGES: Record<string, string> = {
@@ -33,7 +33,6 @@ export function TasksPage() {
   const [search, setSearch] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<TaskRecord | null>(null)
-  const [draftKey, setDraftKey] = useState(0)
   const [listFilter, setListFilter] = useState<TaskListFilter>('all')
   const editorRef = useRef<OpportunityEditorHandle>(null)
 
@@ -75,7 +74,8 @@ export function TasksPage() {
   )
 
   const selected = selectedId ? (tasks.find((t) => t.id === selectedId) ?? null) : null
-  const editorOpen = draftOpen || Boolean(selected)
+  // New tasks open in the dimmed creation drawer; only editing an existing task uses the side panel.
+  const editorOpen = Boolean(selected)
 
   const closeEditor = () => {
     setSelectedId(null)
@@ -86,22 +86,12 @@ export function TasksPage() {
     const startFresh = () => {
       setSelectedId(null)
       setDraftOpen(true)
-      setDraftKey((k) => k + 1)
     }
     if (editorRef.current?.isDirty()) editorRef.current.requestLeave(startFresh)
     else startFresh()
   }
 
   const onRowActivate = (id: string) => {
-    if (draftOpen) {
-      const go = () => {
-        setDraftOpen(false)
-        setSelectedId(id)
-      }
-      if (editorRef.current) editorRef.current.requestLeave(go)
-      else go()
-      return
-    }
     if (selectedId === id) {
       if (editorRef.current) editorRef.current.requestLeave(closeEditor)
       else closeEditor()
@@ -216,14 +206,16 @@ export function TasksPage() {
             </thead>
             <tbody>
               {activeTasks.map((task) => {
-                const active = !draftOpen && selected?.id === task.id
+                const active = selected?.id === task.id
                 const entity =
                   opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? '—'
-                const overdue = isOverdueUnfinishedTask(task)
+                const warning = taskWarning(task)
                 return (
                   <tr
                     key={task.id}
                     tabIndex={0}
+                    data-testid={`task-row-${task.id}`}
+                    aria-selected={active}
                     onClick={() => onRowActivate(task.id)}
                     onKeyDown={(event) => onRowKeyDown(event, task.id)}
                     className={`cursor-pointer border-b border-border/70 ${
@@ -240,15 +232,7 @@ export function TasksPage() {
                     <td className="px-3 py-3.5 font-medium">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate">{task.action}</span>
-                        {overdue && (
-                          <WarningTriangle
-                            warning={{
-                              level: 'red',
-                              reason: 'Next action overdue',
-                              detail: `${task.action} is overdue`,
-                            }}
-                          />
-                        )}
+                        <WarningTriangle warning={warning} />
                       </span>
                     </td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{task.projectName || '—'}</td>
@@ -290,35 +274,30 @@ export function TasksPage() {
           </table>
         </div>
 
-        {editorOpen && (
+        {editorOpen && selected && (
           <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
-            {draftOpen ? (
-              <TaskEditor
-                key={draftKey}
-                ref={editorRef}
-                mode="draft"
-                draftSeed={emptyTaskDraft()}
-                onClose={closeEditor}
-                onSaved={(created) => {
-                  setDraftOpen(false)
-                  setSelectedId(created.id)
-                }}
-                onDeleted={closeEditor}
-              />
-            ) : (
-              selected && (
-                <TaskEditor
-                  ref={editorRef}
-                  mode="existing"
-                  task={selected}
-                  onClose={closeEditor}
-                  onDeleted={closeEditor}
+            <TaskEditor
+              ref={editorRef}
+              mode="existing"
+              task={selected}
+              onClose={closeEditor}
+              onDeleted={closeEditor}
+              footerExtra={
+                <ProfileLinkButton
+                  opportunityId={opportunities.some((o) => o.id === selected.opportunityId) ? selected.opportunityId : null}
+                  missingText="This task is not linked to an opportunity."
                 />
-              )
-            )}
+              }
+            />
           </aside>
         )}
       </div>
+
+      <NewTaskDrawer
+        open={draftOpen}
+        onClose={() => setDraftOpen(false)}
+        onCreated={(created) => setSelectedId(created.id)}
+      />
 
       {archiveTarget && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">

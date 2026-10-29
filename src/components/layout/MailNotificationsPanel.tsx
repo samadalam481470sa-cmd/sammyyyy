@@ -1,0 +1,156 @@
+import { useEffect, useState } from 'react'
+import { Inbox, Mail, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { formatMailTime, loadMailbox, mailProvider, type MailMessage } from '@/lib/outlookMailbox'
+import { OUTLOOK_SYNCED_EVENT, mailSyncHealth } from '@/lib/outlookSync'
+
+export interface UnreadMailState {
+  /** Unread incoming Inbox mail, newest first. */
+  unread: MailMessage[]
+  /** A mailbox (Outlook or Gmail) is connected for this user. */
+  available: boolean
+}
+
+function readUnread(email: string): UnreadMailState {
+  const mailbox = email ? loadMailbox(email) : []
+  const unread = mailbox
+    .filter((message) => message.folder === 'inbox' && !message.read && !message.demo && !message.pending)
+    .sort((a, b) => b.at.localeCompare(a.at))
+  const health = mailSyncHealth(email)
+  const connected = Object.values(health).some((row) => row && row.state !== 'not_connected')
+  const hasMail = mailbox.some((message) => !message.demo)
+  return { unread, available: connected || hasMail }
+}
+
+/** Live unread incoming mail for the signed-in user, from the app's existing mail sync. */
+export function useUnreadMail(email: string): UnreadMailState {
+  const [state, setState] = useState<UnreadMailState>(() => readUnread(email))
+  useEffect(() => {
+    const update = () => setState(readUnread(email))
+    update()
+    window.addEventListener(OUTLOOK_SYNCED_EVENT, update)
+    window.addEventListener('storage', update)
+    const timer = window.setInterval(update, 5000)
+    return () => {
+      window.removeEventListener(OUTLOOK_SYNCED_EVENT, update)
+      window.removeEventListener('storage', update)
+      window.clearInterval(timer)
+    }
+  }, [email])
+  return state
+}
+
+interface MailNotificationsPanelProps {
+  open: boolean
+  onClose: () => void
+  email: string
+}
+
+/**
+ * Bell drawer: the five most recent UNREAD incoming emails. Opening the bell does not mark
+ * anything read; opening a message in Email does, through the mail provider.
+ */
+export function MailNotificationsPanel({ open, onClose, email }: MailNotificationsPanelProps) {
+  const navigate = useNavigate()
+  const { unread, available } = useUnreadMail(email)
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  const shown = unread.slice(0, 5)
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-navy-950/30 backdrop-blur-[1px]" data-testid="mail-notifications">
+      <button type="button" className="flex-1 cursor-default" aria-label="Close notifications" onClick={onClose} />
+      <aside className="flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-(--shadow-drawer)" role="dialog" aria-modal="true" aria-label="Unread email notifications">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div>
+            <h2 className="font-brand text-lg font-bold text-navy-900">Notifications</h2>
+            <p className="text-xs text-ink-muted">
+              {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'} in your inbox` : 'Incoming email'}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close notifications" className="rounded-lg border border-border p-2 text-ink-muted hover:bg-canvas">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="custom-scroll flex-1 overflow-y-auto">
+          {!available ? (
+            <div className="flex flex-col items-center px-6 py-12 text-center">
+              <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />
+              <p className="text-sm font-semibold text-navy-900">Mailbox not connected</p>
+              <p className="mt-1 text-xs text-ink-muted">Connect Outlook or Gmail on the Email page to see new email here.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  navigate('/email')
+                }}
+                className="mt-4 h-9 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white hover:bg-navy-800"
+              >
+                Open Email
+              </button>
+            </div>
+          ) : shown.length === 0 ? (
+            <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-empty">
+              <Mail className="mb-3 h-8 w-8 text-ink-subtle" />
+              <p className="text-sm font-semibold text-navy-900">No unread emails</p>
+              <p className="mt-1 text-xs text-ink-muted">You are all caught up.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {shown.map((message) => (
+                <li key={message.id}>
+                  <button
+                    type="button"
+                    data-testid={`mail-notification-${message.id}`}
+                    onClick={() => {
+                      onClose()
+                      navigate(`/email?open=${encodeURIComponent(message.id)}`)
+                    }}
+                    className="w-full px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[#f5b301]" aria-hidden />
+                      <span className="sr-only">Unread. </span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{message.from || 'Unknown sender'}</span>
+                      <span className="shrink-0 text-[11px] text-ink-subtle">{formatMailTime(message.at)}</span>
+                    </div>
+                    <p className="mt-1 truncate text-sm font-semibold text-navy-900">{message.subject || '(no subject)'}</p>
+                    <p className="mt-0.5 truncate text-xs text-ink-muted">
+                      <span className="mr-1 text-[10px] font-semibold text-ink-subtle uppercase">{mailProvider(message) === 'gmail' ? 'Gmail' : 'Outlook'}</span>
+                      {message.preview}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {available && unread.length > 5 && (
+          <div className="border-t border-border px-5 py-3 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                onClose()
+                navigate('/email')
+              }}
+              className="text-sm font-semibold text-navy-900 hover:underline"
+            >
+              View all {unread.length} in Email
+            </button>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
