@@ -15,7 +15,7 @@ import './db/index.ts'
 import { connectMongo, getMongoHealth } from './db/mongo.ts'
 
 const app = express()
-const PORT = Number(process.env.API_PORT || 3001)
+const PORT = Number(process.env.PORT || process.env.API_PORT || 3001)
 
 app.set('trust proxy', 1)
 

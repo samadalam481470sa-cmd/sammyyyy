@@ -22,8 +22,12 @@ Any host that runs Docker with a persistent disk works. Two options:
 2. Set `ALLOWED_EMAIL_DOMAINS` (for example `newportspecialty.com`) and/or `ALLOWED_EMAILS`, and `ADMIN_EMAILS`.
 3. Deploy. Copy the service URL, for example `https://newport-crm-api.onrender.com`.
 
-**Azure App Service** (Linux, container): build `Dockerfile.api`, set the same settings, and set
-`CRM_DB_PATH=/home/data/newport-crm.db` (the `/home` folder persists on App Service).
+**Azure App Service** (Linux, Node 22, Free F1 or Basic B1)
+1. Create a Web App: Publish = Code, Runtime = Node 22 LTS, Operating System = Linux.
+2. Configuration → Startup command: `npm run start:api`.
+3. Environment variables: `CRM_DB_PATH=/home/data/newport-crm.db`, `SCM_DO_BUILD_DURING_DEPLOYMENT=true`,
+   plus the allowlist (`ALLOWED_EMAILS`, `ALLOWED_EMAIL_DOMAINS`, `ADMIN_EMAILS`). `/home` persists on App Service.
+4. Deployment Center → GitHub → this repository, branch `main`.
 
 ## Point the CRM at the server
 Edit `public/api.json`:
