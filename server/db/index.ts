@@ -401,4 +401,32 @@ export { hashToken }
 
 resetPublicDemoTablesIfNeeded()
 seedDatabase()
+
+/**
+ * The seeded demo and manager keys are written in plain text in this public repository, so
+ * anyone could use them. Outside local development (ALLOW_DEMO_SIGNIN=1), revoke any key
+ * whose value is public and end the sessions those keys opened. Real keys are provisioned
+ * later by the security owner and are never committed.
+ */
+export const PUBLISHED_KEY_HASHES = new Set([
+  hashToken('nwp_demo_key_slot1_replace_me_by_security_team'),
+  hashToken('nwp_mgr_samad_newport_master_only'),
+])
+
+export function demoKeysAllowed(): boolean {
+  return process.env.ALLOW_DEMO_SIGNIN === '1'
+}
+
+export function revokePublishedKeys(): void {
+  if (demoKeysAllowed()) return
+  const hashes = [...PUBLISHED_KEY_HASHES]
+  const marks = hashes.map(() => '?').join(',')
+  const apiIds = (db.prepare(`SELECT id FROM api_keys WHERE key_hash IN (${marks})`).all(...hashes) as { id: string }[]).map((r) => r.id)
+  db.prepare(`UPDATE api_keys SET status = 'revoked' WHERE key_hash IN (${marks})`).run(...hashes)
+  db.prepare(`UPDATE manager_keys SET status = 'revoked' WHERE key_hash IN (${marks})`).run(...hashes)
+  if (apiIds.length) db.prepare(`DELETE FROM sessions WHERE api_key_id IN (${apiIds.map(() => '?').join(',')})`).run(...apiIds)
+  db.prepare(`DELETE FROM sessions WHERE auth_method IN ('manager_key', 'demo')`).run()
+}
+
+revokePublishedKeys()
 seedModuleTables()

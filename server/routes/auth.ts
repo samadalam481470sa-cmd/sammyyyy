@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { db, createSessionToken, hashToken } from '../db/index.ts'
+import { db, createSessionToken, hashToken, PUBLISHED_KEY_HASHES, demoKeysAllowed } from '../db/index.ts'
 import {
   authRateLimit,
   lockoutGuard,
@@ -66,6 +66,11 @@ authRouter.post('/api-key', authRateLimit, lockoutGuard, (req, res) => {
   }
 
   const hashed = hashToken(parsed.data.apiKey)
+  // Keys printed in the public repository never sign in on a real deployment.
+  if (PUBLISHED_KEY_HASHES.has(hashed) && !demoKeysAllowed()) {
+    recordAuthFailure(req.ip, req)
+    return res.status(403).json({ error: 'This key is disabled. Ask the security owner for a real key.' })
+  }
 
   // Managerial master key path (exactly one)
   const manager = db
