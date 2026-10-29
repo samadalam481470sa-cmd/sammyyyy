@@ -20,11 +20,8 @@ import {
   computePipelineByStage,
   formatCurrency,
 } from '@/utils/dashboard'
-import {
-  downloadDatabaseFile,
-  downloadOpportunitiesCsv,
-  downloadOpportunitiesJson,
-} from '@/lib/api'
+import { downloadDatabaseFile } from '@/lib/api'
+import { exportFileName, opportunitiesCsv, opportunitiesJson, saveFile } from '@/lib/reportExport'
 
 const NAVY = '#0b1f3a'
 const ACCENT = '#3d7eb8'
@@ -107,8 +104,15 @@ export function ReportsPage() {
       await fn()
       setExportMsg(`${label} downloaded`)
     } catch {
-      setExportMsg(`${label} requires the database server (run npm run dev locally)`)
+      setExportMsg(`${label} could not be created. Try again.`)
     }
+  }
+
+  const exportCsv = async () => {
+    saveFile(exportFileName('csv'), opportunitiesCsv(opportunities), 'text/csv;charset=utf-8')
+  }
+  const exportJson = async () => {
+    saveFile(exportFileName('json'), opportunitiesJson(opportunities), 'application/json')
   }
 
   return (
@@ -123,14 +127,14 @@ export function ReportsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => void runExport(downloadOpportunitiesCsv, 'CSV')}
+            onClick={() => void runExport(exportCsv, `CSV of ${opportunities.length} opportunities`)}
             className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-accent-soft"
           >
             <Download className="h-4 w-4 text-accent" /> CSV (Excel)
           </button>
           <button
             type="button"
-            onClick={() => void runExport(downloadOpportunitiesJson, 'JSON')}
+            onClick={() => void runExport(exportJson, `JSON of ${opportunities.length} opportunities`)}
             className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-accent-soft"
           >
             <FileJson className="h-4 w-4 text-accent" /> JSON

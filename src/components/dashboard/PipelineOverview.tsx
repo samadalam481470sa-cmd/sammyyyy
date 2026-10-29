@@ -30,7 +30,7 @@ export function PipelineOverview({
             Active, pending, and completed opportunities by acquisition stage
           </p>
         </div>
-        <p className="text-xs text-ink-subtle">{totalDeals} deals in view</p>
+        <p className="text-xs text-ink-subtle">{totalDeals} {totalDeals === 1 ? 'deal' : 'deals'} in view</p>
       </div>
 
       <div className="custom-scroll -mx-1 overflow-x-auto px-1 pb-1">

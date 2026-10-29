@@ -504,7 +504,20 @@ export function MeetingsPage() {
       return
     }
     const typed = dialNumber.trim()
-    const target = typed.includes('@') ? typed : me
+    const digits = typed.replace(/\D/g, '')
+    // Teams calls an email directly, and a phone number written as 4:+<country><number>.
+    const target = typed.includes('@')
+      ? typed
+      : digits.length === 10
+        ? `4:+1${digits}`
+        : digits.length >= 11
+          ? `4:+${digits}`
+          : ''
+    if (!target) {
+      // Calling your own account opens Teams with nobody on the line.
+      setError('Type the email or phone number to call in the dial field, then start the Teams call.')
+      return
+    }
     const url = teamsCallUrl(target)
     if (!isAllowedJoinUrl(url, 'teams')) {
       setError('That Teams call could not be opened.')

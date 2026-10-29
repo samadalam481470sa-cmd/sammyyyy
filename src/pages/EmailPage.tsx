@@ -674,7 +674,15 @@ export function EmailPage() {
 
   // ── composer ──────────────────────────────────────────────────────────────
   const defaultVia = (replyToId?: string): MailProvider =>
-    replyToId && !isLocalMailId(replyToId) ? mailProvider({ id: replyToId }) : outlookOn ? 'outlook' : gmailOn ? 'gmail' : 'outlook'
+    replyToId && !isLocalMailId(replyToId)
+      ? mailProvider({ id: replyToId })
+      : // A Microsoft account that signs in with a Gmail address has no real Outlook mail;
+        // when Gmail is connected, new mail goes out from Gmail.
+        gmailOn && (!outlookOn || /@gmail\.com$/i.test(outlookAddress))
+        ? 'gmail'
+        : outlookOn
+          ? 'outlook'
+          : 'outlook'
 
   const startCompose = (draft: ComposeDraft) => {
     setComposeNote(null)
