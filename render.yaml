@@ -1,0 +1,22 @@
+# Render Blueprint for the Newport CRM shared workspace server.
+# A persistent disk keeps the SQLite database across restarts (paid "starter" plan or higher).
+services:
+  - type: web
+    name: newport-crm-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: newport-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: CRM_DB_PATH
+        value: /data/newport-crm.db
+      - key: ALLOWED_EMAIL_DOMAINS
+        sync: false
+      - key: ALLOWED_EMAILS
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false

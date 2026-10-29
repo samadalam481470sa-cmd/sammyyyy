@@ -36,6 +36,8 @@ import { uploadDealDocumentToOneDrive } from '@/lib/graphDocuments'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { CreatableSelect, matchExistingOption } from '@/components/shared/CreatableSelect'
+import { rememberCustomType, storedCustomTypes } from '@/lib/documentTypes'
+import { deleteWorkspaceFile, downloadWorkspaceFile, isWorkspaceShared, uploadWorkspaceFile } from '@/lib/workspaceSync'
 import { FileAttachmentField } from '@/components/documents/FileAttachmentField'
 import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
@@ -56,28 +58,6 @@ interface DocumentWorkspaceProps {
   footerExtra?: ReactNode
 }
 
-const CUSTOM_TYPES_KEY = 'newport_crm_custom_document_types'
-
-function storedCustomTypes(): string[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_TYPES_KEY)
-    const list = raw ? (JSON.parse(raw) as unknown) : []
-    return Array.isArray(list) ? list.filter((row): row is string => typeof row === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function rememberCustomType(type: string): void {
-  try {
-    const list = storedCustomTypes()
-    if (!list.some((row) => row.toLowerCase() === type.toLowerCase())) {
-      localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify([...list, type].slice(-200)))
-    }
-  } catch {
-    // storage blocked; the type is still saved on the document
-  }
-}
 
 type DocDraft = {
   name: string
@@ -282,6 +262,8 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
 
         if (pendingFile) {
           await putDocumentBlob(owner, result.id, pendingFile)
+          // Shared workspace: store the file on the server so every approved user can open it.
+          if (isWorkspaceShared()) await uploadWorkspaceFile(result.id, pendingFile, pendingFile.name)
           const cloud = await uploadDealDocumentToOneDrive({
             file: pendingFile,
             dealId,
@@ -350,7 +332,8 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         window.open(href, '_blank', 'noopener,noreferrer')
         return
       }
-      const blob = pendingFile ?? (editingId ? await getDocumentBlob(owner, editingId) : null)
+      let blob: Blob | null = pendingFile ?? (editingId ? await getDocumentBlob(owner, editingId) : null)
+      if (!blob && editingId && isWorkspaceShared()) blob = await downloadWorkspaceFile(editingId)
       if (!blob) {
         setError('No file is available to open yet.')
         return
@@ -647,6 +630,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
             const id = editingId
             void deleteDocumentBlob(owner, id)
               .catch(() => undefined)
+              .then(() => (isWorkspaceShared() ? deleteWorkspaceFile(id) : undefined))
               .then(() => deleteDocument(id))
               .then(() => {
                 setConfirmDelete(false)

@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -6,7 +6,19 @@ import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 import { desktopManifest, desktopServiceWorkerSource } from './src/lib/desktopApp.js'
 
+/** Origin of the shared workspace server from public/api.json, allowed in the page's CSP. */
+function workspaceOrigin(): string {
+  try {
+    const raw = JSON.parse(readFileSync(fileURLToPath(new URL('./public/api.json', import.meta.url)), 'utf8')) as { apiBase?: string }
+    const url = new URL(String(raw.apiBase ?? '').trim())
+    return url.protocol === 'https:' || url.hostname === 'localhost' ? url.origin : ''
+  } catch {
+    return ''
+  }
+}
+
 function productionCsp(): Plugin {
+  const api = workspaceOrigin()
   const csp = [
     "default-src 'self'",
     "script-src 'self' https://accounts.google.com",
@@ -14,7 +26,7 @@ function productionCsp(): Plugin {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
     "font-src https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
-    "connect-src 'self' https://login.microsoftonline.com https://login.live.com https://login.microsoft.com https://graph.microsoft.com https://aadcdn.msauth.net https://aadcdn.msftauth.net https://accounts.google.com https://oauth2.googleapis.com https://gmail.googleapis.com https://www.googleapis.com",
+    `connect-src 'self' https://login.microsoftonline.com https://login.live.com https://login.microsoft.com https://graph.microsoft.com https://aadcdn.msauth.net https://aadcdn.msftauth.net https://accounts.google.com https://oauth2.googleapis.com https://gmail.googleapis.com https://www.googleapis.com${api ? ` ${api}` : ''}`,
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "frame-src https://accounts.google.com https://login.microsoftonline.com https://login.live.com https://login.microsoft.com https://teams.microsoft.com https://zoom.us https://meet.google.com https://webex.com https://web.skype.com",
@@ -79,7 +91,7 @@ export default defineConfig({
     host: true,
     allowedHosts: true,
     proxy: {
-      '/api': {
+      '^/api/': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },

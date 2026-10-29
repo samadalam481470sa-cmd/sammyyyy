@@ -42,6 +42,8 @@ interface OpportunityEditorProps {
   tabs?: Array<{ id: string; label: string }>
   /** Shown at the very bottom, below Delete Opportunity. */
   footerExtra?: ReactNode
+  /** Hide the title block when the surrounding page already shows the deal (the full profile). */
+  hideHeader?: boolean
 }
 
 const DEFAULT_TABS = [
@@ -52,7 +54,7 @@ const DEFAULT_TABS = [
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
-  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra }, ref) {
+  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra, hideHeader = false }, ref) {
     const [tab, setTab] = useState(tabs[0]?.id ?? 'overview')
     const [saved, setSaved] = useState(() => snapshotOpportunityDraft(opportunity))
     const [draft, setDraft] = useState<OpportunityDraft>(() => snapshotOpportunityDraft(opportunity))
@@ -190,7 +192,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
 
     return (
       <div className="flex h-full flex-col">
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+        <div className={`flex items-start justify-between gap-3 border-b border-border px-5 py-4 ${hideHeader ? 'hidden' : ''}`}>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
               {dealIdFromOpportunity(opportunity)}

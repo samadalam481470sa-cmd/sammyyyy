@@ -34,6 +34,23 @@ import {
   userFromMicrosoftAccount,
 } from '@/auth/msal'
 import { attachVaultUnloadFlush, commitAllPendingEdits, flushAllUserVaults } from '@/lib/userVault'
+import { clearWorkspaceSession, connectWorkspace, workspaceApiBase } from '@/lib/workspaceSync'
+import { purgePersonalData } from '@/lib/userPrivacy'
+
+/**
+ * With a shared server configured, a person is admitted only after the server verifies their
+ * Microsoft token and finds them on the approved list. Any refusal or failure keeps them out.
+ */
+async function enforceWorkspaceAccess(user: AuthUser): Promise<string | null> {
+  if (!(await workspaceApiBase())) return null
+  if (user.authMethod !== 'microsoft') return 'This CRM requires Microsoft sign-in.'
+  try {
+    await connectWorkspace(user.email || '')
+    return null
+  } catch (err) {
+    return err instanceof Error ? err.message : 'The Newport server did not approve this sign-in.'
+  }
+}
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -76,6 +93,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hydrate = useCallback(async () => {
     const epoch = epochRef.current
+    const admit = async (next: AuthUser | null) => {
+      if (!next) {
+        setUser(null)
+        return
+      }
+      const refused = await enforceWorkspaceAccess(next)
+      if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
+      if (refused) {
+        clearSession()
+        clearWorkspaceSession()
+        await clearMicrosoftCache().catch(() => undefined)
+        purgePersonalData()
+        rememberMicrosoftReturnError(refused)
+        setUser(null)
+        return
+      }
+      setUser(next)
+    }
     if (signingOutRef.current || !hydrateEnabledRef.current) return
     if (isMsalConfigured()) {
       try {
@@ -88,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = await sessionFromMicrosoftAccount(returned.account)
         if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
         recordLoginSuccess()
-        setUser(next)
+        await admit(next)
         return
       }
       if (returned.kind === 'denied') {
@@ -121,14 +156,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (ok) {
               await storeSession(storedMs.token, storedMs.user, proofMs.fingerprint)
               if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
-              setUser(storedMs.user)
+              await admit(storedMs.user)
               return
             }
             // A leftover Entra account must not replace a different email session.
           } else {
             const next = await sessionFromMicrosoftAccount(account)
             if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
-            setUser(next)
+            await admit(next)
             return
           }
         } catch {
@@ -145,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (ok) {
         await storeSession(stored.token, stored.user, proof.fingerprint)
         if (epoch !== epochRef.current || signingOutRef.current || !hydrateEnabledRef.current) return
-        setUser(stored.user)
+        await admit(stored.user)
         return
       }
       clearSession()
@@ -179,6 +214,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const email = next.email || next.id
     await storeSession(await newSessionToken(), next, await sha256Hex(email))
     if (next.email) await rememberLastEmail(next.email, provider)
+    const refused = await enforceWorkspaceAccess(next)
+    if (refused) {
+      clearSession()
+      clearWorkspaceSession()
+      await clearMicrosoftCache().catch(() => undefined)
+      purgePersonalData()
+      throw new Error(refused)
+    }
     recordLoginSuccess()
     setUser(next)
     setSigningOut(false)
@@ -222,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Static demo has no auth API.
       }
       clearSession()
+      clearWorkspaceSession()
       setUser(null)
       try {
         sessionStorage.removeItem('newport_post_login_path')

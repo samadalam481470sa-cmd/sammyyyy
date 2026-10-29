@@ -237,6 +237,7 @@ export function OpportunityProfilePage() {
               opportunity={opportunity}
               onSave={(patch) => saveOpportunity(opportunity.id, patch).then(() => undefined)}
               onDeleted={() => navigate('/opportunities', { replace: true })}
+              hideHeader
             />
           </div>
         )}

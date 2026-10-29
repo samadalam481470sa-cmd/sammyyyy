@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Inbox, Mail, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { formatMailTime, loadMailbox, mailProvider, type MailMessage } from '@/lib/outlookMailbox'
-import { OUTLOOK_SYNCED_EVENT, mailSyncHealth } from '@/lib/outlookSync'
+import { formatMailTime, loadMailbox, mailProvider, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
+import { graphTokenError, outlookToken } from '@/lib/outlookGraph'
+import { OUTLOOK_SYNCED_EVENT, mailSyncHealth, pushMailRead, syncOutlookNow } from '@/lib/outlookSync'
 
 export interface UnreadMailState {
   /** Unread incoming Inbox mail, newest first. */
@@ -53,6 +54,32 @@ interface MailNotificationsPanelProps {
 export function MailNotificationsPanel({ open, onClose, email }: MailNotificationsPanelProps) {
   const navigate = useNavigate()
   const { unread, available } = useUnreadMail(email)
+  const [connecting, setConnecting] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  const connectOutlook = () => {
+    setConnecting(true)
+    setNote(null)
+    // Microsoft's account picker; the page comes back here and mail starts syncing.
+    void outlookToken(true, email).then((token) => {
+      setConnecting(false)
+      if (token) void syncOutlookNow(email, { incremental: false, mail: true })
+      else setNote(graphTokenError() ?? 'Outlook was not connected.')
+    })
+  }
+
+  /** Marks the email read with the mail provider (Outlook or Gmail), then opens it in Email. */
+  const openMessage = (message: MailMessage) => {
+    const rows = loadMailbox(email).map((row) => (row.id === message.id ? { ...row, read: true } : row))
+    saveMailbox(email, rows)
+    window.dispatchEvent(new CustomEvent(OUTLOOK_SYNCED_EVENT, { detail: { message: 'Marked read.', mode: 'graph' } }))
+    void pushMailRead(message.id, true).catch(() => {
+      const back = loadMailbox(email).map((row) => (row.id === message.id ? { ...row, read: false } : row))
+      saveMailbox(email, back)
+    })
+    onClose()
+    navigate(`/email?open=${encodeURIComponent(message.id)}`)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -87,17 +114,29 @@ export function MailNotificationsPanel({ open, onClose, email }: MailNotificatio
             <div className="flex flex-col items-center px-6 py-12 text-center">
               <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">Mailbox not connected</p>
-              <p className="mt-1 text-xs text-ink-muted">Connect Outlook or Gmail on the Email page to see new email here.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose()
-                  navigate('/email')
-                }}
-                className="mt-4 h-9 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white hover:bg-navy-800"
-              >
-                Open Email
-              </button>
+              <p className="mt-1 text-xs text-ink-muted">Connect your mailbox to see new email here. Reading an email marks it read in Outlook too.</p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  data-testid="bell-connect-outlook"
+                  disabled={connecting}
+                  onClick={connectOutlook}
+                  className="h-9 rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60"
+                >
+                  {connecting ? 'Opening Microsoft…' : 'Connect Outlook'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    navigate('/email')
+                  }}
+                  className="h-9 rounded-lg border border-border px-4 text-sm font-semibold text-ink hover:bg-canvas"
+                >
+                  Gmail and more
+                </button>
+              </div>
+              {note && <p className="mt-2 text-xs text-attention">{note}</p>}
             </div>
           ) : shown.length === 0 ? (
             <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-empty">
@@ -112,10 +151,7 @@ export function MailNotificationsPanel({ open, onClose, email }: MailNotificatio
                   <button
                     type="button"
                     data-testid={`mail-notification-${message.id}`}
-                    onClick={() => {
-                      onClose()
-                      navigate(`/email?open=${encodeURIComponent(message.id)}`)
-                    }}
+                    onClick={() => openMessage(message)}
                     className="w-full px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
                   >
                     <div className="flex items-center gap-2">

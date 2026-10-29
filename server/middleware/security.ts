@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
+import { createHash } from 'node:crypto'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { ownerKeyFromAuth } from '../../src/lib/ownerKey.ts'
 import { db, hashToken } from '../db/index.ts'
@@ -9,7 +10,7 @@ export interface AuthContext {
   userId: string
   userName: string
   role: string
-  authMethod: 'demo' | 'api_key' | 'password' | 'manager_key'
+  authMethod: 'demo' | 'api_key' | 'password' | 'manager_key' | 'microsoft'
   apiKeyId?: string
   apiKeySlot?: number
   isManager?: boolean
@@ -102,6 +103,11 @@ export function lockoutGuard(req: Request, res: Response, next: NextFunction) {
 export const apiRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
+  // Per signed-in session, so many people behind one office network are not throttled together.
+  keyGenerator: (req) => {
+    const auth = req.get('authorization') ?? ''
+    return auth.startsWith('Bearer ') ? `s:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}` : `ip:${ipKeyGenerator(req.ip ?? '')}`
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded.' },

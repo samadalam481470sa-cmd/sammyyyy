@@ -62,14 +62,14 @@ db.exec(schema)
   const row = db
     .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'sessions'`)
     .get() as { sql: string } | undefined
-  if (row?.sql && !row.sql.includes('manager_key')) {
+  if (row?.sql && (!row.sql.includes('manager_key') || !row.sql.includes("'microsoft'"))) {
     db.exec(`
       ALTER TABLE sessions RENAME TO sessions_legacy_migrate;
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         token_hash TEXT NOT NULL UNIQUE,
-        auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
+        auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key', 'microsoft')),
         api_key_id TEXT,
         ip_address TEXT,
         user_agent TEXT,

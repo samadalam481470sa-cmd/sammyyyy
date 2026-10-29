@@ -20,6 +20,17 @@ import { microsoftLoginInProgress } from '@/auth/msal'
 import { mockOpportunities } from '@/data/mockOpportunities'
 import { pullCrmVault, pushCrmVault } from '@/lib/onedriveVault'
 import {
+  WORKSPACE_STATE_EVENT,
+  isWorkspaceShared,
+  pullWorkspace,
+  pushWorkspaceChanges,
+  workspaceApiBase,
+  type WorkspaceCollection,
+  type WorkspaceRecord,
+} from '@/lib/workspaceSync'
+import { DOCUMENT_TYPES_CHANGED, saveCustomTypes, storedCustomTypes } from '@/lib/documentTypes'
+import { RESOURCE_CHANGED, type ResourceChangedDetail } from '@/hooks/useResource'
+import {
   mockContacts,
   mockDocuments,
   mockTasksDb,
@@ -234,7 +245,116 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const cloudEpoch = useRef(0)
   const seedAddedOnPull = useRef(false)
   const fetchedSeedRef = useRef<SeedSnapshot | null>(null)
+  // ── Shared workspace (server) sync ────────────────────────────────────────
+  const sharedRef = useRef(false)
+  const syncedRef = useRef<Map<string, string>>(new Map())
+  const sinceRef = useRef<string | null>(null)
+  const sharedTimer = useRef<number | null>(null)
+  const pushingRef = useRef(false)
+
+  const workspaceSnapshot = (): Record<WorkspaceCollection, { id: string }[]> => ({
+    opportunities: oppsRef.current,
+    tasks: tasksRef.current,
+    documents: docsRef.current,
+    contacts: loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts),
+    activity: activityRef.current,
+    documentTypes: storedCustomTypes().map((name) => ({ id: name.toLowerCase(), name })),
+  })
+
+  const snapshotKeys = () => {
+    const map = new Map<string, string>()
+    for (const [collection, rows] of Object.entries(workspaceSnapshot())) {
+      for (const row of rows) if (row?.id) map.set(`${collection}/${row.id}`, JSON.stringify(row))
+    }
+    return map
+  }
+
+  /** Send only records that changed since the last sync, so people editing different records never collide. */
+  const pushShared = async () => {
+    if (!sharedRef.current || pushingRef.current) return
+    pushingRef.current = true
+    try {
+      const current = snapshotKeys()
+      const changes: { collection: WorkspaceCollection; id: string; data: unknown | null }[] = []
+      for (const [key, json] of current) {
+        if (syncedRef.current.get(key) === json) continue
+        const [collection, ...rest] = key.split('/')
+        changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: JSON.parse(json) })
+      }
+      for (const key of syncedRef.current.keys()) {
+        if (current.has(key)) continue
+        const [collection, ...rest] = key.split('/')
+        changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: null })
+      }
+      if (!changes.length) return
+      await pushWorkspaceChanges(changes)
+      syncedRef.current = current
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? `Not saved to the server yet: ${err.message} It will retry.` : 'Not saved to the server yet. It will retry.')
+      if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
+      sharedTimer.current = window.setTimeout(() => void pushShared(), 8000)
+    } finally {
+      pushingRef.current = false
+    }
+  }
+
+  /** Apply records from the server. A full pull replaces local data; a partial pull merges. */
+  const applyShared = (records: WorkspaceRecord[], full: boolean) => {
+    const base = workspaceSnapshot()
+    const touched = new Set<string>()
+    const collections = {} as Record<WorkspaceCollection, Map<string, unknown>>
+    for (const name of Object.keys(base) as WorkspaceCollection[]) {
+      collections[name] = new Map(full ? [] : base[name].map((row) => [row.id, row]))
+    }
+    for (const record of records) {
+      const target = collections[record.collection]
+      if (!target) continue
+      touched.add(`${record.collection}/${record.id}`)
+      if (record.deleted || !record.data) target.delete(record.id)
+      else target.set(record.id, record.data)
+    }
+    if (!full && !touched.size) return
+    const list = <T,>(name: WorkspaceCollection) => [...collections[name].values()] as T[]
+    const contacts = list<ContactRecord>('contacts')
+    saveOwnedCollection('contacts', owner, contacts)
+    const detail: ResourceChangedDetail = { resource: 'contacts', owner, source: -1, items: contacts }
+    window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+    saveCustomTypes(list<{ name: string }>('documentTypes').map((row) => row.name).filter(Boolean))
+    const database = buildPortableDatabase(
+      {
+        opportunities: list<Opportunity>('opportunities'),
+        tasks: list<TaskRecord>('tasks'),
+        documents: list<DocumentRecord>('documents'),
+        activity: list<ActivityItem>('activity').sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
+        contacts,
+      },
+      new Date().toISOString(),
+    )
+    applyingRemote.current = true
+    try {
+      writeDatabaseRef.current(database, false)
+    } finally {
+      applyingRemote.current = false
+    }
+    // What is on screen now matches the server; record it so it is not pushed back.
+    const now = snapshotKeys()
+    if (full) syncedRef.current = now
+    else for (const key of touched) {
+      const json = now.get(key)
+      if (json) syncedRef.current.set(key, json)
+      else syncedRef.current.delete(key)
+    }
+  }
+  const applyingRemote = useRef(false)
+
   const pushCloud = () => {
+    if (sharedRef.current) {
+      if (applyingRemote.current) return
+      if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
+      sharedTimer.current = window.setTimeout(() => void pushShared(), 600)
+      return
+    }
     if (!allowCloudPush.current || user?.authMethod !== 'microsoft') return
     if (cloudTimer.current) window.clearTimeout(cloudTimer.current)
     cloudTimer.current = window.setTimeout(() => {
@@ -257,6 +377,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
+      sharedRef.current = false
+      syncedRef.current = new Map()
+      sinceRef.current = null
       oppsRef.current = []
       tasksRef.current = []
       docsRef.current = []
@@ -278,6 +401,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (isLocalPersistence()) {
       loadLocal()
       setLoading(false)
+      if (isWorkspaceShared() || (await workspaceApiBase())) {
+        // Shared company workspace: the server is the source of truth for every approved user.
+        try {
+          const pulled = await pullWorkspace()
+          sharedRef.current = true
+          sinceRef.current = pulled.serverTime
+          if (pulled.empty) {
+            // First person on a new server: their records become the shared starting data.
+            syncedRef.current = new Map()
+            void pushShared()
+          } else {
+            applyShared(pulled.records, true)
+          }
+          setError(null)
+        } catch (err) {
+          sharedRef.current = false
+          setError(err instanceof Error ? `Shared workspace unavailable: ${err.message}` : 'Shared workspace unavailable.')
+        }
+        return
+      }
       if (user?.authMethod === 'microsoft') {
         const epoch = cloudEpoch.current
         void pullCrmVault()
@@ -363,6 +506,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Other people's changes arrive every 10 seconds (and right away when the window regains focus).
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let running = false
+    const poll = async () => {
+      if (!sharedRef.current || running || document.visibilityState === 'hidden') return
+      running = true
+      try {
+        const pulled = await pullWorkspace(sinceRef.current)
+        sinceRef.current = pulled.serverTime
+        applyShared(pulled.records, false)
+      } catch {
+        // offline or server busy: the next poll retries
+      } finally {
+        running = false
+      }
+    }
+    const onLocalChange = (event: Event) => {
+      const detail = (event as CustomEvent<ResourceChangedDetail>).detail
+      if (detail?.resource === 'contacts' && detail.source !== -1) pushCloud()
+    }
+    const onTypes = () => pushCloud()
+    const onState = () => {
+      if (!isWorkspaceShared()) return
+      if (!sharedRef.current) void refresh()
+    }
+    const timer = window.setInterval(() => void poll(), 10_000)
+    window.addEventListener('focus', poll)
+    window.addEventListener(RESOURCE_CHANGED, onLocalChange)
+    window.addEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
+    window.addEventListener(WORKSPACE_STATE_EVENT, onState)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', poll)
+      window.removeEventListener(RESOURCE_CHANGED, onLocalChange)
+      window.removeEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
+      window.removeEventListener(WORKSPACE_STATE_EVENT, onState)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, owner])
 
   useEffect(() => {
     if (!isAuthenticated) return

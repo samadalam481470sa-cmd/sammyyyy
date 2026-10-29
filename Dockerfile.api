@@ -1,0 +1,20 @@
+# Newport CRM shared workspace server (Express + SQLite).
+#   docker build -f Dockerfile.api -t newport-crm-api .
+#   docker run -d -p 3001:3001 -v newport-data:/data \
+#     -e ALLOWED_EMAIL_DOMAINS=newportspecialty.com -e ADMIN_EMAILS=you@newportspecialty.com \
+#     newport-crm-api
+FROM node:22-bookworm-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+RUN npm ci --omit=optional
+COPY server ./server
+COPY src ./src
+COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
+ENV NODE_ENV=production \
+    API_PORT=3001 \
+    CRM_DB_PATH=/data/newport-crm.db
+VOLUME ["/data"]
+EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["npm", "run", "start:api"]

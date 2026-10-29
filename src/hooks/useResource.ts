@@ -14,10 +14,10 @@ import { mergeMissingById } from '@/data/sprintSeed'
 const API_BASE = '/api/resources'
 
 /** Other screens using the same collection update at once when one saves (no manual refresh). */
-const RESOURCE_CHANGED = 'newport-resource-changed'
+export const RESOURCE_CHANGED = 'newport-resource-changed'
 let instanceSeq = 0
 
-interface ResourceChangedDetail {
+export interface ResourceChangedDetail {
   resource: string
   owner: string
   source: number

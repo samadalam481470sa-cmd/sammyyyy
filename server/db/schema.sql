@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
-  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key')),
+  auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'api_key', 'password', 'manager_key', 'microsoft')),
   api_key_id TEXT REFERENCES api_keys(id),
   ip_address TEXT,
   user_agent TEXT,
@@ -293,3 +293,25 @@ CREATE INDEX IF NOT EXISTS idx_documents_opp ON documents(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_started ON meetings(started_at);
 CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
 CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner_key);
+
+-- Shared company workspace: one row per record, so concurrent users merge per record.
+CREATE TABLE IF NOT EXISTS workspace_records (
+  collection TEXT NOT NULL,
+  id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  PRIMARY KEY (collection, id)
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_updated ON workspace_records(updated_at);
+
+CREATE TABLE IF NOT EXISTS workspace_files (
+  doc_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data BLOB NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT NOT NULL
+);

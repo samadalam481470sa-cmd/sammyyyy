@@ -559,6 +559,25 @@ export async function ensureMsal(): Promise<PublicClientApplication | null> {
   }
 }
 
+/** A current Microsoft ID token for the signed-in account (for the shared workspace server). */
+export async function getMicrosoftIdToken(): Promise<string | null> {
+  const instance = await ensureMsal()
+  const account = instance?.getActiveAccount() ?? instance?.getAllAccounts()[0] ?? null
+  if (!instance || !account) return null
+  try {
+    const result = await instance.acquireTokenSilent({ scopes: LOGIN_SCOPES, account })
+    if (result.idToken) return result.idToken
+  } catch {
+    // fall through to a forced refresh
+  }
+  try {
+    const result = await instance.acquireTokenSilent({ scopes: LOGIN_SCOPES, account, forceRefresh: true })
+    return result.idToken || null
+  } catch {
+    return null
+  }
+}
+
 export function getMicrosoftAccount(): AccountInfo | null {
   if (!pca) return null
   return pca.getActiveAccount() ?? pca.getAllAccounts()[0] ?? null

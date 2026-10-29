@@ -16,6 +16,7 @@ const SESSION_KEYS = [
   'newport_crm_session_proof',
   'newport_crm_last_email',
   'newport_crm_last_login_provider',
+  'newport_crm_workspace_session',
 ]
 
 function normalize(email: string | null | undefined): string {

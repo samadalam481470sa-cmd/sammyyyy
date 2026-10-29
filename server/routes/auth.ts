@@ -16,6 +16,8 @@ function sweepExpiredSessions() {
 }
 
 authRouter.post('/demo', authRateLimit, lockoutGuard, (req, res) => {
+  // Credential-free demo sign-in is off on a real deployment; only local development may enable it.
+  if (process.env.ALLOW_DEMO_SIGNIN !== '1') return res.status(403).json({ error: 'Demo sign-in is disabled on this server.' })
   sweepExpiredSessions()
   const user = db
     .prepare(`SELECT id, email, name, role, initials FROM users WHERE id = 'user-dennis'`)

@@ -1,4 +1,5 @@
 import { getStoredSession } from '@/lib/api'
+import { isWorkspaceShared } from '@/lib/workspaceSync'
 
 /**
  * Static GitHub Pages / CDN demo writes localStorage, not a shared database.
@@ -31,5 +32,6 @@ export function saveButtonLabel(saving: boolean): string {
 }
 
 export function savedMessageLabel(): string {
+  if (isWorkspaceShared()) return 'Saved for everyone'
   return isLocalPersistence() ? 'Saved in this browser' : 'Saved to database'
 }

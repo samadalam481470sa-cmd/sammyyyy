@@ -10,6 +10,7 @@ import { exportRouter } from './routes/export.ts'
 import { resourcesRouter } from './routes/resources.ts'
 import { aiRouter } from './routes/ai.ts'
 import { preferencesRouter } from './routes/preferences.ts'
+import { microsoftAuthRouter, workspaceRouter } from './routes/workspace.ts'
 import './db/index.ts'
 import { connectMongo, getMongoHealth } from './db/mongo.ts'
 
@@ -23,11 +24,12 @@ app.use(
     contentSecurityPolicy: {
       directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
     },
-    crossOriginResourcePolicy: { policy: 'same-origin' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     referrerPolicy: { policy: 'no-referrer' },
   }),
 )
 const allowedOrigins = new Set([
+  ...(process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean),
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:4173',
@@ -48,10 +50,10 @@ app.use(
       return cb(new Error('Not allowed by CORS'))
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Requested-With', 'X-Request-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Requested-With', 'X-Request-Id', 'X-File-Name'],
   }),
 )
-app.use(express.json({ limit: '256kb' }))
+app.use(express.json({ limit: '4mb' }))
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
@@ -70,7 +72,9 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+app.use('/api/auth', microsoftAuthRouter)
 app.use('/api/auth', authRouter)
+app.use('/api/workspace', workspaceRouter)
 app.use('/api/opportunities', opportunitiesRouter)
 app.use('/api/security', securityRouter)
 app.use('/api/export', exportRouter)
