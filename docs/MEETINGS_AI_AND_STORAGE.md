@@ -25,16 +25,30 @@ The shared Newport server (`server/`, Azure App Service) has two routes, both be
 Microsoft workspace sign-in:
 
 - `GET /api/workspace/ai/status` — tells the browser whether summaries are available.
+- `GET /api/workspace/ai/selftest` — sends a one-word test to the AI provider (Test AI connection button).
+- `GET /api/workspace/ai/reachability` — checks that the server can reach Google's API host. No key or CRM data is sent.
 - `POST /api/workspace/ai/meeting-summary` — body `{ "transcript": "..." }`.
 
-They stay **off** unless both settings are present in the server's environment:
+They stay **off** unless `MEETING_SUMMARY_ENABLED=1` and a provider key are set in the server's environment.
+
+Current setup (Oct 30, 2026): Google Gemini.
 
 ```
 MEETING_SUMMARY_ENABLED=1
-OPENAI_API_KEY=<secret, server only>
+GEMINI_API_KEY=<secret from Google AI Studio, server only>
 # optional
-OPENAI_MODEL=gpt-4o-mini
+GEMINI_MODEL=gemini-flash-latest
+GEMINI_FALLBACK_MODELS=gemini-flash-lite-latest,gemini-2.5-flash
 ```
+
+- A Google key saved as `OPENAI_API_KEY` (starts with `AIza` or `AQ.`) is also sent to Gemini. The live
+  server uses this today; renaming the setting to `GEMINI_API_KEY` is cleaner.
+- When the main model answers "busy" (429/503), the server tries the fallback models in order.
+- Calls to Google use node:https over IPv4, because Azure App Service on Linux stalled on the other route.
+- OpenAI still works: set `OPENAI_API_KEY` to a real OpenAI key (starts with `sk-`) and leave
+  `GEMINI_API_KEY` unset. Optional `OPENAI_MODEL` (default gpt-4o-mini).
+- On Google's free tier, Google may use what it receives to improve its products. Turn on billing in
+  Google AI Studio, or get Newport's approval, before sending real meeting transcripts.
 
 `MEETING_SUMMARY_ENABLED=1` is the explicit approval to send transcript text to that provider.
 The key is never sent to browsers. The model receives only the transcript text, with instructions to
@@ -43,8 +57,8 @@ The audit log records that a summary ran and its length, never the transcript.
 
 ## Decisions Newport should make before real use
 
-1. **AI provider and data terms.** Confirm the provider (OpenAI API, or Azure OpenAI in Newport's
-   own tenant), its data-retention and no-training terms, and who may enable it.
+1. **AI provider and data terms.** Confirm the provider (Google Gemini on a paid tier, OpenAI API, or
+   Azure OpenAI in Newport's own tenant), its data-retention and no-training terms, and who may enable it.
 2. **Where transcripts are stored.** Today they stay in one browser. For sharing across the team,
    choose a store with access control (for example SharePoint/OneDrive per deal, or the Newport
    server's database with encryption at rest) and a retention period.
