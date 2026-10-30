@@ -4,6 +4,9 @@
  * Settings in the server environment:
  *   GEMINI_API_KEY   secret from Google AI Studio; never sent to browsers
  *   GEMINI_MODEL     optional, default gemini-flash-latest
+ *   GEMINI_FALLBACK_MODELS  optional, comma-separated; tried in order when the
+ *                    main model is overloaded (503), rate-limited (429) or missing.
+ *                    Default: gemini-flash-lite-latest, gemini-2.5-flash
  *
  * If GEMINI_API_KEY is not set but OPENAI_API_KEY holds a Google key
  * (starts with "AIza" or "AQ."), that key is used for Gemini instead,
@@ -39,6 +42,20 @@ export function geminiModel(): string {
   return m && /^[a-z0-9.\-]+$/i.test(m) ? m : DEFAULT_GEMINI_MODEL
 }
 
+export const DEFAULT_FALLBACK_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash']
+
+const validModel = (m: string) => /^[a-z0-9.\-]+$/i.test(m)
+
+/** The main model first, then fallbacks, without duplicates. */
+export function geminiModels(): string[] {
+  const env = process.env.GEMINI_FALLBACK_MODELS
+  const fallbacks = (env !== undefined && env.trim() !== '' ? env.split(',') : DEFAULT_FALLBACK_MODELS).map((m) => m.trim()).filter(validModel)
+  return [...new Set([geminiModel(), ...fallbacks])]
+}
+
+/** Google's "busy" answers: worth trying the next model instead of failing. */
+const RETRYABLE = new Set([429, 500, 503, 504])
+
 export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high'
 
 async function readGoogleError(res: Response): Promise<string> {
@@ -62,16 +79,18 @@ export async function geminiGenerate(
 ): Promise<string> {
   const key = geminiKey()
   if (!key) throw new Error('No Gemini API key is set.')
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:generateContent`
   const thinking = opts.thinking === undefined ? 'low' : opts.thinking
   // Azure closes requests after about 230 seconds; stop well before that with a clear message.
+  // One deadline covers every model tried.
   const timeoutMs = opts.timeoutMs ?? 150_000
+  const deadline = AbortSignal.timeout(timeoutMs)
+  const models = geminiModels()
 
-  const call = (withThinking: boolean) =>
-    fetchImpl(url, {
+  const call = (model: string, withThinking: boolean) =>
+    fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: deadline,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: opts.system }] },
         contents: [{ role: 'user', parts: [{ text: opts.user }] }],
@@ -83,19 +102,27 @@ export async function geminiGenerate(
       }),
     })
 
-  let res: Response
-  try {
-    res = await call(true)
-    if (res.status === 400 && thinking) {
-      const detail = await readGoogleError(res.clone())
-      if (/thinking/i.test(detail)) res = await call(false)
+  let res: Response | null = null
+  for (let i = 0; i < models.length; i++) {
+    const isLast = i === models.length - 1
+    try {
+      res = await call(models[i], true)
+      if (res.status === 400 && thinking) {
+        const detail = await readGoogleError(res.clone())
+        if (/thinking/i.test(detail)) res = await call(models[i], false)
+      }
+    } catch (err) {
+      if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        throw new Error(`Google Gemini did not answer within ${Math.round(timeoutMs / 1000)} seconds. Try again in a minute.`)
+      }
+      throw new Error(`Google Gemini could not be reached: ${err instanceof Error ? err.message : String(err)}`)
     }
-  } catch (err) {
-    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-      throw new Error(`Google Gemini did not answer within ${Math.round(timeoutMs / 1000)} seconds. Try again in a minute.`)
-    }
-    throw new Error(`Google Gemini could not be reached: ${err instanceof Error ? err.message : String(err)}`)
+    if (res.ok || isLast) break
+    // Busy or rate-limited: try the next model. A fallback model this key cannot use (404) is skipped too.
+    if (RETRYABLE.has(res.status) || (i > 0 && res.status === 404)) continue
+    break
   }
+  if (!res) throw new Error('No Gemini model is configured.')
   if (!res.ok) {
     const detail = await readGoogleError(res)
     const hint =
@@ -103,7 +130,9 @@ export async function geminiGenerate(
         ? ' Check that the key was created in Google AI Studio (aistudio.google.com/apikey) and is saved as GEMINI_API_KEY.'
         : res.status === 429
           ? ' The free tier limit was reached; wait a minute and try again.'
-          : ''
+          : res.status === 503
+            ? ' Google is busy right now; try again in a minute.'
+            : ''
     throw new Error(`The AI service returned ${res.status}.${detail}${hint}`)
   }
   const data = (await res.json()) as {

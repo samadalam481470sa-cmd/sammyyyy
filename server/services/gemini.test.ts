@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { geminiGenerate, geminiSelfTest } from './gemini.ts'
 
 const saved = { ...process.env }
@@ -56,5 +56,40 @@ describe('Gemini client', () => {
     const result = await geminiSelfTest(async () => answer('OK'))
     expect(result.ok).toBe(true)
     expect(JSON.stringify(result)).not.toContain('AQ.secret')
+  })
+})
+
+describe('Gemini model fallback', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  const okBody = (text: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }))
+  const busy = () => new Response(JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand.' } }), { status: 503 })
+
+  it('tries the next model when the main one is overloaded', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'k')
+    vi.stubEnv('GEMINI_MODEL', '')
+    vi.stubEnv('GEMINI_FALLBACK_MODELS', '')
+    const fetchImpl = vi.fn(async (url: string) => (url.includes('/gemini-flash-latest:') ? busy() : okBody('fine')))
+    const text = await geminiGenerate({ system: 's', user: 'u' }, fetchImpl)
+    expect(text).toBe('fine')
+    const urls = fetchImpl.mock.calls.map((c) => c[0] as string)
+    expect(urls[0]).toContain('/gemini-flash-latest:')
+    expect(urls[1]).toContain('/gemini-flash-lite-latest:')
+  })
+
+  it('reports Google busy when every model is overloaded', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'k')
+    vi.stubEnv('GEMINI_FALLBACK_MODELS', 'gemini-2.5-flash')
+    const fetchImpl = vi.fn(async () => busy())
+    await expect(geminiGenerate({ system: 's', user: 'u' }, fetchImpl)).rejects.toThrow(/503.*busy/s)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry a bad key on other models', async () => {
+    vi.stubEnv('GEMINI_API_KEY', 'k')
+    vi.stubEnv('GEMINI_FALLBACK_MODELS', '')
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'API key not valid.' } }), { status: 400 }))
+    await expect(geminiGenerate({ system: 's', user: 'u' }, fetchImpl)).rejects.toThrow(/400/)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })
