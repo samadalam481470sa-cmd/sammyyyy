@@ -1,20 +1,23 @@
 /**
  * Meeting summaries from an uploaded transcript.
  *
- * Off unless an administrator sets BOTH:
- *   MEETING_SUMMARY_ENABLED=1   (explicit approval to send transcripts to the AI provider)
- *   OPENAI_API_KEY=...          (server-side secret; never sent to browsers)
- * Optional: OPENAI_MODEL (default gpt-4o-mini).
+ * Off unless an administrator sets MEETING_SUMMARY_ENABLED=1 (explicit approval
+ * to send transcripts to the AI provider) AND one provider key:
+ *   GEMINI_API_KEY=...   Google Gemini (used first when set; optional GEMINI_MODEL)
+ *   OPENAI_API_KEY=...   OpenAI (optional OPENAI_MODEL, default gpt-4o-mini)
+ * Keys are server-side secrets and are never sent to browsers.
  *
  * The model receives only the transcript text, with instructions to use nothing else.
  * Output is validated; anything malformed is rejected rather than shown.
  */
 import { z } from 'zod'
+import { geminiConfigured, geminiGenerate, geminiModel } from './gemini.ts'
 
 export const SUMMARY_MAX_CHARS = 120_000
 
 export function meetingSummaryProvider(): string | null {
   if (process.env.MEETING_SUMMARY_ENABLED !== '1') return null
+  if (geminiConfigured()) return `Google Gemini ${geminiModel()} (admin-configured)`
   if (!process.env.OPENAI_API_KEY) return null
   return `OpenAI ${process.env.OPENAI_MODEL || 'gpt-4o-mini'} (admin-configured)`
 }
@@ -52,24 +55,31 @@ export async function summarizeTranscript(transcript: string, fetchImpl: FetchLi
   const text = transcript.trim()
   if (!text) throw new Error('The transcript is empty.')
   const truncated = text.length > SUMMARY_MAX_CHARS
-  const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: `TRANSCRIPT:\n${text.slice(0, SUMMARY_MAX_CHARS)}` },
-      ],
-    }),
-  })
-  if (!res.ok) throw new Error(`The AI service returned ${res.status}.`)
-  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+  const userText = `TRANSCRIPT:\n${text.slice(0, SUMMARY_MAX_CHARS)}`
+  let content: string
+  if (geminiConfigured()) {
+    content = await geminiGenerate({ system: SYSTEM, user: userText, json: true }, fetchImpl)
+  } else {
+    const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: userText },
+        ],
+      }),
+    })
+    if (!res.ok) throw new Error(`The AI service returned ${res.status}.`)
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+    content = data.choices?.[0]?.message?.content ?? ''
+  }
   let parsed: unknown
   try {
-    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '')
+    parsed = JSON.parse(content)
   } catch {
     throw new Error('The AI service returned an unreadable summary.')
   }

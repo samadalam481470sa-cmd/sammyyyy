@@ -31,3 +31,24 @@ describe('meeting summary service', () => {
     await expect(summarizeTranscript('x', ok({ discussion: 'not a list' }))).rejects.toThrow(/wrong shape/)
   })
 })
+
+describe('meeting summary with Gemini', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('uses Gemini when GEMINI_API_KEY is set, with the key in a header only', async () => {
+    vi.stubEnv('MEETING_SUMMARY_ENABLED', '1')
+    vi.stubEnv('GEMINI_API_KEY', 'gem-key')
+    vi.stubEnv('OPENAI_API_KEY', '')
+    expect(meetingSummaryProvider()).toMatch(/Gemini/)
+    const content = { discussion: ['Deal signed'], decisions: [], openQuestions: [], nextSteps: [], proposedActions: [{ action: 'Send checklist', owner: 'Dennis' }] }
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(content) }] } }] })))
+    const result = await summarizeTranscript('Dennis: I will send the checklist.', fetchImpl)
+    expect(result.summary.proposedActions[0].owner).toBe('Dennis')
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toContain('generativelanguage.googleapis.com')
+    expect(url).not.toContain('gem-key')
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('gem-key')
+    const body = JSON.parse(init.body as string)
+    expect(body.contents[0].parts[0].text).toBe('TRANSCRIPT:\nDennis: I will send the checklist.')
+  })
+})

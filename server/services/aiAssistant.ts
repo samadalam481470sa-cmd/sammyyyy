@@ -5,6 +5,7 @@ import {
   type AiAnswer,
   type AiKnowledge,
 } from '../../src/lib/aiAssistant.ts'
+import { geminiConfigured, geminiGenerate } from './gemini.ts'
 
 function loadKnowledge(): AiKnowledge {
   const opps = (
@@ -44,7 +45,21 @@ function knowledgeBrief(k: AiKnowledge): string {
   return lines.join('\n')
 }
 
+const ASSISTANT_SYSTEM =
+  'You are Newport AI, the acquisition CRM assistant for Newport Specialty Partners. Answer only from the provided CRM knowledge. Be concise, executive, and cite project code names.'
+
+async function answerWithGemini(question: string, knowledge: AiKnowledge): Promise<AiAnswer | null> {
+  const brief = knowledgeBrief(knowledge).slice(0, 12000)
+  try {
+    const text = await geminiGenerate({ system: ASSISTANT_SYSTEM, user: `CRM DATA:\n${brief}\n\nQUESTION: ${question}`, temperature: 0.2 })
+    return text ? { answer: text, sources: [], mode: 'llm' } : null
+  } catch {
+    return null
+  }
+}
+
 async function answerWithLlm(question: string, knowledge: AiKnowledge): Promise<AiAnswer | null> {
+  if (geminiConfigured()) return answerWithGemini(question, knowledge)
   const azure = Boolean(process.env.AZURE_OPENAI_ENDPOINT)
   const key = azure ? process.env.AZURE_OPENAI_API_KEY : process.env.OPENAI_API_KEY
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT

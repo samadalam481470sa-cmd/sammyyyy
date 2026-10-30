@@ -1,0 +1,50 @@
+/**
+ * Google Gemini client (server only).
+ *
+ * Settings in the server environment:
+ *   GEMINI_API_KEY   secret from Google AI Studio; never sent to browsers
+ *   GEMINI_MODEL     optional, default gemini-flash-latest
+ *
+ * The key goes in the x-goog-api-key header, never in the URL, so it cannot
+ * appear in request logs.
+ */
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+
+export const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'
+
+export function geminiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY?.trim())
+}
+
+export function geminiModel(): string {
+  const m = process.env.GEMINI_MODEL?.trim()
+  // Model ids are short tokens; reject anything that could change the URL path.
+  return m && /^[a-z0-9.\-]+$/i.test(m) ? m : DEFAULT_GEMINI_MODEL
+}
+
+export async function geminiGenerate(
+  opts: { system: string; user: string; json?: boolean; temperature?: number },
+  fetchImpl: FetchLike = fetch,
+): Promise<string> {
+  const key = process.env.GEMINI_API_KEY?.trim()
+  if (!key) throw new Error('GEMINI_API_KEY is not set.')
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:generateContent`
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: [{ role: 'user', parts: [{ text: opts.user }] }],
+      generationConfig: {
+        temperature: opts.temperature ?? 0,
+        ...(opts.json ? { responseMimeType: 'application/json' } : {}),
+      },
+    }),
+  })
+  if (!res.ok) throw new Error(`The AI service returned ${res.status}.`)
+  const data = (await res.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+  }
+  return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim()
+}
