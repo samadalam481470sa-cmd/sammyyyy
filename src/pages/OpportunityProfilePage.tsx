@@ -267,7 +267,7 @@ export function OpportunityProfilePage() {
                 </div>
               </Card>
               <Card title={`Open tasks (${openTasks.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewTask(true))} data-testid="profile-new-task"><Plus className="h-4 w-4" /> New Task</button>}>
-                <TaskTable rows={openTasks} selectedId={taskId} onOpen={(id) => guarded(() => setTaskId(taskId === id ? null : id))} empty="No open tasks for this opportunity." />
+                <TaskTable rows={openTasks} selectedId={taskId} drivingId={opportunity.nextActionTaskId ?? null} onOpen={(id) => guarded(() => setTaskId(taskId === id ? null : id))} empty="No open tasks for this opportunity." />
               </Card>
               <Card title={`Completed (${doneTasks.length})`}>
                 <TaskTable rows={doneTasks} selectedId={taskId} onOpen={(id) => guarded(() => setTaskId(taskId === id ? null : id))} empty="No completed tasks yet." />
@@ -417,7 +417,7 @@ export function OpportunityProfilePage() {
   )
 }
 
-function TaskTable({ rows, selectedId, onOpen, empty }: { rows: TaskRecord[]; selectedId: string | null; onOpen: (id: string) => void; empty: string }) {
+function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null }: { rows: TaskRecord[]; selectedId: string | null; onOpen: (id: string) => void; empty: string; drivingId?: string | null }) {
   if (!rows.length) return <Empty>{empty}</Empty>
   return (
     <table className="w-full table-fixed text-left text-sm">
@@ -449,6 +449,11 @@ function TaskTable({ rows, selectedId, onOpen, empty }: { rows: TaskRecord[]; se
               <span className="flex items-center gap-1.5">
                 <span className="truncate">{task.action}</span>
                 <WarningTriangle warning={taskWarning(task)} />
+                {drivingId === task.id && (
+                  <span className="shrink-0 rounded bg-navy-900 px-1.5 py-0.5 text-[10px] font-semibold text-white" title="Earliest-due open task: this is the deal's Next Action and drives Needs Attention" data-testid="driving-task">
+                    Next action
+                  </span>
+                )}
               </span>
             </td>
             <td className="truncate px-3 py-3.5 text-ink-muted">{task.owner || '—'}</td>

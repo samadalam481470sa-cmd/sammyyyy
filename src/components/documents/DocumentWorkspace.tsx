@@ -236,6 +236,28 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         else if (isOpenableDocumentUrl(draft.link)) storage = 'url'
         else if (!attachedName) storage = 'none'
 
+        // A core slot whose file was removed (and has no link) goes back to an empty slot:
+        // its saved record and metadata are cleared, the slot itself always stays.
+        const existingRecord = nextEditingId ? related.find((doc) => doc.id === nextEditingId) ?? null : null
+        const nothingAttached =
+          !attachedName && !isOpenableDocumentUrl(draft.link) && !isOpenableDocumentUrl(draft.webUrl)
+        if (mode === 'slot' && existingRecord && hasAttachedFile(existingRecord) && nothingAttached) {
+          const slot = normalizeDocSlot(existingRecord.docType)
+          await deleteDocumentBlob(owner, existingRecord.id).catch(() => undefined)
+          if (isWorkspaceShared()) await deleteWorkspaceFile(existingRecord.id).catch(() => undefined)
+          await deleteDocument(existingRecord.id)
+          const empty = emptyDraft(slot)
+          pendingFileRef.current = null
+          dirtyRef.current = false
+          setEditingId(null)
+          setDraft(empty)
+          setSaved(empty)
+          setPendingFile(null)
+          setTab(slot)
+          setMessage(`File removed. The ${slotAbbreviation(slot)} slot is empty again.`)
+          return true
+        }
+
         const docType = mode === 'slot' ? draft.docType : matchExistingOption(draft.docType, knownCustomTypes)
         if (mode !== 'slot') rememberCustomType(docType)
         const payload: Partial<DocumentRecord> = {

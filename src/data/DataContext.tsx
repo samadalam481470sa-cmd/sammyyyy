@@ -664,6 +664,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const mergedBase = { ...existing, ...nextPatch }
       const merged = decorateOpportunities([mergedBase], taskList)[0]
+      // Links are by ID; copied project labels on linked records follow a rename right away.
+      const renamed = patch.projectName !== undefined && patch.projectName !== existing.projectName ? patch.projectName : null
+      if (renamed != null) {
+        taskList = taskList.map((row) => (row.opportunityId === id ? { ...row, projectName: renamed } : row))
+        persistTasks(taskList)
+        persistDocs(docsRef.current.map((row) => (row.opportunityId === id ? { ...row, projectName: renamed } : row)))
+        const contacts = loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts)
+        if (contacts.some((row) => row.opportunityId === id)) {
+          const nextContacts = contacts.map((row) => (row.opportunityId === id ? { ...row, projectName: renamed } : row))
+          saveOwnedCollection('contacts', owner, nextContacts)
+          const detail: ResourceChangedDetail = { resource: 'contacts', owner, source: -1, items: nextContacts }
+          window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+        }
+      }
       if (isLocalPersistence()) {
         persistOpps(oppsRef.current.map((row) => (row.id === id ? merged : row)))
         logChange('opportunity', id, 'update', Object.keys(patch))
