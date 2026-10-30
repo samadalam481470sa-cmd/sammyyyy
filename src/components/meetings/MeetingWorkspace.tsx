@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { NewTaskDrawer } from '@/components/tasks/NewTaskDrawer'
 import { cleanRecordingUrl, readTranscriptSource, readTranscriptText } from '@/lib/crmMeetings'
 import { TRANSCRIPT_ACCEPT } from '@/lib/transcript'
+import { isWorkspaceShared, workspaceAiSelfTest } from '@/lib/workspaceSync'
 import { todayDateInput } from '@/lib/calendarDate'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { meetingTitle, type CrmMeeting } from '@/types/crmMeeting'
@@ -151,6 +152,20 @@ export function MeetingWorkspace({ api, meeting, variant, onRemoved }: Props) {
       setTab(done.summary.status === 'ready' ? 'summary' : 'transcript')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The transcript could not be read.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const [connection, setConnection] = useState<{ ok: boolean; text: string } | null>(null)
+  const testConnection = async () => {
+    setBusy('selftest')
+    setConnection(null)
+    try {
+      const r = await workspaceAiSelfTest()
+      setConnection({ ok: r.ok, text: `${r.message}${r.model ? ` · ${r.model}` : ''} · ${(r.ms / 1000).toFixed(1)} s` })
+    } catch (err) {
+      setConnection({ ok: false, text: err instanceof Error ? err.message : 'The Newport server could not be reached.' })
     } finally {
       setBusy(null)
     }
@@ -372,6 +387,16 @@ export function MeetingWorkspace({ api, meeting, variant, onRemoved }: Props) {
                   <button type="button" onClick={() => void retrySummary()} className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-canvas">
                     <RefreshCw className="h-3.5 w-3.5" /> Retry
                   </button>
+                  {isWorkspaceShared() && (
+                    <button type="button" onClick={() => void testConnection()} disabled={busy === 'selftest'} className="ml-2 inline-flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-canvas disabled:opacity-50" data-testid="ai-selftest">
+                      {busy === 'selftest' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Test AI connection
+                    </button>
+                  )}
+                  {connection && (
+                    <p className={`text-xs ${connection.ok ? 'text-success' : 'text-danger'}`} data-testid="ai-selftest-result">
+                      {connection.text}
+                    </p>
+                  )}
                 </div>
               ))}
 

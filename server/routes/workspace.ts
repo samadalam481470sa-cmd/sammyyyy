@@ -4,7 +4,11 @@ import { db, createSessionToken, hashToken } from '../db/index.ts'
 import { authRateLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, writeAudit } from '../middleware/security.ts'
 import { accessPolicy, isAllowed, verifyMicrosoftIdToken } from '../services/microsoftToken.ts'
 import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from '../services/meetingSummary.ts'
+<<<<<<< Updated upstream
 import { geminiModel, geminiReachability } from '../services/gemini.ts'
+=======
+import { geminiSelfTest } from '../services/gemini.ts'
+>>>>>>> Stashed changes
 
 /**
  * Shared company workspace: every approved Newport user reads and writes the same records.
@@ -172,9 +176,15 @@ workspaceRouter.get('/ai/status', requireAuth, (_req, res) => {
   res.json({ meetingSummary: Boolean(provider), provider })
 })
 
+<<<<<<< Updated upstream
 // Admin check: can this server reach Google's API host at all? No key or CRM data is sent.
 workspaceRouter.get('/ai/reachability', requireAuth, async (_req, res) => {
   res.json({ model: geminiModel(), reach: await geminiReachability() })
+=======
+// A short connection check an approved user can run from the Meetings page. Returns no secrets.
+workspaceRouter.get('/ai/selftest', requireAuth, async (_req, res) => {
+  res.json(await geminiSelfTest())
+>>>>>>> Stashed changes
 })
 
 const summarySchema = z.object({ transcript: z.string().min(1).max(400_000) })

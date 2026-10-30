@@ -224,6 +224,12 @@ export async function workspaceAiStatus(): Promise<{ meetingSummary: boolean; pr
   return (await res.json()) as { meetingSummary: boolean; provider: string | null }
 }
 
+/** Asks the server to send a tiny test request to its AI service. Never returns the key. */
+export async function workspaceAiSelfTest(): Promise<{ ok: boolean; provider: string | null; model: string | null; ms: number; message: string }> {
+  const res = await request('/ai/selftest')
+  return (await res.json()) as { ok: boolean; provider: string | null; model: string | null; ms: number; message: string }
+}
+
 /** Sends transcript text to the server's approved summary service. Throws with the server's reason. */
 export async function workspaceMeetingSummary(transcript: string): Promise<MeetingSummaryResponse> {
   const res = await request('/ai/meeting-summary', {
