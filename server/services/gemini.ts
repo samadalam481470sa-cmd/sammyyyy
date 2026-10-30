@@ -75,3 +75,18 @@ export async function geminiGenerate(
   }
   return (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim()
 }
+
+/**
+ * Reachability check for administrators. Sends no key and no CRM data:
+ * a plain GET to Google's API host, timed, so a network stall can be told
+ * apart from a key or model problem.
+ */
+export async function geminiReachability(fetchImpl: FetchLike = fetch): Promise<{ ok: boolean; status?: number; ms: number; error?: string }> {
+  const t0 = Date.now()
+  try {
+    const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', { signal: AbortSignal.timeout(15_000) })
+    return { ok: true, status: res.status, ms: Date.now() - t0 }
+  } catch (err) {
+    return { ok: false, ms: Date.now() - t0, error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) }
+  }
+}

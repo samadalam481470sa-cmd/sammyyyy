@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import dns from 'node:dns'
+// Azure App Service on Linux has no IPv6 egress; prefer IPv4 so outbound calls (Gemini) do not stall.
+dns.setDefaultResultOrder('ipv4first')
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'

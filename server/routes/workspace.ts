@@ -4,6 +4,7 @@ import { db, createSessionToken, hashToken } from '../db/index.ts'
 import { authRateLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, writeAudit } from '../middleware/security.ts'
 import { accessPolicy, isAllowed, verifyMicrosoftIdToken } from '../services/microsoftToken.ts'
 import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from '../services/meetingSummary.ts'
+import { geminiModel, geminiReachability } from '../services/gemini.ts'
 
 /**
  * Shared company workspace: every approved Newport user reads and writes the same records.
@@ -169,6 +170,11 @@ workspaceRouter.delete('/files/:docId', requireAuth, (req, res) => {
 workspaceRouter.get('/ai/status', requireAuth, (_req, res) => {
   const provider = meetingSummaryProvider()
   res.json({ meetingSummary: Boolean(provider), provider })
+})
+
+// Admin check: can this server reach Google's API host at all? No key or CRM data is sent.
+workspaceRouter.get('/ai/reachability', requireAuth, async (_req, res) => {
+  res.json({ model: geminiModel(), reach: await geminiReachability() })
 })
 
 const summarySchema = z.object({ transcript: z.string().min(1).max(400_000) })
