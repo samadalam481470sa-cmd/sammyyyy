@@ -135,7 +135,7 @@ export function Dashboard() {
     () =>
       [...activity]
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-        .slice(0, 5),
+        .slice(0, 4),
     [activity],
   )
 

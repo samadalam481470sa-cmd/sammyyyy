@@ -478,6 +478,18 @@ export function EmailPage() {
   // Open a message requested from the notification bell (?open=<id>); opening marks it read.
   const [params, setParams] = useSearchParams()
   const openParam = params.get('open')
+  // The bell's "View all in Email" arrives as ?filter=unread: show the Inbox with Unread selected.
+  const filterParam = params.get('filter')
+  useEffect(() => {
+    if (filterParam !== 'unread') return
+    setFolder('inbox')
+    setListFilter('unread')
+    setSearchResult(null)
+    const next = new URLSearchParams(params)
+    next.delete('filter')
+    setParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterParam])
   useEffect(() => {
     if (!openParam) return
     const message = messages.find((row) => row.id === openParam)

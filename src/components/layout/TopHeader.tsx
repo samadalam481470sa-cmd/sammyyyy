@@ -64,8 +64,8 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
                 setProfileOpen(false)
               }}
               className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-              aria-label={alertCount ? `Notifications: ${unreadCount} unread email${unreadCount === 1 ? '' : 's'}, ${taskAlerts.length} task${taskAlerts.length === 1 ? '' : 's'} due` : 'Notifications: nothing new'}
-              title={alertCount ? `${unreadCount} unread email${unreadCount === 1 ? '' : 's'} · ${taskAlerts.length} task${taskAlerts.length === 1 ? '' : 's'} due` : 'Nothing new'}
+              aria-label={alertCount ? `Notifications: ${unreadCount} unread email${unreadCount === 1 ? '' : 's'}, ${taskAlerts.length} overdue task${taskAlerts.length === 1 ? '' : 's'}` : 'Notifications: nothing new'}
+              title={alertCount ? `${unreadCount} unread email${unreadCount === 1 ? '' : 's'} · ${taskAlerts.length} overdue task${taskAlerts.length === 1 ? '' : 's'}` : 'Nothing new'}
               data-testid="notification-bell"
             >
               <Bell className="h-4 w-4" strokeWidth={1.75} />

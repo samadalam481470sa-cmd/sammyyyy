@@ -45,12 +45,102 @@ function fmtMoney(n: number): string {
   return `$${n.toFixed(0)}`
 }
 
+export interface ProjectMention {
+  /** Exact text the user typed, e.g. "Project B" or "DEAL-043". */
+  text: string
+  match: Opportunity | null
+}
+
+function dealIdOf(o: Opportunity): string | null {
+  return typeof o.projectNumber === 'number' ? `DEAL-${String(o.projectNumber).padStart(3, '0')}` : null
+}
+
+/**
+ * Projects named in the question, matched exactly by project name or deal ID (case-insensitive).
+ * "Project B" never matches Project BA, and an unknown name is reported as unknown.
+ */
+export function findMentionedProjects(question: string, opps: Opportunity[]): ProjectMention[] {
+  const out: ProjectMention[] = []
+  const seen = new Set<string>()
+  const byName = new Map(opps.map((o) => [o.projectName.trim().toLowerCase(), o]))
+  // Longest names first so "Project Gladiator Two" wins over "Project Gladiator".
+  const names = [...byName.keys()].filter(Boolean).sort((a, b) => b.length - a.length)
+  const lower = question.toLowerCase()
+  for (const name of names) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, 'i').test(lower)) {
+      const o = byName.get(name)!
+      if (!seen.has(o.id)) {
+        seen.add(o.id)
+        out.push({ text: o.projectName, match: o })
+      }
+    }
+  }
+  for (const m of question.matchAll(/\bdeal[-\s]?(\d{1,4})\b/gi)) {
+    const n = Number(m[1])
+    const o = opps.find((row) => row.projectNumber === n) ?? null
+    if (o && seen.has(o.id)) continue
+    if (o) seen.add(o.id)
+    out.push({ text: m[0].toUpperCase(), match: o })
+  }
+  // "Project X" phrases that did not match any saved project name.
+  for (const m of question.matchAll(/\bproject\s+([a-z0-9][a-z0-9-]*)/gi)) {
+    const text = `Project ${m[1]}`
+    const known = byName.get(text.toLowerCase())
+    if (!known && !out.some((row) => row.text.toLowerCase() === text.toLowerCase())) {
+      out.push({ text, match: null })
+    }
+  }
+  return out
+}
+
+function taskLinesFor(o: Opportunity, tasks: Array<Record<string, unknown>>): string[] {
+  return tasks
+    .filter((t) => t.opportunityId === o.id && !t.deletedAt && !t.archivedAt && (t.status === 'Open' || t.status === 'In Progress'))
+    .sort((a, b) => String(a.dueDate ?? '9999').localeCompare(String(b.dueDate ?? '9999')))
+    .map((t) => `  – ${String(t.action ?? 'Task')} · due ${String(t.dueDate ?? 'no date')} · ${String(t.owner ?? 'unassigned')} · priority ${String(t.priority ?? '—')}`)
+}
+
+export function summarizeProject(o: Opportunity, knowledge: AiKnowledge): string {
+  const open = taskLinesFor(o, knowledge.tasks ?? [])
+  const attention = o.needsAttention ? `Needs Attention: ${(o.attentionReasons ?? []).join('; ')}` : 'No attention flag'
+  return [
+    `**${o.projectName}** (${o.entityName})${dealIdOf(o) ? ` · ${dealIdOf(o)}` : ''}`,
+    '',
+    `• Status: **${o.status}** · Stage: **${o.stage}**`,
+    `• Deal lead: ${o.dealLead || 'Unassigned'}`,
+    `• Specialty / Geography: ${o.specialty || '—'} · ${o.geography || '—'}`,
+    `• NWP ${fmtMoney(o.nwp)} · Net Revenue ${fmtMoney(o.netRevenue)} · PF EBITDA ${fmtMoney(o.pfEbitda)}`,
+    `• Next action: ${o.nextAction ? `${o.nextAction} (due ${o.nextActionDate ?? 'no date'})` : 'none — no open linked task'}`,
+    `• ${attention}`,
+    `• Open tasks (${open.length}):`,
+    ...(open.length ? open : ['  – None']),
+  ].join('\n')
+}
+
 /** Core answer engine used by both client (static demo) and server. */
 export function answerFromKnowledge(question: string, knowledge: AiKnowledge): AiAnswer {
   const q = question.trim()
   const tokens = tokenize(q)
   const sources: AiAnswer['sources'] = []
   const opps = knowledge.opportunities ?? []
+
+  if (!q) {
+    return { mode: 'retrieval', sources, answer: 'Type a question, for example “Summarize Project A” or “Which deals need attention?”.' }
+  }
+
+  // Named projects are answered from that exact record only, never from a fuzzy guess.
+  const mentions = findMentionedProjects(q, opps)
+  if (mentions.length) {
+    const found = mentions.filter((m) => m.match)
+    const unknown = mentions.filter((m) => !m.match).map((m) => m.text)
+    for (const m of found) sources.push({ type: 'opportunity', id: m.match!.id, label: m.match!.projectName })
+    const parts = found.map((m) => summarizeProject(m.match!, knowledge))
+    if (unknown.length) {
+      parts.push(`I could not find ${unknown.join(', ')} in the CRM. Check the project name or deal ID on the Opportunities page.`)
+    }
+    return { mode: 'retrieval', sources, answer: parts.join('\n\n') }
+  }
 
   const scoredOpps = opps
     .map((o) => ({

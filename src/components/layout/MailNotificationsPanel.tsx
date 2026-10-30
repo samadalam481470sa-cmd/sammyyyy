@@ -5,12 +5,16 @@ import { useNavigate } from 'react-router-dom'
 import { formatMailTime, loadMailbox, mailProvider, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
 import { graphTokenError, outlookToken } from '@/lib/outlookGraph'
 import { OUTLOOK_SYNCED_EVENT, mailSyncHealth, pushMailRead, syncOutlookNow } from '@/lib/outlookSync'
+import { overdueTaskList } from '@/lib/taskSort'
+import { formatDate } from '@/utils/dashboard'
 
 export interface UnreadMailState {
   /** Unread incoming Inbox mail, newest first. */
   unread: MailMessage[]
   /** A mailbox (Outlook or Gmail) is connected for this user. */
   available: boolean
+  /** The most recent sync error from a connected provider, shown as-is. */
+  error: string | null
 }
 
 function readUnread(email: string): UnreadMailState {
@@ -21,7 +25,8 @@ function readUnread(email: string): UnreadMailState {
   const health = mailSyncHealth(email)
   const connected = Object.values(health).some((row) => row && row.state !== 'not_connected')
   const hasMail = mailbox.some((message) => !message.demo)
-  return { unread, available: connected || hasMail }
+  const failed = Object.values(health).find((row) => row?.state === 'failed' && row.error)
+  return { unread, available: connected || hasMail, error: failed?.error ?? null }
 }
 
 /** Live unread incoming mail for the signed-in user, from the app's existing mail sync. */
@@ -42,29 +47,19 @@ export function useUnreadMail(email: string): UnreadMailState {
   return state
 }
 
-/** Open tasks that are overdue or due by tomorrow, soonest first. */
+/**
+ * Bell task alerts: the same unfinished OVERDUE task list the Tasks page shows under Overdue,
+ * so the two counts always match. These are task counts, not deal counts.
+ */
 export function dueTasks(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
-  const limit = new Date(now)
-  limit.setDate(limit.getDate() + 1)
-  const cutoff = limit.toISOString().slice(0, 10)
-  return tasks
-    .filter(
-      (task) =>
-        task.dueDate &&
-        task.dueDate.slice(0, 10) <= cutoff &&
-        !task.completedAt &&
-        !task.archivedAt &&
-        !task.deletedAt &&
-        !/complete|done|closed|cancel/i.test(task.status),
-    )
-    .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
+  return overdueTaskList(tasks, now)
 }
 
 interface MailNotificationsPanelProps {
   open: boolean
   onClose: () => void
   email: string
-  /** Tasks to flag in the bell (see dueTasks). */
+  /** Unfinished overdue tasks, already in priority/date order (see dueTasks). */
   tasks?: TaskRecord[]
 }
 
@@ -74,7 +69,7 @@ interface MailNotificationsPanelProps {
  */
 export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: MailNotificationsPanelProps) {
   const navigate = useNavigate()
-  const { unread, available } = useUnreadMail(email)
+  const { unread, available, error: mailError } = useUnreadMail(email)
   const [connecting, setConnecting] = useState(false)
   const [note, setNote] = useState<string | null>(null)
 
@@ -123,7 +118,7 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
             <h2 className="font-brand text-lg font-bold text-navy-900">Notifications</h2>
             <p className="text-xs text-ink-muted">
               {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'}` : 'Incoming email'}
-              {tasks.length > 0 && ` · ${tasks.length} task${tasks.length === 1 ? '' : 's'} due`}
+              {tasks.length > 0 && ` · ${tasks.length} overdue task${tasks.length === 1 ? '' : 's'}`}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close notifications" className="rounded-lg border border-border p-2 text-ink-muted hover:bg-canvas">
@@ -134,25 +129,24 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
         <div className="custom-scroll flex-1 overflow-y-auto">
           {tasks.length > 0 && (
             <div className="border-b border-border" data-testid="task-notifications">
-              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Tasks due</p>
+              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Overdue tasks</p>
               <ul className="divide-y divide-border">
                 {tasks.slice(0, 5).map((task) => {
-                  const overdue = (task.dueDate ?? '').slice(0, 10) < new Date().toISOString().slice(0, 10)
                   return (
                     <li key={task.id}>
                       <button
                         type="button"
                         onClick={() => {
                           onClose()
-                          navigate('/tasks')
+                          navigate(`/tasks?filter=overdue&select=${encodeURIComponent(task.id)}`)
                         }}
                         className="flex w-full items-start gap-2 px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
                       >
-                        <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${overdue ? 'text-attention' : 'text-ink-subtle'}`} />
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-attention" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-navy-900">{task.action || 'Task'}</span>
                           <span className="block truncate text-xs text-ink-muted">
-                            {task.projectName || 'No project'} · {overdue ? 'Overdue' : 'Due'} {task.dueDate?.slice(0, 10)}
+                            Priority {task.priority} · {task.projectName || 'No project'} · was due {formatDate(task.dueDate)}
                           </span>
                         </span>
                       </button>
@@ -160,12 +154,13 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
                   )
                 })}
               </ul>
-              {tasks.length > 5 && (
+              {tasks.length > 0 && (
                 <button
                   type="button"
+                  data-testid="bell-view-all-tasks"
                   onClick={() => {
                     onClose()
-                    navigate('/tasks')
+                    navigate('/tasks?filter=overdue')
                   }}
                   className="w-full px-5 py-2 text-left text-xs font-semibold text-navy-900 hover:underline"
                 >
@@ -202,6 +197,12 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
               </div>
               {note && <p className="mt-2 text-xs text-attention">{note}</p>}
             </div>
+          ) : mailError && shown.length === 0 ? (
+            <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-error">
+              <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />
+              <p className="text-sm font-semibold text-navy-900">Mail could not be checked</p>
+              <p className="mt-1 text-xs text-ink-muted">{mailError}</p>
+            </div>
           ) : shown.length === 0 ? (
             <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-empty">
               <Mail className="mb-3 h-8 w-8 text-ink-subtle" />
@@ -236,17 +237,18 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
           )}
         </div>
 
-        {available && unread.length > 5 && (
+        {available && (
           <div className="border-t border-border px-5 py-3 text-center">
             <button
               type="button"
+              data-testid="bell-view-all-email"
               onClick={() => {
                 onClose()
-                navigate('/email')
+                navigate('/email?filter=unread')
               }}
               className="text-sm font-semibold text-navy-900 hover:underline"
             >
-              View all {unread.length} in Email
+              {unread.length > 0 ? `View all ${unread.length} unread in Email` : 'View all in Email'}
             </button>
           </div>
         )}
