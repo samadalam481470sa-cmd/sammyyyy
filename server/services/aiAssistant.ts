@@ -45,19 +45,29 @@ function knowledgeBrief(k: AiKnowledge): string {
 }
 
 async function answerWithLlm(question: string, knowledge: AiKnowledge): Promise<AiAnswer | null> {
-  const key = process.env.OPENAI_API_KEY
-  if (!key) return null
+  const azure = Boolean(process.env.AZURE_OPENAI_ENDPOINT)
+  const key = azure ? process.env.AZURE_OPENAI_API_KEY : process.env.OPENAI_API_KEY
+  const deployment = process.env.AZURE_OPENAI_DEPLOYMENT
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT
+  if (!key || (azure && (!deployment || !endpoint))) return null
+  if (azure) {
+    try {
+      const parsed = new URL(endpoint!)
+      if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.openai.azure.com') || parsed.username || parsed.password) return null
+    } catch { return null }
+  }
 
   const brief = knowledgeBrief(knowledge).slice(0, 12000)
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const url = azure ? new URL('/openai/v1/chat/completions', endpoint).toString() : 'https://api.openai.com/v1/chat/completions'
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${key}`,
+        ...(azure ? { 'api-key': key } : { Authorization: `Bearer ${key}` }),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: azure ? deployment : (process.env.OPENAI_MODEL || 'gpt-4o-mini'),
         temperature: 0.2,
         messages: [
           {
