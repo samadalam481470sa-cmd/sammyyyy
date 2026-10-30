@@ -76,6 +76,7 @@ import {
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
+import { applyDataFixes } from '@/lib/dataFixes'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
@@ -348,6 +349,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (json) syncedRef.current.set(key, json)
       else syncedRef.current.delete(key)
     }
+    // Repair known starter-data problems on the shared copy too; the change is pushed to the server.
+    const repaired = applyDataFixes(oppsRef.current)
+    if (repaired !== oppsRef.current) persistOpps(decorateOpportunities(repaired, tasksRef.current))
   }
   const applyingRemote = useRef(false)
 
