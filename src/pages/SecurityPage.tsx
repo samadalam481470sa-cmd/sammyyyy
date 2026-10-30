@@ -1,4 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { paginate } from '@/lib/paginate'
+import { Pagination } from '@/components/shared/Pagination'
 import { History, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { loadDemoChangeHistory } from '@/lib/demoStore'
@@ -8,7 +10,10 @@ export function SecurityPage() {
   const { user } = useAuth()
   const owner = sessionOwnerKey(user)
 
-  const changes = useMemo(() => loadDemoChangeHistory(owner).slice(0, 80), [owner])
+  const changes = useMemo(() => loadDemoChangeHistory(owner), [owner])
+  const [page, setPage] = useState(1)
+  // A fixed page keeps this section from growing the whole page as history accumulates.
+  const view = paginate(changes, page, 10)
 
   return (
     <div className="flex flex-1 flex-col">
@@ -58,7 +63,7 @@ export function SecurityPage() {
             {changes.length === 0 && (
               <li className="py-3 text-sm text-ink-muted">No changes recorded for this account yet.</li>
             )}
-            {changes.map((chg, index) => (
+            {view.rows.map((chg, index) => (
               <li key={`${chg.resourceId}-${chg.createdAt}-${index}`} className="py-2.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-medium text-ink">
@@ -66,11 +71,16 @@ export function SecurityPage() {
                     {chg.resourceType}
                     <span className="text-ink-muted"> · {chg.resourceId}</span>
                   </p>
-                  <span className="text-[11px] text-ink-subtle">{chg.createdAt}</span>
+                  <span className="text-[11px] text-ink-subtle">{new Date(chg.createdAt).toLocaleString()}</span>
                 </div>
               </li>
             ))}
           </ul>
+          {changes.length > 0 && (
+            <div className="-mx-5 mt-3 -mb-5 overflow-hidden rounded-b-xl">
+              <Pagination {...view} onPage={setPage} noun="changes" testId="security-history-pagination" />
+            </div>
+          )}
         </section>
       </div>
     </div>

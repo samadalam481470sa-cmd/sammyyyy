@@ -5,6 +5,7 @@ import { useData } from '@/data/DataContext'
 import { mockContacts, type ContactRecord, type TaskRecord } from '@/data/mockModules'
 import { useResource } from '@/hooks/useResource'
 import { primaryDealWarning } from '@/lib/attention'
+import { statusStageConflict } from '@/lib/statusHistory'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { customDocumentsForOpportunity, DOCUMENT_SLOT_META, hasAttachedFile, slotDocument } from '@/lib/documentSlots'
 import { isDeletedTask, isHistoryTask, isUnfinishedTask } from '@/lib/taskLifecycle'
@@ -158,11 +159,14 @@ export function OpportunityProfilePage() {
     setTab('overview')
   }
 
-  const sideGrid = (open: boolean) => (open ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]' : 'grid gap-4')
+  const sideGrid = (open: boolean) =>
+    open ? 'grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]' : 'grid h-full min-h-0 gap-4'
+  const panel_ = 'h-full min-h-[420px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card) lg:min-h-0'
+  const conflict = statusStageConflict(opportunity)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="opportunity-profile">
-      <header className="border-b border-border bg-surface px-6 py-5 lg:px-8">
+    <div className="custom-scroll flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-y-auto" data-testid="opportunity-profile">
+      <header className="shrink-0 border-b border-border bg-surface px-6 py-5 lg:px-8">
         <button type="button" onClick={goBack} className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-ink" data-testid="profile-back">
           <ArrowLeft className="h-4 w-4" /> Back
         </button>
@@ -178,6 +182,11 @@ export function OpportunityProfilePage() {
               <span className={badgeClass(statusBadge(opportunity.status))}>{opportunity.status}</span>
               <span className={badgeClass(stageBadge(opportunity.stage))}>{opportunity.stage}</span>
               <span className="text-ink-muted">Deal owner: <span className="font-semibold text-ink">{opportunity.dealLead || 'Unassigned'}</span></span>
+              {conflict && (
+                <span className="rounded-md border border-attention-border bg-attention-bg px-2 py-0.5 text-xs font-semibold text-attention" data-testid="profile-stage-conflict">
+                  {conflict}
+                </span>
+              )}
             </div>
           </div>
           {(warning || opportunity.needsAttention) && (
@@ -223,7 +232,7 @@ export function OpportunityProfilePage() {
         </nav>
       </header>
 
-      <main className="flex-1 px-6 py-6 lg:px-8">
+      <main className="flex min-h-[460px] flex-1 flex-col px-6 py-5 lg:px-8">
         {notice && (
           <p role="status" className="mb-4 rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink-muted">
             {notice}
@@ -231,7 +240,7 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'overview' && (
-          <div className="h-[calc(100vh-17rem)] min-h-[560px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)" data-testid="profile-overview">
+          <div className={`${panel_} flex-1`} data-testid="profile-overview">
             <OpportunityEditor
               ref={panel}
               opportunity={opportunity}
@@ -243,8 +252,8 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'tasks' && (
-          <div className={sideGrid(Boolean(selectedTask))}>
-            <div className="space-y-4">
+          <div className={`${sideGrid(Boolean(selectedTask))} flex-1`}>
+            <div className="custom-scroll min-h-0 space-y-4 overflow-y-auto">
               <Card title="Next Action">
                 <div className="px-5 py-4 text-sm">
                   {opportunity.nextAction ? (
@@ -265,7 +274,7 @@ export function OpportunityProfilePage() {
               </Card>
             </div>
             {selectedTask && (
-              <aside className="h-[calc(100vh-17rem)] min-h-[560px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)">
+              <aside className={panel_}>
                 <TaskEditor ref={panel} mode="existing" task={selectedTask} onClose={() => setTaskId(null)} onDeleted={() => setTaskId(null)} />
               </aside>
             )}
@@ -273,7 +282,8 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'relationships' && (
-          <div className={sideGrid(Boolean(selectedContact))}>
+          <div className={`${sideGrid(Boolean(selectedContact))} flex-1`}>
+            <div className="custom-scroll min-h-0 overflow-y-auto">
             <Card title={`Contacts (${contacts.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewContact(true))} data-testid="profile-new-relationship"><Plus className="h-4 w-4" /> New Relationship</button>}>
               {contacts.length === 0 ? (
                 <Empty>No contacts are linked to {opportunity.projectName}. Add one, or link an existing contact from Relationships.</Empty>
@@ -311,8 +321,9 @@ export function OpportunityProfilePage() {
                 </table>
               )}
             </Card>
+            </div>
             {selectedContact && (
-              <aside className="h-[calc(100vh-17rem)] min-h-[560px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)">
+              <aside className={panel_}>
                 <RelationshipEditor ref={panel} api={contactsApi} contact={selectedContact} onClose={() => setContactId(null)} onDeleted={() => setContactId(null)} />
               </aside>
             )}
@@ -320,7 +331,8 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'documents' && (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]">
+            <div className="custom-scroll min-h-0 overflow-y-auto">
             <Card title="Documents">
               <ul className="divide-y divide-border">
                 {DOCUMENT_SLOT_META.map((slot) => {
@@ -359,13 +371,15 @@ export function OpportunityProfilePage() {
               </ul>
               <p className="border-t border-border px-5 py-3 text-xs text-ink-muted">Open, upload, or add documents in the workspace. Use “Add New Document” there for custom types.</p>
             </Card>
-            <aside className="h-[calc(100vh-17rem)] min-h-[560px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)">
-              <DocumentWorkspace key={docWorkspaceKey} ref={panel} opportunity={opportunity} initialDocumentId={docId} onClose={() => { setDocId(null); setDocWorkspaceKey((k) => k + 1) }} />
+            </div>
+            <aside className={panel_}>
+              <DocumentWorkspace key={docWorkspaceKey} ref={panel} opportunity={opportunity} initialDocumentId={docId} hideClose onClose={() => { setDocId(null); setDocWorkspaceKey((k) => k + 1) }} />
             </aside>
           </div>
         )}
 
         {tab === 'activity' && (
+          <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
           <Card title="Activity">
             {timeline.length === 0 ? (
               <Empty>No saved changes are recorded for this opportunity yet.</Empty>
@@ -393,6 +407,7 @@ export function OpportunityProfilePage() {
               </ul>
             )}
           </Card>
+          </div>
         )}
       </main>
 

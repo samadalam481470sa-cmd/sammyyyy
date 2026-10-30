@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { History, Plus, Search, X } from 'lucide-react'
+import { Filter, History, Plus, Search, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useData } from '@/data/DataContext'
 import type { TaskRecord } from '@/data/mockModules'
@@ -16,6 +16,10 @@ import { formatDate } from '@/utils/dashboard'
 import { WarningTriangle } from '@/components/shared/WarningTriangle'
 import { TaskEditor } from '@/components/tasks/TaskEditor'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
+import { paginate } from '@/lib/paginate'
+import { useFitRows } from '@/hooks/useFitRows'
+import { Pagination } from '@/components/shared/Pagination'
+import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
 
 const PRIORITY_BADGES: Record<string, string> = {
   A: 'bg-navy-900 text-white',
@@ -26,15 +30,59 @@ const PRIORITY_BADGES: Record<string, string> = {
 type TaskListFilter = 'all' | 'overdue' | 'on-track'
 
 export function TasksPage() {
-  const { tasks, opportunities, archiveTask, loading } = useData()
+  const { tasks, opportunities, users, archiveTask, loading } = useData()
   const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draftOpen, setDraftOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [archiveTarget, setArchiveTarget] = useState<TaskRecord | null>(null)
-  const [listFilter, setListFilter] = useState<TaskListFilter>('all')
+  const [listFilter, setListFilter] = useState<TaskListFilter>(() => {
+    const value = params.get('filter')
+    return value === 'overdue' || value === 'on-track' ? value : 'all'
+  })
+  const [projectFilter, setProjectFilter] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [page, setPage] = useState(1)
   const editorRef = useRef<OpportunityEditorHandle>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const pageSize = useFitRows(tableRef, { rowHeight: 49 })
+
+  // Links such as the bell's "View all in Tasks" arrive with ?filter=overdue.
+  useEffect(() => {
+    const value = params.get('filter')
+    if (value === 'overdue' || value === 'on-track' || value === 'all') {
+      setListFilter(value)
+      setPage(1)
+    }
+  }, [params])
+
+  useEffect(() => {
+    const onDoc = (event: MouseEvent) => {
+      if (!filterRef.current?.contains(event.target as Node)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
+  const projectOptions = useMemo(
+    () =>
+      [...opportunities]
+        .filter((o) => o.projectName.trim())
+        .sort((a, b) => a.projectName.localeCompare(b.projectName, undefined, { numeric: true }))
+        .map((o) => ({ id: o.id, name: o.projectName })),
+    [opportunities],
+  )
+  const ownerOptions = useMemo(() => {
+    const names = new Set<string>()
+    users.forEach((u) => names.add(u.name))
+    tasks.forEach((t) => {
+      if (t.owner?.trim()) names.add(t.owner.trim())
+    })
+    return [...names].sort()
+  }, [users, tasks])
 
   useEffect(() => {
     const next = new URLSearchParams(params)
@@ -61,12 +109,39 @@ export function TasksPage() {
       if (!isActiveListTask(task)) return false
       if (listFilter === 'overdue' && !isOverdueUnfinishedTask(task)) return false
       if (listFilter === 'on-track' && !isOnTrackTask(task)) return false
+      if (projectFilter && task.opportunityId !== projectFilter) return false
+      if (ownerFilter && (task.owner ?? '').trim() !== ownerFilter) return false
       if (!q) return true
       const entity = opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? ''
       return `${task.action} ${task.projectName} ${task.owner} ${entity}`.toLowerCase().includes(q)
     })
     return sortVisibleTasks(rows)
-  }, [tasks, search, opportunities, listFilter])
+  }, [tasks, search, opportunities, listFilter, projectFilter, ownerFilter])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, listFilter, projectFilter, ownerFilter])
+  const view = paginate(activeTasks, page, pageSize)
+
+  const setPill = (value: TaskListFilter) => {
+    setListFilter(value)
+    if (params.get('filter')) {
+      const next = new URLSearchParams(params)
+      next.delete('filter')
+      setParams(next, { replace: true })
+    }
+  }
+  const projectLabel = projectOptions.find((p) => p.id === projectFilter)?.name ?? ''
+  const chips: ActiveFilterChip[] = [
+    ...(projectFilter ? [{ key: 'project', label: `Project: ${projectLabel || 'Unknown'}`, onRemove: () => setProjectFilter('') }] : []),
+    ...(ownerFilter ? [{ key: 'owner', label: `Task Owner: ${ownerFilter}`, onRemove: () => setOwnerFilter('') }] : []),
+    ...(search.trim() ? [{ key: 'search', label: `Search: ${search.trim()}`, onRemove: () => setSearch('') }] : []),
+  ]
+  const clearAll = () => {
+    setProjectFilter('')
+    setOwnerFilter('')
+    setSearch('')
+  }
 
   const historyTasks = useMemo(
     () => tasks.filter((task) => isHistoryTask(task)),
@@ -109,7 +184,7 @@ export function TasksPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-hidden">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Tasks & Follow-Ups</h1>
@@ -133,7 +208,7 @@ export function TasksPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search tasks..."
-              className="h-10 w-56 rounded-lg border border-border bg-canvas pr-3 pl-9 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              className="h-10 w-full rounded-lg border border-border bg-canvas pr-3 pl-9 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 sm:w-56"
             />
           </div>
           <button
@@ -158,7 +233,7 @@ export function TasksPage() {
           <button
             key={id}
             type="button"
-            onClick={() => setListFilter(id)}
+            onClick={() => setPill(id)}
             className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
               listFilter === id
                 ? 'border-navy-900 bg-navy-900 text-white'
@@ -168,22 +243,73 @@ export function TasksPage() {
             {label}
           </button>
         ))}
+        <div className="ml-auto flex items-center gap-2">
+          <div ref={filterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-expanded={filterOpen}
+              className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold ${
+                projectFilter || ownerFilter ? 'border-navy-900 bg-navy-900 text-white' : 'border-border bg-surface text-ink'
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+            </button>
+            {filterOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-border bg-surface p-4 shadow-(--shadow-elevated)">
+                <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase" htmlFor="task-filter-project">
+                  Project
+                </label>
+                <select
+                  id="task-filter-project"
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                >
+                  <option value="">All projects</option>
+                  {projectOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="mt-3 block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase" htmlFor="task-filter-owner">
+                  Task Owner (assigned)
+                </label>
+                <select
+                  id="task-filter-owner"
+                  className="mt-1 h-10 w-full rounded-lg border border-border px-3 text-sm"
+                  value={ownerFilter}
+                  onChange={(e) => setOwnerFilter(e.target.value)}
+                >
+                  <option value="">All task owners</option>
+                  {ownerOptions.map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+      {chips.length > 0 && (
+        <div className="border-b border-border bg-canvas px-6 py-2 lg:px-8">
+          <FilterChips chips={chips} onClearAll={clearAll} />
+        </div>
+      )}
 
       <div
         className={
           editorOpen
-            ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]'
+            ? 'grid min-h-0 w-full flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]'
             : 'flex min-h-0 w-full flex-1 flex-col'
         }
       >
-        <div
-          className={`custom-scroll min-h-0 min-w-0 w-full flex-1 overflow-auto ${
-            editorOpen ? 'border-r border-border' : ''
-          }`}
-        >
+        <div className={`flex min-h-0 min-w-0 w-full flex-1 flex-col ${editorOpen ? 'border-r border-border' : ''}`}>
+        <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {loading && <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>}
-          <table className="w-full table-fixed text-left text-sm">
+          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[8%]" />
               <col className="w-[22%]" />
@@ -205,7 +331,7 @@ export function TasksPage() {
               </tr>
             </thead>
             <tbody>
-              {activeTasks.map((task) => {
+              {view.rows.map((task) => {
                 const active = selected?.id === task.id
                 const entity =
                   opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? '—'
@@ -272,10 +398,15 @@ export function TasksPage() {
               })}
             </tbody>
           </table>
+          {!loading && activeTasks.length === 0 && (
+            <p className="px-6 py-8 text-sm text-ink-muted">No tasks match these filters.</p>
+          )}
+        </div>
+        <Pagination {...view} onPage={setPage} noun={activeTasks.length === 1 ? 'task' : 'tasks'} testId="tasks-pagination" />
         </div>
 
         {editorOpen && selected && (
-          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
+          <aside className="min-h-0 overflow-hidden bg-surface">
             <TaskEditor
               ref={editorRef}
               mode="existing"

@@ -14,6 +14,10 @@ import { DocumentWorkspace } from '@/components/documents/DocumentWorkspace'
 import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
+import { paginate } from '@/lib/paginate'
+import { useFitRows, useGridColumns } from '@/hooks/useFitRows'
+import { Pagination } from '@/components/shared/Pagination'
+import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
 
 export function DocumentsPage() {
   const { opportunities, documents, loading } = useData()
@@ -28,6 +32,12 @@ export function DocumentsPage() {
   const [cancelCreate, setCancelCreate] = useState(0)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLDivElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState(1)
+  // One row is a measured card plus the 16px grid gap; the area has 48px of vertical padding.
+  const rowsThatFit = useFitRows(areaRef, { rowHeight: 126, headerHeight: 48, gap: 16, rowSelector: '[data-doc-card]', min: 1, max: 20, fallback: 3 })
+  const columns = useGridColumns(gridRef, 3)
 
   useEffect(() => {
     const select = params.get('select')
@@ -54,6 +64,16 @@ export function DocumentsPage() {
   }, [opportunities, search, statusFilter, stageFilter])
 
   const selected = selectedId ? (opportunities.find((o) => o.id === selectedId) ?? null) : null
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, stageFilter])
+  const view = paginate(filtered, page, Math.max(1, rowsThatFit * columns))
+  const chips: ActiveFilterChip[] = [
+    ...(statusFilter ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('') }] : []),
+    ...(stageFilter ? [{ key: 'stage', label: `Stage: ${stageFilter}`, onRemove: () => setStageFilter('') }] : []),
+    ...(search.trim() ? [{ key: 'search', label: `Search: ${search.trim()}`, onRemove: () => setSearch('') }] : []),
+  ]
 
   useEffect(() => {
     const onDoc = (event: MouseEvent) => {
@@ -84,7 +104,7 @@ export function DocumentsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-hidden">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Documents</h1>
@@ -160,27 +180,42 @@ export function DocumentsPage() {
           </div>
         </div>
       </header>
+      {chips.length > 0 && (
+        <div className="border-b border-border bg-canvas px-6 py-2 lg:px-8">
+          <FilterChips
+            chips={chips}
+            onClearAll={() => {
+              setStatusFilter('')
+              setStageFilter('')
+              setSearch('')
+            }}
+          />
+        </div>
+      )}
 
       <div
         className={
           selected
-            ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]'
+            ? 'grid min-h-0 w-full flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]'
             : 'flex min-h-0 w-full flex-1 flex-col'
         }
       >
-        <div className={`custom-scroll min-h-0 flex-1 overflow-auto p-6 ${selected ? 'border-r border-border' : ''}`}>
+        <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${selected ? 'border-r border-border' : ''}`}>
+        <div ref={areaRef} className="custom-scroll min-h-0 flex-1 overflow-auto p-6">
           {loading && <p className="text-sm text-ink-muted">Loading records…</p>}
           <div
+            ref={gridRef}
             className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
               selected ? 'lg:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-5'
             }`}
           >
-            {filtered.map((opp) => {
+            {view.rows.map((opp) => {
               const active = selected?.id === opp.id
               return (
                 <button
                   key={opp.id}
                   type="button"
+                  data-doc-card
                   onClick={() => activate(opp.id)}
                   className={`rounded-2xl border bg-surface p-4 text-left shadow-(--shadow-card) transition-colors ${
                     active ? 'border-accent bg-accent-soft/50' : 'border-border hover:border-accent-muted'
@@ -209,6 +244,9 @@ export function DocumentsPage() {
               )
             })}
           </div>
+          {!loading && filtered.length === 0 && <p className="text-sm text-ink-muted">No projects match these filters.</p>}
+        </div>
+        <Pagination {...view} onPage={setPage} noun={filtered.length === 1 ? 'project' : 'projects'} testId="documents-pagination" />
         </div>
         {selected && creatingDoc && (
           <button
@@ -222,7 +260,11 @@ export function DocumentsPage() {
         )}
         {selected && (
           <aside
-            className={`min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)] ${creatingDoc ? 'relative z-[65] shadow-(--shadow-drawer)' : ''}`}
+            className={
+              creatingDoc
+                ? 'fixed inset-y-0 right-0 z-[65] flex h-dvh w-full max-w-[460px] flex-col bg-surface shadow-(--shadow-drawer)'
+                : 'min-h-0 overflow-hidden bg-surface'
+            }
             role={creatingDoc ? 'dialog' : undefined}
             aria-modal={creatingDoc ? true : undefined}
             aria-label={creatingDoc ? 'New document' : undefined}

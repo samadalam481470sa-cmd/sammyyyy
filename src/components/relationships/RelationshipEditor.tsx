@@ -248,7 +248,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
   }
 
   return (
-    <div className="flex h-full flex-col" data-testid="relationship-editor">
+    <div className="flex h-full min-h-0 flex-col" data-testid="relationship-editor">
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">{creating ? 'Unsaved draft' : 'Relationship'}</p>
@@ -260,7 +260,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
         </button>
       </div>
 
-      <div className="custom-scroll flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         <label className={label}>
           Name
           <input data-testid="relationship-name" value={draft.name} onChange={(e) => set('name', e.target.value)} className={input} />
@@ -345,7 +345,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
         </label>
       </div>
 
-      <div className="space-y-2 border-t border-border bg-canvas px-5 py-3">
+      <div className="shrink-0 space-y-2 border-t border-border bg-canvas px-5 py-3">
         {error && <p className="text-xs text-attention">{error}</p>}
         {message && !dirty && <p className="text-xs text-success">{message}</p>}
         {dirty && !valid && <p className="text-xs text-ink-muted">Add a name to save this relationship.</p>}

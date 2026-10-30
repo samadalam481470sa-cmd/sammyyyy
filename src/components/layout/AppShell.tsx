@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { EditorGuardProvider } from '@/components/shared/EditorGuardContext'
@@ -27,7 +27,14 @@ function AppFrame() {
   const [motionReady, setMotionReady] = useState(false)
   const { user } = useAuth()
   const { sheets } = useSpreadsheetColumns()
-  const onDashboard = useLocation().pathname === '/'
+  const location = useLocation()
+  const onDashboard = location.pathname === '/'
+
+  // Every route change opens the target page at the top, not at the old scroll position.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0 })
+    document.scrollingElement?.scrollTo?.({ top: 0, left: 0 })
+  }, [location.pathname, location.search])
   const offset = sidebarOffset(collapsed, sheets.length, onDashboard)
 
   useEffect(() => {

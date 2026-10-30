@@ -1,4 +1,8 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { paginate } from '@/lib/paginate'
+import { useFitRows } from '@/hooks/useFitRows'
+import { Pagination } from '@/components/shared/Pagination'
+import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
 import { Plus, Search } from 'lucide-react'
 import { useResource } from '@/hooks/useResource'
 import { useData } from '@/data/DataContext'
@@ -15,6 +19,9 @@ export function RelationshipsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('All Relationships')
   const editorRef = useRef<OpportunityEditorHandle>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = useFitRows(tableRef, { rowHeight: 49 })
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -24,6 +31,15 @@ export function RelationshipsPage() {
       return `${item.name} ${item.company} ${item.title} ${item.category} ${item.projectName}`.toLowerCase().includes(q)
     })
   }, [api.items, search, status])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, status])
+  const view = paginate(rows, page, pageSize)
+  const chips: ActiveFilterChip[] = [
+    ...(status !== 'All Relationships' ? [{ key: 'status', label: `Status: ${status}`, onRemove: () => setStatus('All Relationships') }] : []),
+    ...(search.trim() ? [{ key: 'search', label: `Search: ${search.trim()}`, onRemove: () => setSearch('') }] : []),
+  ]
 
   const selected = selectedId ? (api.items.find((item) => item.id === selectedId) ?? null) : null
 
@@ -51,7 +67,7 @@ export function RelationshipsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-hidden">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Relationships</h1>
@@ -74,10 +90,22 @@ export function RelationshipsPage() {
           </button>
         ))}
       </div>
-      <div className={selected ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]' : 'flex min-h-0 w-full flex-1 flex-col'}>
-        <div className={`custom-scroll min-h-0 min-w-0 w-full flex-1 overflow-auto ${selected ? 'border-r border-border' : ''}`}>
+      {chips.length > 0 && (
+        <div className="border-b border-border bg-canvas px-6 py-2 lg:px-8">
+          <FilterChips
+            chips={chips}
+            onClearAll={() => {
+              setStatus('All Relationships')
+              setSearch('')
+            }}
+          />
+        </div>
+      )}
+      <div className={selected ? 'grid min-h-0 w-full flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]' : 'flex min-h-0 w-full flex-1 flex-col'}>
+        <div className={`flex min-h-0 min-w-0 w-full flex-1 flex-col ${selected ? 'border-r border-border' : ''}`}>
+        <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {api.loading && <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>}
-          <table className="w-full table-fixed text-left text-sm">
+          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[17%]" />
               <col className="w-[16%]" />
@@ -95,7 +123,7 @@ export function RelationshipsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((contact) => {
+              {view.rows.map((contact) => {
                 const active = selectedId === contact.id
                 return (
                   <tr
@@ -126,9 +154,14 @@ export function RelationshipsPage() {
               })}
             </tbody>
           </table>
+          {!api.loading && rows.length === 0 && (
+            <p className="px-6 py-8 text-sm text-ink-muted">No relationships match these filters.</p>
+          )}
+        </div>
+        <Pagination {...view} onPage={setPage} noun={rows.length === 1 ? 'relationship' : 'relationships'} testId="relationships-pagination" />
         </div>
         {selected && (
-          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
+          <aside className="min-h-0 overflow-hidden bg-surface">
             <RelationshipEditor
               ref={editorRef}
               api={api}

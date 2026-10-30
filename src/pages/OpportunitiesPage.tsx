@@ -14,6 +14,10 @@ import { formatCurrency } from '@/utils/dashboard'
 import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { primaryDealWarning } from '@/lib/attention'
+import { paginate } from '@/lib/paginate'
+import { useFitRows } from '@/hooks/useFitRows'
+import { Pagination } from '@/components/shared/Pagination'
+import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
 
 type StatusChip = 'All' | OpportunityStatus
@@ -30,6 +34,9 @@ export function OpportunitiesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = useFitRows(tableRef, { rowHeight: 49 })
 
   useEffect(() => {
     const attention = params.get('attention') === '1'
@@ -70,6 +77,35 @@ export function OpportunitiesPage() {
 
   const closeEditor = () => setSelectedId(null)
   const advancedActive = Boolean(stageFilter || ownerFilter || needsAttentionOnly)
+
+  // Filters apply to the whole list before paging; any filter change returns to page 1.
+  useEffect(() => {
+    setPage(1)
+  }, [statusFilter, stageFilter, ownerFilter, needsAttentionOnly])
+  const view = paginate(filtered, page, pageSize)
+
+  const clearAttention = () => {
+    setNeedsAttentionOnly(false)
+    if (params.get('attention') === '1') {
+      const next = new URLSearchParams(params)
+      next.delete('attention')
+      setParams(next, { replace: true })
+    }
+  }
+  const chips: ActiveFilterChip[] = [
+    ...(statusFilter !== 'All' ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('All') }] : []),
+    ...(stageFilter ? [{ key: 'stage', label: `Stage: ${stageFilter}`, onRemove: () => setStageFilter('') }] : []),
+    ...(ownerFilter ? [{ key: 'owner', label: `Deal Owner: ${ownerFilter}`, onRemove: () => setOwnerFilter('') }] : []),
+    ...(needsAttentionOnly
+      ? [{ key: 'attention', label: 'Needs Attention', tone: 'attention' as const, onRemove: clearAttention }]
+      : []),
+  ]
+  const clearAll = () => {
+    setStatusFilter('All')
+    setStageFilter('')
+    setOwnerFilter('')
+    clearAttention()
+  }
 
   useEffect(() => {
     if (!selectedId) return
@@ -123,7 +159,7 @@ export function OpportunitiesPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-hidden">
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border bg-surface px-6 py-5 lg:px-8">
         <div>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Opportunities</h1>
@@ -170,11 +206,6 @@ export function OpportunitiesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {needsAttentionOnly && (
-            <span className="rounded-full border border-attention bg-attention-bg px-3 py-1.5 text-xs font-semibold text-attention">
-              Needs Attention
-            </span>
-          )}
           <div ref={filterRef} className="relative">
             <button
               type="button"
@@ -221,13 +252,8 @@ export function OpportunitiesPage() {
                     type="checkbox"
                     checked={needsAttentionOnly}
                     onChange={(e) => {
-                      const checked = e.target.checked
-                      setNeedsAttentionOnly(checked)
-                      if (!checked && params.get('attention') === '1') {
-                        const next = new URLSearchParams(params)
-                        next.delete('attention')
-                        setParams(next, { replace: true })
-                      }
+                      if (e.target.checked) setNeedsAttentionOnly(true)
+                      else clearAttention()
                     }}
                   />
                   Needs Attention
@@ -238,12 +264,7 @@ export function OpportunitiesPage() {
                   onClick={() => {
                     setStageFilter('')
                     setOwnerFilter('')
-                    setNeedsAttentionOnly(false)
-                    if (params.get('attention') === '1') {
-                      const next = new URLSearchParams(params)
-                      next.delete('attention')
-                      setParams(next, { replace: true })
-                    }
+                    clearAttention()
                   }}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -262,23 +283,25 @@ export function OpportunitiesPage() {
           </button>
         </div>
       </div>
+      {chips.length > 0 && (
+        <div className="border-b border-border bg-canvas px-6 py-2 lg:px-8">
+          <FilterChips chips={chips} onClearAll={clearAll} />
+        </div>
+      )}
 
       <div
         className={
           selected
-            ? 'grid min-h-0 w-full flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]'
+            ? 'grid min-h-0 w-full flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]'
             : 'flex min-h-0 w-full flex-1 flex-col'
         }
       >
-        <div
-          className={`custom-scroll min-h-0 min-w-0 w-full flex-1 overflow-auto ${
-            selected ? 'border-r border-border' : ''
-          }`}
-        >
+        <div className={`flex min-h-0 min-w-0 w-full flex-1 flex-col ${selected ? 'border-r border-border' : ''}`}>
+        <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {loading && (
             <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>
           )}
-          <table className="w-full table-fixed text-left text-sm">
+          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[20%]" />
@@ -298,7 +321,7 @@ export function OpportunitiesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((opp) => {
+              {view.rows.map((opp) => {
                 const active = selected?.id === opp.id
                 const warning = primaryDealWarning(opp, tasks)
                 return (
@@ -335,10 +358,15 @@ export function OpportunitiesPage() {
               })}
             </tbody>
           </table>
+          {!loading && filtered.length === 0 && (
+            <p className="px-6 py-8 text-sm text-ink-muted">No opportunities match these filters.</p>
+          )}
+        </div>
+        <Pagination {...view} onPage={setPage} noun={filtered.length === 1 ? 'opportunity' : 'opportunities'} testId="opportunities-pagination" />
         </div>
 
         {selected && (
-          <aside className="min-h-[480px] bg-surface lg:h-[calc(100vh-11rem)]">
+          <aside className="min-h-0 overflow-hidden bg-surface">
             <OpportunityEditor
               ref={editorRef}
               opportunity={selected}

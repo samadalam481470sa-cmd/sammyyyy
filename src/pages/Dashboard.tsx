@@ -245,7 +245,7 @@ export function Dashboard() {
             <PriorityTasks
               tasks={weekTasks}
               onProjectClick={openById}
-              onViewAll={() => void navigate('/tasks')}
+              onViewAll={() => void navigate('/tasks?filter=all')}
             />
             <AttentionAlerts
               alerts={alerts}

@@ -20,9 +20,14 @@ export function compareVisibleTasks(a: TaskRecord, b: TaskRecord, now = new Date
     if (aOverdue !== bOverdue) return aOverdue ? -1 : 1
     const byPriority = priorityIndex(a.priority) - priorityIndex(b.priority)
     if (byPriority !== 0) return byPriority
-    const byDate = dueDateSortValue(a.dueDate, now) - dueDateSortValue(b.dueDate, now)
-    if (byDate !== 0) return byDate
-    return (a.action || '').localeCompare(b.action || '')
+    const ad = dueDateSortValue(a.dueDate, now)
+    const bd = dueDateSortValue(b.dueDate, now)
+    if (ad !== bd) {
+      if (!Number.isFinite(ad)) return 1
+      if (!Number.isFinite(bd)) return -1
+      return ad - bd
+    }
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   }
 
   const byDate = dueDateSortValue(a.dueDate, now) - dueDateSortValue(b.dueDate, now)

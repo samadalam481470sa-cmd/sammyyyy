@@ -93,6 +93,13 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         return true
       }
       if (savingRef.current) return false
+      const patchPreview = opportunityDraftPatch(saved, draft) as { status?: string; stage?: string }
+      const nextStatus = patchPreview.status ?? opportunity.status
+      const nextStage = patchPreview.stage ?? opportunity.stage
+      if ((patchPreview.status !== undefined || patchPreview.stage !== undefined) && nextStatus === 'Completed' && nextStage !== 'Closing') {
+        setError('Completed deals must be at the Closing stage. Set the stage to Closing, or choose another status.')
+        return false
+      }
       savingRef.current = true
       setSaving(true)
       setError(null)
@@ -109,7 +116,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         savingRef.current = false
         setSaving(false)
       }
-    }, [saved, draft, onSave])
+    }, [saved, draft, onSave, opportunity.status, opportunity.stage])
 
     const persistRef = useRef(persist)
     persistRef.current = persist
@@ -191,7 +198,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const outstandingText = (draft.outstandingItems ?? []).join('\n')
 
     return (
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <div className={`flex items-start justify-between gap-3 border-b border-border px-5 py-4 ${hideHeader ? 'hidden' : ''}`}>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
@@ -231,7 +238,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           ))}
         </div>
 
-        <div className="custom-scroll flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
             <label className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
               Status (editable on all tabs)
@@ -436,7 +443,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           )}
         </div>
 
-        <div className="border-t border-border bg-canvas px-5 py-3">
+        <div className="shrink-0 border-t border-border bg-canvas px-5 py-3">
           {error && pendingLeave == null && (
             <p className="mb-2 text-xs text-attention">{error}</p>
           )}

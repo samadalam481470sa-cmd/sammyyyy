@@ -56,6 +56,8 @@ interface DocumentWorkspaceProps {
   cancelCreateRequest?: number
   /** Shown at the very bottom, below Delete Document when it exists. */
   footerExtra?: ReactNode
+  /** The Full Opportunity Profile embeds the workspace and has nothing to close, so it hides the X. */
+  hideClose?: boolean
 }
 
 
@@ -109,7 +111,7 @@ function emptyDraft(docType: string): DocDraft {
 }
 
 export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWorkspaceProps>(
-  function DocumentWorkspace({ opportunity, onClose, initialDocumentId, onCreatingChange, cancelCreateRequest, footerExtra }, ref) {
+  function DocumentWorkspace({ opportunity, onClose, initialDocumentId, onCreatingChange, cancelCreateRequest, footerExtra, hideClose = false }, ref) {
     const { documents, createDocument, saveDocument, deleteDocument } = useData()
     const { user } = useAuth()
     const owner = sessionOwnerKey(user)
@@ -355,8 +357,8 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
     const fileTypeOptions = [...new Set([...DOCUMENT_FILE_TYPES, draft.fileType].filter(Boolean))]
 
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">{dealId}</p>
             <h2 className="mt-1 font-brand text-xl font-bold text-navy-900">
@@ -364,17 +366,19 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
             </h2>
             <p className="text-sm text-ink-muted">{opportunity.entityName}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => requestLeave(onClose)}
-            className="rounded-lg p-1.5 text-ink-muted hover:bg-canvas"
-            aria-label="Close document workspace"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {!hideClose && (
+            <button
+              type="button"
+              onClick={() => requestLeave(onClose)}
+              className="rounded-lg p-1.5 text-ink-muted hover:bg-canvas"
+              aria-label="Close document workspace"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
-        <div className="flex min-w-0 flex-wrap gap-1 border-b border-border px-2 pt-2">
+        <div className="flex min-w-0 shrink-0 flex-wrap gap-1 border-b border-border px-2 pt-2">
           {DOCUMENT_SLOT_META.map((slot) => {
             const record = slotDocument(related, opportunity.id, slot.id)
             return (
@@ -430,7 +434,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           </button>
         </div>
 
-        <div className="custom-scroll flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
           <label className="block text-xs font-semibold tracking-[0.06em] text-ink-muted uppercase">
             Name
             <input
@@ -565,7 +569,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           </label>
         </div>
 
-        <div className="border-t border-border bg-canvas px-5 py-3">
+        <div className="shrink-0 border-t border-border bg-canvas px-5 py-3">
           {error && <p className="mb-2 text-xs text-attention">{error}</p>}
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           {mode === 'new' && <p className="mb-2 text-xs text-ink-muted">New document for {opportunity.projectName}. Nothing is created until you save.</p>}

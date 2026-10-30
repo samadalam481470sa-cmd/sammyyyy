@@ -179,7 +179,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
     }
 
     return (
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
@@ -202,7 +202,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           </button>
         </div>
 
-        <div className="custom-scroll flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
               Status
@@ -298,7 +298,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           </label>
         </div>
 
-        <div className="space-y-2 border-t border-border bg-canvas px-5 py-3">
+        <div className="shrink-0 space-y-2 border-t border-border bg-canvas px-5 py-3">
           {error && <p className="text-xs text-attention">{error}</p>}
           {message && <p className="text-xs text-success">{message}</p>}
           {dirty && !valid && <p className="text-xs text-ink-muted">Add an action to save this task.</p>}
