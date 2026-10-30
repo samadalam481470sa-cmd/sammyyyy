@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Inbox, Mail, X } from 'lucide-react'
 import type { TaskRecord } from '@/data/mockModules'
 import { useNavigate } from 'react-router-dom'
-import { formatMailTime, loadMailbox, mailProvider, saveMailbox, type MailMessage } from '@/lib/outlookMailbox'
+import { formatMailTime, loadMailbox, mailProvider, saveMailbox, senderDisplayName, type MailMessage } from '@/lib/outlookMailbox'
 import { graphTokenError, outlookToken } from '@/lib/outlookGraph'
 import { OUTLOOK_SYNCED_EVENT, mailSyncHealth, pushMailRead, syncOutlookNow } from '@/lib/outlookSync'
 import { overdueTaskList } from '@/lib/taskSort'
@@ -222,7 +222,7 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-[#f5b301]" aria-hidden />
                       <span className="sr-only">Unread. </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{message.from || 'Unknown sender'}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{senderDisplayName(message) || 'Unknown sender'}</span>
                       <span className="shrink-0 text-[11px] text-ink-subtle">{formatMailTime(message.at)}</span>
                     </div>
                     <p className="mt-1 truncate text-sm font-semibold text-navy-900">{message.subject || '(no subject)'}</p>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Mail, X } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { NEW_MAIL_EVENT } from '@/lib/outlookSync'
-import type { MailMessage } from '@/lib/outlookMailbox'
+import { senderDisplayName, type MailMessage } from '@/lib/outlookMailbox'
 
 interface NewMail {
   count: number
@@ -20,7 +20,7 @@ export function NewMailToast() {
     const onNew = (event: Event) => {
       const detail = (event as CustomEvent<NewMail>).detail
       if (!detail?.count) return
-      const sender = detail.latest?.from || 'someone'
+      const sender = (detail.latest ? senderDisplayName(detail.latest) : '') || 'someone'
       const subject = detail.latest?.subject || '(no subject)'
       if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
         try {
@@ -47,7 +47,7 @@ export function NewMailToast() {
       <Mail className="mt-0.5 h-5 w-5 shrink-0 text-[#0f6cbd]" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-[#242424]">
-          {mail.count > 1 ? `${mail.count} new emails` : `New email from ${mail.latest?.from || 'someone'}`}
+          {mail.count > 1 ? `${mail.count} new emails` : `New email from ${(mail.latest ? senderDisplayName(mail.latest) : '') || 'someone'}`}
         </p>
         <p className="truncate text-xs text-[#616161]">{mail.latest?.subject || '(no subject)'}</p>
         <button

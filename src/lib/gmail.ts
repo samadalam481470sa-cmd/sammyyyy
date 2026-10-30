@@ -298,6 +298,12 @@ function decodeEntities(text: string): string {
 }
 
 /** Gmail sends addresses as "Name <a@b.com>". The CRM shows the address. */
+/** "Ada Lovelace <ada@example.com>" -> "Ada Lovelace". Empty when the header has no name. */
+export function displayNameOf(value: string): string {
+  const match = /^\s*"?([^"<]*?)"?\s*<[^>]+>/.exec(value)
+  return match ? match[1].trim() : ''
+}
+
 function addresses(value: string): string {
   return value
     .split(',')
@@ -340,6 +346,7 @@ export function toMailMessage(raw: GmailRawMessage, folder: MailFolder): MailMes
     id: `${GMAIL_ID_PREFIX}${raw.id}`,
     folder: folderFromLabels(raw.labelIds, folder),
     from: addresses(header(raw.payload, 'From')),
+    ...(displayNameOf(header(raw.payload, 'From')) ? { fromName: displayNameOf(header(raw.payload, 'From')) } : {}),
     to: addresses(header(raw.payload, 'To')),
     cc: addresses(header(raw.payload, 'Cc')) || undefined,
     subject: header(raw.payload, 'Subject') || '(no subject)',

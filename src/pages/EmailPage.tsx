@@ -34,6 +34,7 @@ import {
 import { useSearchParams } from 'react-router-dom'
 import { ensureMsal } from '@/auth/msal'
 import { useAuth } from '@/auth/AuthContext'
+import { EmailCalendar } from '@/components/email/EmailCalendar'
 import { AddToCalendarDialog } from '@/components/email/AddToCalendarDialog'
 import { MailBody } from '@/components/email/MailBody'
 import { CapabilitiesDialog, MailboxCheckDialog, ShortcutsDialog } from '@/components/email/MailDialogs'
@@ -78,6 +79,7 @@ import {
   mergeMailbox,
   relocateMessage,
   saveMailbox,
+  senderDisplayName,
   type MailAttachment,
   type MailFolder,
   type MailMessage,
@@ -179,7 +181,7 @@ function avatarTone(value: string): string {
 
 function senderLabel(message: MailMessage): string {
   if (message.folder === 'sent' || message.folder === 'drafts') return message.to ? `To ${message.to}` : 'No recipient'
-  return message.from || 'Unknown sender'
+  return senderDisplayName(message) || 'Unknown sender'
 }
 
 const PROVIDER_NAME: Record<MailProvider, string> = { outlook: 'Outlook', gmail: 'Gmail' }
@@ -477,11 +479,13 @@ export function EmailPage() {
   // ── actions ───────────────────────────────────────────────────────────────
   // Open a message requested from the notification bell (?open=<id>); opening marks it read.
   const [params, setParams] = useSearchParams()
+  const [view, setView] = useState<'mail' | 'calendar'>(() => (params.get('view') === 'calendar' ? 'calendar' : 'mail'))
   const openParam = params.get('open')
   // The bell's "View all in Email" arrives as ?filter=unread: show the Inbox with Unread selected.
   const filterParam = params.get('filter')
   useEffect(() => {
     if (filterParam !== 'unread') return
+    setView('mail')
     setFolder('inbox')
     setListFilter('unread')
     setSearchResult(null)
@@ -494,6 +498,7 @@ export function EmailPage() {
     if (!openParam) return
     const message = messages.find((row) => row.id === openParam)
     if (!message) return
+    setView('mail')
     setFolder(message.folder)
     setSearchResult(null)
     openMessage(message)
@@ -986,7 +991,23 @@ export function EmailPage() {
           <Mail className="h-5 w-5" />
           <h1 className="text-base font-semibold">{bothConnected ? 'Mail' : gmailOn ? 'Gmail' : 'Outlook'}</h1>
         </div>
+        <div className="flex shrink-0 rounded-md bg-white/15 p-0.5" role="tablist" aria-label="Mail or calendar">
+          {(['mail', 'calendar'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={view === value}
+              data-testid={`email-view-${value}`}
+              onClick={() => setView(value)}
+              className={`h-7 rounded px-2.5 text-xs font-semibold capitalize ${view === value ? 'bg-white text-[#0f548c]' : 'text-white hover:bg-white/15'}`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
         <form
+          hidden={view === 'calendar'}
           className="relative mx-auto w-full max-w-xl"
           onSubmit={(event) => {
             event.preventDefault()
@@ -1031,6 +1052,10 @@ export function EmailPage() {
         </div>
       )}
 
+      {view === 'calendar' ? (
+        <EmailCalendar />
+      ) : (
+      <>
       {/* Command ribbon */}
       <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[#e0e0e0] bg-white px-2 py-1.5 sm:px-3">
         <button
@@ -1457,12 +1482,17 @@ export function EmailPage() {
                   </p>
                 )}
                 <div className="mt-4 flex items-start gap-3">
-                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarTone(selected.from || account)}`}>
-                    {initialsOf(selected.from || account)}
+                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarTone(selected.from || account)}`} aria-hidden="true">
+                    {initialsOf(senderDisplayName(selected) || account)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="truncate text-sm font-semibold">{selected.from || account}</p>
+                      <p className="truncate text-sm font-semibold">
+                        {senderDisplayName(selected) || account}
+                        {selected.fromName && selected.from && (
+                          <span className="ml-1.5 font-normal text-[#616161]">&lt;{selected.from}&gt;</span>
+                        )}
+                      </p>
                       <p className="text-xs text-[#616161]">{new Date(selected.at).toLocaleString()}</p>
                     </div>
                     {selected.to && <p className="truncate text-xs text-[#616161]">To: {selected.to}</p>}
@@ -1558,6 +1588,8 @@ export function EmailPage() {
           </button>
         </span>
       </footer>
+      </>
+      )}
 
       {dialog === 'check' && (
         <MailboxCheckDialog

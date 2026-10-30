@@ -22,6 +22,8 @@ export interface MailMessage {
   id: string
   folder: MailFolder
   from: string
+  /** Sender display name from the mail provider, when it sends one. */
+  fromName?: string
   to: string
   cc?: string
   bcc?: string
@@ -40,6 +42,13 @@ export interface MailMessage {
   pending?: boolean
   /** Outlook follow-up flag or Gmail star. */
   flagged?: boolean
+}
+
+/** Friendly sender name, falling back to the address. */
+export function senderDisplayName(message: Pick<MailMessage, 'from' | 'fromName'>): string {
+  const name = message.fromName?.trim()
+  if (name && name.toLowerCase() !== message.from.toLowerCase()) return name
+  return message.from || ''
 }
 
 export const MAIL_FOLDERS: { id: MailFolder; label: string }[] = [

@@ -126,7 +126,7 @@ export function outlookInteractiveRequest(): { scopes: readonly string[] } {
 }
 
 interface GraphAddress {
-  emailAddress?: { address?: string }
+  emailAddress?: { address?: string; name?: string }
 }
 
 interface GraphMessage {
@@ -178,6 +178,7 @@ function toMail(row: GraphMessage, folder: MailFolder): MailMessage | null {
     id: row.id,
     folder,
     from: row.from?.emailAddress?.address || '',
+    ...(row.from?.emailAddress?.name ? { fromName: row.from.emailAddress.name } : {}),
     to: joinAddresses(row.toRecipients),
     cc: joinAddresses(row.ccRecipients) || undefined,
     bcc: joinAddresses(row.bccRecipients) || undefined,
