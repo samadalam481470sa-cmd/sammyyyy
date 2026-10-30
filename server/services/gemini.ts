@@ -16,6 +16,7 @@
  * appear in request logs.
  */
 
+import { httpsFetch } from './httpsFetch.ts'
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'
@@ -75,7 +76,7 @@ async function readGoogleError(res: Response): Promise<string> {
  */
 export async function geminiGenerate(
   opts: { system: string; user: string; json?: boolean; temperature?: number; thinking?: ThinkingLevel | null; timeoutMs?: number },
-  fetchImpl: FetchLike = fetch,
+  fetchImpl: FetchLike = httpsFetch,
 ): Promise<string> {
   const key = geminiKey()
   if (!key) throw new Error('No Gemini API key is set.')
@@ -154,10 +155,15 @@ export interface AiSelfTest {
 }
 
 /** A tiny request that shows whether the configured key and model answer. Never returns the key. */
-export async function geminiSelfTest(fetchImpl: FetchLike = fetch): Promise<AiSelfTest> {
+export async function geminiSelfTest(fetchImpl: FetchLike = httpsFetch): Promise<AiSelfTest> {
   const started = Date.now()
   if (!geminiConfigured()) {
     return { ok: false, provider: null, model: null, ms: 0, message: 'No Google Gemini key is saved on the server.' }
+  }
+  // First a plain request to Google's host (no key), so a network stall is told apart from a key problem.
+  const reach = await geminiReachability(fetchImpl)
+  if (!reach.ok) {
+    return { ok: false, provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: `The Newport server cannot reach Google (${reach.error ?? 'no answer'}).` }
   }
   try {
     const text = await geminiGenerate(
@@ -175,7 +181,7 @@ export async function geminiSelfTest(fetchImpl: FetchLike = fetch): Promise<AiSe
  * a plain GET to Google's API host, timed, so a network stall can be told
  * apart from a key or model problem.
  */
-export async function geminiReachability(fetchImpl: FetchLike = fetch): Promise<{ ok: boolean; status?: number; ms: number; error?: string }> {
+export async function geminiReachability(fetchImpl: FetchLike = httpsFetch): Promise<{ ok: boolean; status?: number; ms: number; error?: string }> {
   const t0 = Date.now()
   try {
     const res = await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models', { signal: AbortSignal.timeout(15_000) })

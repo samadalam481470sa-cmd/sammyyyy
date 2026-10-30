@@ -10,6 +10,7 @@
  * The model receives only the transcript text, with instructions to use nothing else.
  * Output is validated; anything malformed is rejected rather than shown.
  */
+import { httpsFetch } from './httpsFetch.ts'
 import { z } from 'zod'
 import { geminiConfigured, geminiGenerate, geminiModel } from './gemini.ts'
 
@@ -49,7 +50,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export class SummaryUnavailable extends Error {}
 
-export async function summarizeTranscript(transcript: string, fetchImpl: FetchLike = fetch): Promise<{ summary: ParsedSummary; provider: string; truncated: boolean }> {
+export async function summarizeTranscript(transcript: string, fetchImpl: FetchLike = httpsFetch): Promise<{ summary: ParsedSummary; provider: string; truncated: boolean }> {
   const provider = meetingSummaryProvider()
   if (!provider) throw new SummaryUnavailable('No AI summary service is configured for this CRM.')
   const text = transcript.trim()
