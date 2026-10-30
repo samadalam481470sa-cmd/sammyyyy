@@ -1513,13 +1513,13 @@
       "nextActionDateManual": null,
       "priorityManual": "B",
       "nextActionTaskId": null,
-      "lastActivityDate": "2026-07-31T20:00:00Z",
+      "lastActivityDate": "2026-07-28T17:00:00Z",
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
       "diligenceNotes": "Fictional sample deal added Oct 30, 2026. Not a live Newport target.",
       "createdAt": "2026-02-10T15:00:00Z",
-      "completedAt": "2026-07-31T20:00:00Z",
+      "completedAt": "2026-07-28T17:00:00Z",
       "statusHistory": [
         {
           "from": null,
@@ -1534,7 +1534,7 @@
         {
           "from": "Active",
           "to": "Completed",
-          "at": "2026-07-31T20:00:00Z"
+          "at": "2026-07-28T17:00:00Z"
         }
       ]
     },
@@ -3732,7 +3732,7 @@
       ],
       "projectName": "Project BA",
       "status": "Active",
-      "lastContactDate": "2026-07-31",
+      "lastContactDate": "2026-07-28",
       "notes": "Fictional contact. Not a live Newport relationship."
     },
     {
