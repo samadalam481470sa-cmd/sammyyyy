@@ -346,7 +346,7 @@ export function MeetingWorkspace({ api, meeting, variant, onRemoved }: Props) {
             {tab === 'summary' &&
               (!current.transcript ? (
                 <p className="py-6 text-center text-sm text-ink-muted">Upload a transcript to generate a meeting summary and proposed follow-ups. A recording link alone does not produce a summary.</p>
-              ) : summary.status === 'pending' || busy === 'summary' ? (
+              ) : busy === 'summary' ? (
                 <p className="flex items-center gap-2 py-6 text-sm text-ink-muted">
                   <Loader2 className="h-4 w-4 animate-spin" /> Summarizing the transcript…
                 </p>
@@ -363,7 +363,11 @@ export function MeetingWorkspace({ api, meeting, variant, onRemoved }: Props) {
               ) : (
                 <div className="space-y-2 py-4" data-testid="summary-unavailable">
                   <p className="text-sm font-semibold text-navy-900">Summary unavailable</p>
-                  <p className="text-sm text-ink-muted">{summary.error ?? api.service.reason ?? 'No summary has been created yet.'}</p>
+                  <p className="text-sm text-ink-muted">
+                    {summary.status === 'pending'
+                      ? 'The last summary request did not finish (the page was closed or reloaded while it ran). Choose Retry.'
+                      : (summary.error ?? api.service.reason ?? 'No summary has been created yet.')}
+                  </p>
                   <p className="text-xs text-ink-subtle">The transcript is saved. Nothing has been written in its place.</p>
                   <button type="button" onClick={() => void retrySummary()} className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-canvas">
                     <RefreshCw className="h-3.5 w-3.5" /> Retry

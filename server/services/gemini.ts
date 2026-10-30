@@ -49,6 +49,8 @@ export async function geminiGenerate(
   const res = await fetchImpl(url, {
     method: 'POST',
     headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+    // A stuck request should fail with a clear message instead of hanging the page.
+    signal: AbortSignal.timeout(90_000),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: opts.system }] },
       contents: [{ role: 'user', parts: [{ text: opts.user }] }],
@@ -58,7 +60,16 @@ export async function geminiGenerate(
       },
     }),
   })
-  if (!res.ok) throw new Error(`The AI service returned ${res.status}.`)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const body = (await res.json()) as { error?: { message?: string } }
+      if (body.error?.message) detail = ` ${body.error.message.slice(0, 200)}`
+    } catch {
+      // no JSON body
+    }
+    throw new Error(`The AI service returned ${res.status}.${detail}`)
+  }
   const data = (await res.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
   }
