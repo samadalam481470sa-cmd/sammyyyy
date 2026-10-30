@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { CalendarPlus, X } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { syncCalendarToOutlook } from '@/lib/azureMeetings'
-import { calendarOwnerKey, loadCalendarEvents, saveCalendarEvents, type CalendarEvent } from '@/lib/meetingCalendar'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
+import { outlookToken } from '@/lib/outlookGraph'
+import { createCalendarEvent } from '@/lib/graphCalendar'
+import { addConfirmedEvent } from '@/lib/calendarStore'
 import type { MailMeetingDraft } from '@/lib/mailMeeting'
 
 interface AddToCalendarDialogProps {
@@ -16,15 +18,17 @@ interface AddToCalendarDialogProps {
 const field =
   'h-9 w-full rounded-md border border-[#e0e0e0] px-3 text-sm outline-none focus:border-[#0f6cbd] focus:ring-1 focus:ring-[#0f6cbd]'
 
-/** Review a meeting found in an email, then save it to the CRM calendar and, if chosen, Outlook. */
+/**
+ * Review a meeting found in an email, then add it to the signed-in user's Outlook calendar.
+ * Email Calendar and Meetings both read that calendar. If Outlook refuses or is not connected,
+ * nothing is added anywhere and the reason is shown.
+ */
 export function AddToCalendarDialog({ draft, outlookConnected, onClose, onSaved }: AddToCalendarDialogProps) {
   const { user } = useAuth()
   const [title, setTitle] = useState(draft.title)
   const [date, setDate] = useState(draft.date)
   const [time, setTime] = useState(draft.time)
   const [notes, setNotes] = useState(draft.notes)
-  const [remind, setRemind] = useState(true)
-  const [alsoOutlook, setAlsoOutlook] = useState(outlookConnected)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,26 +47,31 @@ export function AddToCalendarDialog({ draft, outlookConnected, onClose, onSaved 
     }
     setSaving(true)
     setError(null)
-    const owner = calendarOwnerKey(user)
     const cleanTitle = title.trim() || 'Meeting'
-    const existing = loadCalendarEvents(owner)
-    const duplicate = existing.some(
-      (event) => event.date === date && event.time === time && event.title.trim().toLowerCase() === cleanTitle.toLowerCase(),
-    )
-    if (!duplicate) {
-      const event: CalendarEvent = { id: `mail-${Date.now()}`, date, time, title: cleanTitle, notes, remind }
-      saveCalendarEvents(owner, [...existing, event])
-      window.dispatchEvent(new Event('newport-calendar-updated'))
+    try {
+      const token = await outlookToken(false, user?.email ?? '').catch(() => null)
+      if (!token) throw new Error('Outlook is not connected. Choose Connect Outlook first. Nothing was added.')
+      const [h, m] = (time || '09:00').split(':').map(Number)
+      const endTime = `${String(Math.min(23, h + (m + 30 >= 60 ? 1 : 0))).padStart(2, '0')}:${String((m + 30) % 60).padStart(2, '0')}`
+      const created = await createCalendarEvent(token, {
+        subject: cleanTitle,
+        date,
+        startTime: time || '09:00',
+        endTime,
+        allDay: !time,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago',
+        location: '',
+        attendees: [],
+        teams: false,
+        description: notes,
+      })
+      addConfirmedEvent(calendarOwnerKey(user), created)
+      setSaving(false)
+      onSaved('Added to your Outlook calendar. It also shows in Email > Calendar and Meetings.')
+    } catch (err) {
+      setSaving(false)
+      setError(err instanceof Error ? err.message : 'Outlook did not add the event. Nothing was added.')
     }
-    let message = duplicate ? 'This meeting is already on your calendar.' : 'Added to your Newport calendar.'
-    if (alsoOutlook) {
-      const result = await syncCalendarToOutlook({ title: cleanTitle, date, time, notes })
-      message = result.synced
-        ? `${duplicate ? 'Already on your Newport calendar. ' : 'Added to your Newport calendar. '}Also added to your Outlook calendar.`
-        : `${message} Outlook calendar was not updated: connect Outlook on this page first.`
-    }
-    setSaving(false)
-    onSaved(message)
   }
 
   return (
@@ -106,16 +115,8 @@ export function AddToCalendarDialog({ draft, outlookConnected, onClose, onSaved 
             Notes
             <textarea className={`${field} mt-1 h-24 py-2 font-normal`} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </label>
-          <label className="flex items-center gap-2 text-sm text-[#242424]">
-            <input type="checkbox" checked={remind} onChange={(event) => setRemind(event.target.checked)} />
-            Remind me in Notifications
-          </label>
-          <label className="flex items-center gap-2 text-sm text-[#242424]">
-            <input data-testid="calendar-outlook" type="checkbox" checked={alsoOutlook} onChange={(event) => setAlsoOutlook(event.target.checked)} />
-            Also add to my Outlook calendar
-          </label>
-          {!outlookConnected && alsoOutlook && (
-            <p className="text-xs text-[#7a5b00]">Outlook is not connected. Click Connect Outlook first, or the Outlook copy will be skipped.</p>
+          {!outlookConnected && (
+            <p className="text-xs text-[#7a5b00]">Outlook is not connected. Connect Outlook first; this adds the event to your Outlook calendar.</p>
           )}
           {error && <p className="text-sm text-[#c50f1f]">{error}</p>}
         </div>
@@ -132,7 +133,7 @@ export function AddToCalendarDialog({ draft, outlookConnected, onClose, onSaved 
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#0f6cbd] px-4 text-sm font-semibold text-white hover:bg-[#115ea3] disabled:opacity-60"
           >
             <CalendarPlus className="h-4 w-4" />
-            {saving ? 'Saving…' : 'Save to calendar'}
+            {saving ? 'Adding to Outlook…' : 'Add to Outlook calendar'}
           </button>
         </div>
       </div>

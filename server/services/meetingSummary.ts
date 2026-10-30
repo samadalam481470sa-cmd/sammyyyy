@@ -1,0 +1,79 @@
+/**
+ * Meeting summaries from an uploaded transcript.
+ *
+ * Off unless an administrator sets BOTH:
+ *   MEETING_SUMMARY_ENABLED=1   (explicit approval to send transcripts to the AI provider)
+ *   OPENAI_API_KEY=...          (server-side secret; never sent to browsers)
+ * Optional: OPENAI_MODEL (default gpt-4o-mini).
+ *
+ * The model receives only the transcript text, with instructions to use nothing else.
+ * Output is validated; anything malformed is rejected rather than shown.
+ */
+import { z } from 'zod'
+
+export const SUMMARY_MAX_CHARS = 120_000
+
+export function meetingSummaryProvider(): string | null {
+  if (process.env.MEETING_SUMMARY_ENABLED !== '1') return null
+  if (!process.env.OPENAI_API_KEY) return null
+  return `OpenAI ${process.env.OPENAI_MODEL || 'gpt-4o-mini'} (admin-configured)`
+}
+
+const listOf = z.array(z.string().trim().min(1).max(600)).max(25)
+export const summarySchema = z.object({
+  discussion: listOf,
+  decisions: listOf,
+  openQuestions: listOf,
+  nextSteps: listOf,
+  proposedActions: z
+    .array(z.object({ action: z.string().trim().min(3).max(300), owner: z.string().trim().max(120).optional().nullable() }))
+    .max(15),
+})
+
+export type ParsedSummary = z.infer<typeof summarySchema>
+
+const SYSTEM = [
+  'You summarize a business meeting transcript for an acquisitions CRM.',
+  'Use ONLY the transcript text you are given. Do not use the meeting title, calendar data, outside knowledge or assumptions.',
+  'Never invent names, numbers, dates, decisions or dialogue. If something is not in the transcript, leave it out.',
+  'Return JSON with keys: discussion (key points discussed), decisions (decisions actually stated),',
+  'openQuestions (questions left unresolved), nextSteps (next steps stated), proposedActions (array of {action, owner})',
+  'where each action is a concrete follow-up stated or clearly agreed in the transcript and owner is the person named for it, or null.',
+  'Each list may be empty. Keep every item short and factual.',
+].join(' ')
+
+type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
+
+export class SummaryUnavailable extends Error {}
+
+export async function summarizeTranscript(transcript: string, fetchImpl: FetchLike = fetch): Promise<{ summary: ParsedSummary; provider: string; truncated: boolean }> {
+  const provider = meetingSummaryProvider()
+  if (!provider) throw new SummaryUnavailable('No AI summary service is configured for this CRM.')
+  const text = transcript.trim()
+  if (!text) throw new Error('The transcript is empty.')
+  const truncated = text.length > SUMMARY_MAX_CHARS
+  const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: `TRANSCRIPT:\n${text.slice(0, SUMMARY_MAX_CHARS)}` },
+      ],
+    }),
+  })
+  if (!res.ok) throw new Error(`The AI service returned ${res.status}.`)
+  const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '')
+  } catch {
+    throw new Error('The AI service returned an unreadable summary.')
+  }
+  const checked = summarySchema.safeParse(parsed)
+  if (!checked.success) throw new Error('The AI service returned a summary in the wrong shape.')
+  return { summary: checked.data, provider, truncated }
+}

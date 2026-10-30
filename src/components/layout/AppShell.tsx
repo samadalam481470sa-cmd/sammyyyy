@@ -7,7 +7,8 @@ import { useAuth } from '@/auth/AuthContext'
 import { installOutlookSync } from '@/lib/outlookSync'
 import { NewMailToast } from '@/components/email/NewMailToast'
 import { sidebarOffset } from '@/lib/dashboardSpreadsheets'
-import { calendarOwnerKey, loadCalendarEvents } from '@/lib/meetingCalendar'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
+import { reminderEventsFromCache } from '@/lib/calendarStore'
 import { pushCalendarReminders } from '@/lib/calendarReminders'
 
 export function AppShell() {
@@ -53,7 +54,7 @@ function AppFrame() {
 
   useEffect(() => {
     if (!user) return
-    pushCalendarReminders(user, loadCalendarEvents(calendarOwnerKey(user)))
+    pushCalendarReminders(user, reminderEventsFromCache(calendarOwnerKey(user)))
   }, [user])
 
   useEffect(() => {

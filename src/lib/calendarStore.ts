@@ -86,3 +86,20 @@ export function eventsByDay(events: OutlookEvent[]): Map<string, OutlookEvent[]>
   }
   return map
 }
+
+/** Outlook events in the shape the reminder inbox uses (local date and time). */
+export function reminderEventsFromCache(owner: string): { id: string; date: string; time: string; title: string; notes: string; remind: boolean }[] {
+  return readCalendarCache(owner)
+    .events.filter((e) => !e.isCancelled)
+    .map((e) => {
+      const d = new Date(e.start)
+      return {
+        id: `graph-${e.id}`,
+        date: localDayOf(e.start),
+        time: e.isAllDay ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+        title: e.subject,
+        notes: e.location,
+        remind: true,
+      }
+    })
+}

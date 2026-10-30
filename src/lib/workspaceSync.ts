@@ -204,3 +204,32 @@ export async function downloadWorkspaceFile(docId: string): Promise<Blob | null>
 export async function deleteWorkspaceFile(docId: string): Promise<void> {
   await request(`/files/${encodeURIComponent(docId)}`, { method: 'DELETE' }).catch(() => undefined)
 }
+
+export interface MeetingSummaryResponse {
+  summary: {
+    discussion: string[]
+    decisions: string[]
+    openQuestions: string[]
+    nextSteps: string[]
+    proposedActions: { action: string; owner?: string | null }[]
+  }
+  provider: string
+  truncated: boolean
+}
+
+/** Whether the Newport server has an administrator-approved summary service. */
+export async function workspaceAiStatus(): Promise<{ meetingSummary: boolean; provider: string | null }> {
+  if (!isWorkspaceShared()) return { meetingSummary: false, provider: null }
+  const res = await request('/ai/status')
+  return (await res.json()) as { meetingSummary: boolean; provider: string | null }
+}
+
+/** Sends transcript text to the server's approved summary service. Throws with the server's reason. */
+export async function workspaceMeetingSummary(transcript: string): Promise<MeetingSummaryResponse> {
+  const res = await request('/ai/meeting-summary', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript }),
+  })
+  return (await res.json()) as MeetingSummaryResponse
+}

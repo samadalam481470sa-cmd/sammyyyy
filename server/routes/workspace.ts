@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db, createSessionToken, hashToken } from '../db/index.ts'
 import { authRateLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, writeAudit } from '../middleware/security.ts'
 import { accessPolicy, isAllowed, verifyMicrosoftIdToken } from '../services/microsoftToken.ts'
+import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from '../services/meetingSummary.ts'
 
 /**
  * Shared company workspace: every approved Newport user reads and writes the same records.
@@ -161,4 +162,27 @@ workspaceRouter.delete('/files/:docId', requireAuth, (req, res) => {
   if (!id.success) return res.status(400).json({ error: 'Invalid file id.' })
   db.prepare(`DELETE FROM workspace_files WHERE doc_id = ?`).run(id.data)
   res.json({ ok: true })
+})
+
+// ── Meeting summaries (off unless an administrator enables them) ────────────
+
+workspaceRouter.get('/ai/status', requireAuth, (_req, res) => {
+  const provider = meetingSummaryProvider()
+  res.json({ meetingSummary: Boolean(provider), provider })
+})
+
+const summarySchema = z.object({ transcript: z.string().min(1).max(400_000) })
+
+workspaceRouter.post('/ai/meeting-summary', requireAuth, async (req, res) => {
+  const parsed = summarySchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'Send the transcript text.' })
+  try {
+    const result = await summarizeTranscript(parsed.data.transcript)
+    // The audit records that a summary ran, never the transcript itself.
+    writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'ai.meeting_summary', 'meeting', null, `${parsed.data.transcript.length} chars via ${result.provider}`, req)
+    res.json(result)
+  } catch (err) {
+    if (err instanceof SummaryUnavailable) return res.status(503).json({ error: err.message, code: 'not_configured' })
+    res.status(502).json({ error: err instanceof Error ? err.message : 'The summary could not be created.' })
+  }
 })

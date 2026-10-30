@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { emailOwnerKey } from './emailIdentity'
-import { loadCalendarEvents, saveCalendarEvents } from './meetingCalendar'
+import { saveCalendarEvents } from './meetingCalendar'
+import { readCalendarCache } from './calendarStore'
 import { loadMailbox, saveMailbox, type MailFolder } from './outlookMailbox'
 
 const {
@@ -11,6 +12,7 @@ const {
   forwardOutlookMail,
   listOutlookFolder,
   listOutlookEvents,
+  listCalendarRange,
   deltaOutlookFolder,
 } = vi.hoisted(() => ({
   outlookToken: vi.fn(),
@@ -20,8 +22,11 @@ const {
   forwardOutlookMail: vi.fn(),
   listOutlookFolder: vi.fn(),
   listOutlookEvents: vi.fn(),
+  listCalendarRange: vi.fn(),
   deltaOutlookFolder: undefined,
 }))
+
+vi.mock('@/lib/graphCalendar', () => ({ listCalendarRange }))
 
 vi.mock('@/lib/outlookGraph', () => ({
   outlookToken,
@@ -73,6 +78,8 @@ describe('Outlook send and sync', () => {
     replyOutlookMail.mockReset()
     listOutlookFolder.mockReset()
     listOutlookEvents.mockReset()
+    listCalendarRange.mockReset()
+    listCalendarRange.mockResolvedValue([])
     replyAllOutlookMail.mockReset()
     forwardOutlookMail.mockReset()
   })
@@ -200,8 +207,8 @@ describe('Outlook send and sync', () => {
         demo: false,
       },
     ])
-    listOutlookEvents.mockResolvedValue([
-      { id: 'graph-evt', date: '2026-10-27', time: '11:00', title: 'Graph', notes: '', remind: true },
+    listCalendarRange.mockResolvedValue([
+      { id: 'graph-evt', subject: 'Graph', start: '2026-10-27T16:00:00.000Z', end: '2026-10-27T16:30:00.000Z', isAllDay: false, location: '', organizer: null, attendees: [], isOnlineMeeting: false, joinUrl: '', platform: null, webLink: '', bodyPreview: '', isCancelled: false },
     ])
 
     await expect(syncOutlookNow('Mary@Outlook.com')).resolves.toBe('graph')
@@ -215,8 +222,9 @@ describe('Outlook send and sync', () => {
       'sent',
     ])
     expect(loadMailbox('sam@outlook.com').every((message) => message.demo)).toBe(true)
-    expect(loadCalendarEvents(maryOwner).map((event) => event.id).sort()).toEqual(['graph-evt', 'local-mary'])
-    expect(loadCalendarEvents(samOwner).map((event) => event.id)).toEqual(['local-sam'])
+    // Outlook events land in the one shared calendar store, for this account only.
+    expect(readCalendarCache(maryOwner).events.map((event) => event.id)).toEqual(['graph-evt'])
+    expect(readCalendarCache(samOwner).events).toEqual([])
     expect(localStorage.getItem('crm-form-draft')).toBe('unsaved opportunity')
     expect(reload).not.toHaveBeenCalled()
   })

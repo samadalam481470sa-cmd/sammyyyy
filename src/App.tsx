@@ -14,6 +14,7 @@ import { OpportunityProfilePage } from '@/pages/OpportunityProfilePage'
 import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
+import { MeetingHistoryPage } from '@/pages/MeetingHistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { OfflineNotice } from '@/components/shared/OfflineNotice'
 
@@ -48,6 +49,7 @@ export default function App() {
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="meetings" element={<MeetingsPage />} />
+              <Route path="meetings/history" element={<MeetingHistoryPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="security" element={<SecurityPage />} />
               <Route path="security/keys" element={<Navigate to="/security" replace />} />

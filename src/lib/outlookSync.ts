@@ -1,9 +1,10 @@
 import { emailOwnerKey, normalizeEmail } from '@/lib/emailIdentity'
-import { loadCalendarEvents, saveCalendarEvents, type CalendarEvent } from '@/lib/meetingCalendar'
+import type { CalendarEvent } from '@/lib/meetingCalendar'
+import { listCalendarRange } from '@/lib/graphCalendar'
+import { replaceCalendarRange } from '@/lib/calendarStore'
 import {
   deltaOutlookFolder,
   forwardOutlookMail,
-  listOutlookEvents,
   listOutlookFolder,
   listOutlookFolderBefore,
   moveOutlookTo,
@@ -128,13 +129,13 @@ async function pullFolder(token: string, folder: MailFolder, deltaLink?: string)
   return { messages, removedIds: [], full: true, deltaLink: null }
 }
 
+/** Background refresh of the one shared Outlook calendar store (Email > Calendar, Meetings, reminders). */
 async function syncCalendar(token: string, account: string): Promise<void> {
-  const events = await listOutlookEvents(token)
-  const owner = emailOwnerKey(account)
-  const local = loadCalendarEvents(owner).filter((event) => !event.id.startsWith('graph-'))
-  const merged = [...local, ...events.filter((event) => !local.some((row) => row.id === event.id))]
-  saveCalendarEvents(owner, merged)
-  window.dispatchEvent(new CustomEvent('newport-calendar-updated'))
+  const now = Date.now()
+  const from = new Date(now - 7 * 86_400_000)
+  const to = new Date(now + 60 * 86_400_000)
+  const events = await listCalendarRange(token, from, to).catch(() => null)
+  if (events) replaceCalendarRange(emailOwnerKey(account), from, to, events)
 }
 
 /** Email of the CRM user logged in to this tab. */
