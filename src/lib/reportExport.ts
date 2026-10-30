@@ -4,6 +4,7 @@
  * static site, where there is no /api/export route.
  */
 import type { Opportunity } from '@/types'
+import { todayDateInput } from '@/lib/calendarDate'
 
 export const CSV_COLUMNS = [
   'projectNumber',
@@ -62,5 +63,5 @@ export function saveFile(name: string, content: string, type: string): void {
 }
 
 export function exportFileName(ext: 'csv' | 'json', now = new Date()): string {
-  return `newport-opportunities-${now.toISOString().slice(0, 10)}.${ext}`
+  return `newport-opportunities-${todayDateInput(now)}.${ext}`
 }

@@ -48,3 +48,14 @@ export function isOverdueUnfinishedTask(task: TaskRecord, now = new Date()): boo
 export function isOnTrackTask(task: TaskRecord, now = new Date()): boolean {
   return isUnfinishedTask(task, now) && !isOverdueDate(task.dueDate, now)
 }
+
+/**
+ * The one overdue-task selector. The Tasks page Overdue pill, the bell, the dashboard and the
+ * audit all read this list, so their counts always match. It counts TASKS, not deals.
+ */
+export function overdueTaskList(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
+  return sortVisibleTasks(
+    tasks.filter((task) => isActiveListTask(task, now) && isOverdueUnfinishedTask(task, now)),
+    now,
+  )
+}

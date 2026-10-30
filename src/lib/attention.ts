@@ -12,43 +12,42 @@ export interface DealWarning {
   detail: string
 }
 
-function hasUnfinishedAction(summary: { nextAction: string | null }): boolean {
-  return Boolean(summary.nextAction?.trim())
+/** Needs Attention applies only to in-progress deals. Every other status never warns. */
+export const ATTENTION_STATUSES: readonly Opportunity['status'][] = ['Active', 'Pending']
+
+export function isAttentionEligible(opportunity: Pick<Opportunity, 'status'>): boolean {
+  return (ATTENTION_STATUSES as readonly string[]).includes(opportunity.status)
 }
 
+/**
+ * One warning per deal at most, from linked unfinished tasks only:
+ * red when the canonical task is overdue, red when there is no unfinished linked task,
+ * navy when the canonical task is due today or within the next 7 calendar days.
+ */
 export function dealWarnings(
   opportunity: Opportunity,
   tasks: TaskRecord[],
   now = new Date(),
 ): DealWarning[] {
+  if (!isAttentionEligible(opportunity)) return []
   const summary = resolveNextAction(opportunity, tasks, now)
-  const unfinished = hasUnfinishedAction(summary)
-  const overdue = unfinished && isOverdueDate(summary.nextActionDate, now)
-  const upcoming = unfinished && isWithinNextDays(summary.nextActionDate, 7, now)
-  const activeMissing = opportunity.status === 'Active' && !unfinished
-
-  const warnings: DealWarning[] = []
-  if (overdue) {
-    warnings.push({
-      level: 'red',
-      reason: 'Next action overdue',
-      detail: `${summary.nextAction} was due ${formatDate(summary.nextActionDate)}`,
-    })
-  } else if (activeMissing) {
-    warnings.push({
-      level: 'red',
-      reason: 'No next action assigned',
-      detail: 'No unfinished next action on this active opportunity',
-    })
+  if (!summary.taskId) {
+    return [
+      {
+        level: 'red',
+        reason: 'No next action assigned',
+        detail: 'No unfinished follow-up task is linked to this deal',
+      },
+    ]
   }
-  if (!overdue && !activeMissing && upcoming) {
-    warnings.push({
-      level: 'navy',
-      reason: 'Upcoming deadline within 7 days',
-      detail: `${summary.nextAction} is due ${formatDate(summary.nextActionDate)}`,
-    })
+  const label = summary.nextAction || 'Task'
+  if (isOverdueDate(summary.nextActionDate, now)) {
+    return [{ level: 'red', reason: 'Next action overdue', detail: `${label} was due ${formatDate(summary.nextActionDate)}` }]
   }
-  return warnings
+  if (isWithinNextDays(summary.nextActionDate, 7, now)) {
+    return [{ level: 'navy', reason: 'Upcoming deadline within 7 days', detail: `${label} is due ${formatDate(summary.nextActionDate)}` }]
+  }
+  return []
 }
 
 export function primaryDealWarning(

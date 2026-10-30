@@ -16,6 +16,8 @@ import {
 } from '@/data/mockModules'
 import { coverOpportunities, mergeMissingById, sprintExtraTasks } from '@/data/sprintSeed'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
+import { seedV2Contacts, seedV2Opportunities, seedV2Tasks } from '@/data/sprintSeedV2'
+import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 
 /** 1 = device records with no portable marker. 2 = current portable document. */
 export const SCHEMA_VERSION = 2
@@ -167,6 +169,7 @@ export function mergeSeedRecords(doc: PortableDatabase, seeds: SeedSnapshot): Po
 export function migrateStoredCrm(
   stored: PortableCollections & { schemaVersion: number | null },
   seeds: SeedSnapshot,
+  owner?: string,
 ): { database: PortableDatabase; contentChanged: boolean } {
   const migrated = applySchemaMigrations({
     schemaVersion: stored.schemaVersion ?? 1,
@@ -178,7 +181,10 @@ export function migrateStoredCrm(
     documents: stored.documents,
     activity: stored.activity,
   })
-  const database = mergeSeedRecords(migrated, seeds)
+  // With an owner, each seed row is added once only (see seedLedger); deletions are never undone.
+  const database = owner
+    ? mergeSeedRecordsForOwner(migrated, seeds, owner, stored.schemaVersion != null)
+    : mergeSeedRecords(migrated, seeds)
   return { database, contentChanged: collectionsDiffer(stored, database) }
 }
 
@@ -304,9 +310,9 @@ export function bundledSeedSnapshot(): SeedSnapshot {
   cachedSeeds = {
     schemaVersion: SCHEMA_VERSION,
     appVersion: APP_VERSION,
-    opportunities,
-    tasks: mergeMissingById(mockTasksDb, sprintExtraTasks()),
-    contacts: coverOpportunities(mockContacts, opportunities),
+    opportunities: [...opportunities, ...seedV2Opportunities],
+    tasks: [...mergeMissingById(mockTasksDb, sprintExtraTasks()), ...seedV2Tasks],
+    contacts: [...coverOpportunities(mockContacts, opportunities), ...seedV2Contacts],
     documents: mockDocuments,
     activity: [],
   }
@@ -353,7 +359,7 @@ export function persistMigratedDatabase(
   seeds: SeedSnapshot = bundledSeedSnapshot(),
 ): PortableDatabase {
   const version = readStoredSchemaVersion(owner)
-  const { database, contentChanged } = migrateStoredCrm({ ...loaded, schemaVersion: version }, seeds)
+  const { database, contentChanged } = migrateStoredCrm({ ...loaded, schemaVersion: version }, seeds, owner)
   if (contentChanged) writeDeviceCollections(owner, database)
   if (version !== SCHEMA_VERSION) writeStoredSchemaVersion(owner, SCHEMA_VERSION)
   return database

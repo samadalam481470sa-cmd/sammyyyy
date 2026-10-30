@@ -42,7 +42,7 @@ import { FileAttachmentField } from '@/components/documents/FileAttachmentField'
 import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
-import { nowIso } from '@/lib/calendarDate'
+import { todayDateInput } from '@/lib/calendarDate'
 import { useEditorGuard, type OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import { registerPendingCommit } from '@/lib/userVault'
 
@@ -249,7 +249,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           uploadedBy:
             related.find((doc) => doc.id === nextEditingId)?.uploadedBy || userName || 'Newport user',
           uploadedAt:
-            related.find((doc) => doc.id === nextEditingId)?.uploadedAt || nowIso().slice(0, 10),
+            related.find((doc) => doc.id === nextEditingId)?.uploadedAt || todayDateInput(),
           fileName: attachedName,
           fileSize: attachedSize,
           storage,

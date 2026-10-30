@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { todayDateInput } from '@/lib/calendarDate'
 import type { Opportunity, OpportunityStatus, AcquisitionStage } from '@/types'
 
 export type ImportRow = Record<string, string | number | null>
@@ -462,7 +463,7 @@ export function rowToOpportunityDraft(
   if (hasMappedSource(row, 'nextActionDate')) {
     out.nextActionDate = row.nextActionDate != null ? String(row.nextActionDate).slice(0, 10) : null
   } else if (!only) {
-    out.nextActionDate = new Date().toISOString().slice(0, 10)
+    out.nextActionDate = todayDateInput()
   }
 
   if (hasMappedSource(row, 'priority')) {

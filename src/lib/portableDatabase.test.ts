@@ -319,7 +319,7 @@ describe('portable database', () => {
     const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string }
     expect(APP_VERSION).toBe(pkg.version)
     const seeds = bundledSeedSnapshot()
-    expect(seeds.opportunities).toHaveLength(42)
+    expect(seeds.opportunities).toHaveLength(62)
     expect(seeds.tasks.some((row) => row.id === 'task-sprint-1')).toBe(true)
     const file = JSON.parse(readFileSync(resolve(root, 'public/database/newport-crm.json'), 'utf8')) as unknown
     expect(file).toEqual(JSON.parse(JSON.stringify(seeds)))
@@ -332,6 +332,6 @@ describe('portable database', () => {
     const fetched = await fetchSeedSnapshot('https://samadalam481470sa-cmd.github.io/sammyyyy/', fetchImpl)
     expect(calls[0]?.url).toBe('https://samadalam481470sa-cmd.github.io/sammyyyy/database/newport-crm.json')
     expect(calls[0]?.init?.cache).toBe('no-store')
-    expect(fetched?.opportunities).toHaveLength(42)
+    expect(fetched?.opportunities).toHaveLength(62)
   })
 })

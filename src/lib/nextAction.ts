@@ -33,19 +33,34 @@ export function unfinishedTasksForOpportunity(
   return tasks.filter((task) => task.opportunityId === opportunityId && isUnfinishedTask(task, now))
 }
 
-/** Oldest overdue, then earliest upcoming, then undated actionable tasks. */
-export function pickMostUrgentTask(tasks: TaskRecord[], now = new Date()): TaskRecord | null {
-  if (!tasks.length) return null
-  return [...tasks].sort((a, b) => {
-    const byDate = dueDateSortValue(a.dueDate, now) - dueDateSortValue(b.dueDate, now)
-    if (byDate !== 0) return byDate
-    const pri = { A: 0, B: 1, C: 2 }
-    const ap = pri[asPriority(a.priority)] - pri[asPriority(b.priority)]
-    if (ap !== 0) return ap
-    return (a.action || '').localeCompare(b.action || '')
-  })[0] ?? null
+const PRIORITY_RANK = { A: 0, B: 1, C: 2 } as const
+
+/**
+ * Canonical order for a deal's open tasks: earliest due date first, undated last,
+ * then priority A, B, C, then task ID. The order never depends on list position.
+ */
+export function compareCanonicalTasks(a: TaskRecord, b: TaskRecord, now = new Date()): number {
+  const ad = dueDateSortValue(a.dueDate, now)
+  const bd = dueDateSortValue(b.dueDate, now)
+  if (ad !== bd) {
+    if (!Number.isFinite(ad)) return 1
+    if (!Number.isFinite(bd)) return -1
+    return ad - bd
+  }
+  const ap = PRIORITY_RANK[asPriority(a.priority)] - PRIORITY_RANK[asPriority(b.priority)]
+  if (ap !== 0) return ap
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+export function pickMostUrgentTask(tasks: TaskRecord[], now = new Date()): TaskRecord | null {
+  if (!tasks.length) return null
+  return [...tasks].sort((a, b) => compareCanonicalTasks(a, b, now))[0] ?? null
+}
+
+/**
+ * The displayed next action comes only from linked unfinished tasks.
+ * A deal with no unfinished linked task has no next action, so screens and alerts agree.
+ */
 export function resolveNextAction(
   opportunity: Opportunity,
   tasks: TaskRecord[],
@@ -64,8 +79,8 @@ export function resolveNextAction(
     }
   }
   return {
-    nextAction: preserved.nextActionManual ?? preserved.nextAction ?? null,
-    nextActionDate: preserved.nextActionDateManual ?? preserved.nextActionDate ?? null,
+    nextAction: null,
+    nextActionDate: null,
     priority: preserved.priorityManual ?? preserved.priority,
     taskId: null,
     source: 'manual',

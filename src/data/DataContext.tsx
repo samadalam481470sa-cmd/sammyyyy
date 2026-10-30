@@ -45,8 +45,8 @@ import {
   DATABASE_FILE_ERROR,
   downloadPortableDatabase,
   fetchSeedSnapshot,
-  importPortableText,
-  mergeSeedRecords,
+  parsePortableDatabase,
+  applySchemaMigrations,
   persistMigratedDatabase,
   sameRecordIds,
   SCHEMA_VERSION,
@@ -57,9 +57,9 @@ import {
 import { registerVaultFlush } from '@/lib/userVault'
 import { demoProjectNumber } from '@/lib/demoAliases'
 import { sessionOwnerKey } from '@/lib/ownerKey'
-import { crmUsersForSession, findCrmUserById, type CrmUser } from '@/lib/crmUsers'
+import { crmUsersForSession, findCrmUserById, findCrmUserByName, type CrmUser } from '@/lib/crmUsers'
 import { nextProjectNumber } from '@/lib/dealId'
-import { nowIso } from '@/lib/calendarDate'
+import { nowIso, todayDateInput } from '@/lib/calendarDate'
 import { isLocalPersistence } from '@/lib/persistenceMode'
 import { deleteDocumentBlob } from '@/lib/documentFileStore'
 import {
@@ -75,6 +75,9 @@ import {
   withManualNextActionOverride,
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
+import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
+import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
+import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
   documentActivity,
   opportunityCreateActivity,
@@ -431,7 +434,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const contacts = Array.isArray(vault.contacts)
               ? (vault.contacts as ContactRecord[])
               : loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts)
-            const merged = mergeSeedRecords(
+            const merged = mergeSeedRecordsForOwner(
               buildPortableDatabase(
                 {
                   opportunities: vault.opportunities as Opportunity[],
@@ -443,6 +446,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 vault.updatedAt,
               ),
               bundledSeedSnapshot(),
+              owner,
             )
             seedAddedOnPull.current = !(
               sameRecordIds(merged.opportunities, vault.opportunities as { id: string }[]) &&
@@ -506,6 +510,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Development-only consistency check: window.__newportAudit() prints the page-level counts.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const w = window as unknown as { __newportAudit?: () => unknown }
+    w.__newportAudit = () => runConsistencyAudit(oppsRef.current, tasksRef.current)
+    return () => {
+      delete w.__newportAudit
+    }
+  }, [])
 
   // Other people's changes arrive every 10 seconds (and right away when the window regains focus).
   useEffect(() => {
@@ -586,7 +600,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           },
           new Date().toISOString(),
         )
-        const merged = mergeSeedRecords(current, seed)
+        const merged = mergeSeedRecordsForOwner(current, seed, owner)
         const unchanged =
           sameRecordIds(merged.opportunities, current.opportunities) &&
           sameRecordIds(merged.tasks, current.tasks) &&
@@ -609,14 +623,44 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const existing = oppsRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Opportunity not found')
       let taskList = tasksRef.current
+      let createdFollowUp: TaskRecord | null = null
       if (nextActionFieldsTouched(patch)) {
         const synced = syncDrivingTaskFromOpportunityPatch(existing, taskList, patch)
         taskList = synced.tasks
         if (synced.drivingId) persistTasks(taskList)
+        else if (patch.nextAction?.trim()) {
+          // No open task drives this deal yet: the typed next action becomes a real linked task,
+          // because alerts and the displayed next action read linked tasks only.
+          const stamp = nowIso()
+          const ownerRow = findCrmUserByName(existing.dealLead, users)
+          createdFollowUp = {
+            id: `task_local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            priority: patch.priority ?? existing.priority ?? 'B',
+            action: patch.nextAction.trim(),
+            opportunityId: existing.id,
+            projectName: patch.projectName ?? existing.projectName,
+            owner: ownerRow?.name ?? existing.dealLead ?? '',
+            ownerId: ownerRow?.id ?? null,
+            dueDate: patch.nextActionDate ?? null,
+            initialDueDate: patch.nextActionDate ?? null,
+            dueDateHistory: [],
+            status: 'Open',
+            notes: '',
+            completedAt: null,
+            archivedAt: null,
+            deletedAt: null,
+            createdAt: stamp,
+            updatedAt: stamp,
+          }
+          taskList = [createdFollowUp, ...taskList]
+          persistTasks(taskList)
+        }
       }
+      const stamp = nowIso()
       const nextPatch: OpportunityUpdate = {
         ...withManualNextActionOverride(patch),
-        lastActivityDate: nowIso(),
+        ...applyStatusChange(existing, patch.status, stamp),
+        lastActivityDate: stamp,
       }
       const mergedBase = { ...existing, ...nextPatch }
       const merged = decorateOpportunities([mergedBase], taskList)[0]
@@ -624,6 +668,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         persistOpps(oppsRef.current.map((row) => (row.id === id ? merged : row)))
         logChange('opportunity', id, 'update', Object.keys(patch))
         pushActivity(opportunityUpdateActivity(user?.name ?? null, existing, patch))
+        if (createdFollowUp) pushActivity(taskActivity(user?.name ?? null, createdFollowUp, 'created'))
         return merged
       }
       const updated = await updateOpportunity(id, nextPatch)
@@ -632,7 +677,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pushActivity(opportunityUpdateActivity(user?.name ?? null, existing, patch))
       return decorated
     },
-    [owner, user],
+    [owner, user, users],
   )
 
   const createOpportunity = useCallback(
@@ -673,6 +718,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           attentionReasons: [],
           outstandingItems: draft.outstandingItems ?? [],
           diligenceNotes: draft.diligenceNotes ?? '',
+          createdAt: nowIso(),
+          ...initialStatusHistory(draft.status ?? 'Pending', nowIso()),
         }
         const created = decorateOpportunities([createdBase], tasksRef.current)[0]
         persistOpps([...oppsRef.current, created])
@@ -691,6 +738,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           {
             ...created,
             projectNumber: created.projectNumber ?? projectNumber,
+            createdAt: created.createdAt ?? nowIso(),
+            ...(created.statusHistory?.length ? {} : initialStatusHistory(created.status, created.createdAt ?? nowIso())),
             nextActionManual: created.nextAction ?? null,
             nextActionDateManual: created.nextActionDate ?? null,
             priorityManual: created.priority,
@@ -747,6 +796,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const existing = tasksRef.current.find((row) => row.id === id)
       if (!existing) throw new Error('Task not found')
       let merged: TaskRecord = { ...existing, ...patch, updatedAt: nowIso() }
+      if (patch.dueDate !== undefined && (patch.dueDate ?? null) !== (existing.dueDate ?? null)) {
+        merged = {
+          ...merged,
+          initialDueDate: existing.initialDueDate !== undefined ? existing.initialDueDate : (existing.dueDate ?? null),
+          dueDateHistory: [
+            ...(existing.dueDateHistory ?? []),
+            { from: existing.dueDate ?? null, to: patch.dueDate ?? null, at: nowIso() },
+          ],
+        }
+      }
       if (patch.status && patch.status !== existing.status) {
         merged = applyTaskStatusTransition({ ...existing, ...patch }, patch.status)
       }
@@ -791,6 +850,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ? oppsRef.current.find((row) => row.id === draft.opportunityId)
         : null
       const ownerRow = findCrmUserById(draft.ownerId ?? null, users)
+      if (!draft.dueDate) throw new Error('Choose a due date for the new task.')
       const record: TaskRecord = {
         id: `task_local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         priority: draft.priority ?? 'B',
@@ -800,6 +860,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         owner: ownerRow?.name ?? draft.owner ?? '',
         ownerId: ownerRow?.id ?? draft.ownerId ?? null,
         dueDate: draft.dueDate ?? null,
+        initialDueDate: draft.dueDate ?? null,
+        dueDateHistory: [],
         status: draft.status ?? 'Open',
         notes: draft.notes ?? '',
         completedAt: null,
@@ -901,7 +963,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         confidentiality: draft.confidentiality ?? 'Confidential',
         uploadedBy: draft.uploadedBy || user?.name || '',
         link: draft.link ?? '',
-        uploadedAt: draft.uploadedAt || nowIso().slice(0, 10),
+        uploadedAt: draft.uploadedAt || todayDateInput(),
         notes: draft.notes ?? '',
         fileType: draft.fileType ?? '',
         createdAt: nowIso(),
@@ -964,14 +1026,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } catch {
       return DATABASE_FILE_ERROR
     }
-    let result = importPortableText(raw, bundledSeedSnapshot())
-    if (!result.ok) return result.error
+    const parsed = parsePortableDatabase(raw)
+    if (!parsed.ok) return parsed.error
+    let result: { ok: true; database: PortableDatabase } = {
+      ok: true,
+      database: mergeSeedRecordsForOwner(applySchemaMigrations(parsed.database), bundledSeedSnapshot(), owner),
+    }
     if (fetchedSeedRef.current) {
-      result = { ok: true, database: mergeSeedRecords(result.database, fetchedSeedRef.current) }
+      result = { ok: true, database: mergeSeedRecordsForOwner(result.database, fetchedSeedRef.current, owner) }
     }
     writeDatabaseRef.current(result.database, true)
     return null
-  }, [])
+  }, [owner])
 
   const value = useMemo(
     () => ({

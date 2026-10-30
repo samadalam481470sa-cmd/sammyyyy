@@ -23,12 +23,15 @@ describe('Azure Teams meetings', () => {
       attendeeEmail: 'ada@outlook.com',
       attendeeName: 'Ada',
     })
+    // 15:00 is the user's local wall clock; Graph gets the matching UTC instant.
+    const start = new Date(2026, 9, 24, 15, 0).toISOString().slice(0, 19)
+    const end = new Date(2026, 9, 24, 15, 30).toISOString().slice(0, 19)
     expect(body).toMatchObject({
       subject: 'Diligence call',
       isOnlineMeeting: true,
       onlineMeetingProvider: 'teamsForBusiness',
-      start: { dateTime: '2026-10-24T15:00:00', timeZone: 'UTC' },
-      end: { dateTime: '2026-10-24T15:30:00', timeZone: 'UTC' },
+      start: { dateTime: start, timeZone: 'UTC' },
+      end: { dateTime: end, timeZone: 'UTC' },
     })
   })
 

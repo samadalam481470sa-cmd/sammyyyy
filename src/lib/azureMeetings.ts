@@ -1,4 +1,5 @@
 import { getGraphAccessToken } from '@/auth/msal'
+import { todayDateInput } from '@/lib/calendarDate'
 
 export const AZURE_MEETING_SCOPES = ['User.Read', 'Calendars.ReadWrite', 'OnlineMeetings.ReadWrite']
 
@@ -41,7 +42,8 @@ function stamp(date: string, time: string): { start: string; end: string } | nul
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null
   const [year, month, day] = date.split('-').map(Number)
   const [hour, minute] = time.split(':').map(Number)
-  const start = new Date(Date.UTC(year, month - 1, day, hour, minute))
+  // The picked date and time are the user's local wall clock; Graph receives the true UTC instant.
+  const start = new Date(year, month - 1, day, hour, minute)
   const end = new Date(start.getTime() + 30 * 60 * 1000)
   const fmt = (value: Date) => value.toISOString().slice(0, 19)
   return { start: fmt(start), end: fmt(end) }
@@ -125,8 +127,8 @@ export async function createAzureTeamsMeeting(
   const fetchImpl = deps?.fetchImpl ?? fetch
   const now = deps?.now ?? new Date()
   const end = new Date(now.getTime() + 30 * 60 * 1000)
-  const date = now.toISOString().slice(0, 10)
-  const time = now.toISOString().slice(11, 16)
+  const date = todayDateInput(now)
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const eventBody = outlookEventBody({
     title: input.subject,
     date,

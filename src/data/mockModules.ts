@@ -39,6 +39,10 @@ export interface TaskRecord {
   deletedAt?: string | null
   createdAt?: string
   updatedAt?: string
+  /** Due date recorded when the task was created. Never changes afterwards. */
+  initialDueDate?: string | null
+  /** Each saved due date change, oldest first. */
+  dueDateHistory?: { from: string | null; to: string | null; at: string }[]
 }
 
 export interface SourceRecord {

@@ -69,6 +69,18 @@ export interface Opportunity {
   attentionReasons: AttentionReason[]
   outstandingItems?: string[]
   diligenceNotes?: string
+  /** When the record was first created. Missing on older records with no trustworthy timestamp. */
+  createdAt?: string
+  /** First transition into Completed. Stays set if the deal is later reversed (see statusHistory). */
+  completedAt?: string | null
+  /** Recorded status changes, oldest first. Only real saved transitions are written here. */
+  statusHistory?: StatusChange[]
+}
+
+export interface StatusChange {
+  from: OpportunityStatus | null
+  to: OpportunityStatus
+  at: string
 }
 
 export interface PriorityTask {
@@ -160,5 +172,7 @@ export type OpportunityUpdate = Partial<
     | 'priorityManual'
     | 'nextActionTaskId'
     | 'lastActivityDate'
+    | 'completedAt'
+    | 'statusHistory'
   >
 >

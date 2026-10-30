@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { todayDateInput } from '@/lib/calendarDate'
 import {
   Bell,
   CalendarDays,
@@ -653,7 +654,7 @@ export function MeetingsPage() {
         opportunityId: opportunityId || null,
         projectName: sanitizeText(projectName || customer.projectName, FIELD_LIMITS.project),
         status: 'Active',
-        lastContactDate: new Date().toISOString().slice(0, 10),
+        lastContactDate: todayDateInput(),
         notes: [
           sanitizeMultiline(customer.notes, FIELD_LIMITS.notes),
           summary && `Call summary: ${sanitizeMultiline(summary, FIELD_LIMITS.summary)}`,

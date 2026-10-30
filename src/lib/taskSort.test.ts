@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TaskRecord } from '@/data/mockModules'
 import { sortVisibleTasks } from './taskSort'
 
-const NOW = new Date('2026-10-16T12:00:00-04:00')
+const NOW = new Date(2026, 9, 16, 12, 0, 0) // Oct 16, 2026, noon local
 
 function task(partial: Partial<TaskRecord>): TaskRecord {
   return {

@@ -21,11 +21,12 @@ function task(partial: Partial<TaskRecord>): TaskRecord {
 }
 
 describe('nextAction reconciliation', () => {
-  it('keeps the manual next action when there are no unfinished linked tasks', () => {
+  it('shows no next action when there are no unfinished linked tasks (typed text never drives it)', () => {
     const opp = mockOpportunities[0]
     const summary = resolveNextAction(opp, [], NOW)
     expect(summary.source).toBe('manual')
-    expect(summary.nextAction).toBe(opp.nextAction)
+    expect(summary.nextAction).toBeNull()
+    expect(summary.taskId).toBeNull()
   })
 
   it('uses the oldest overdue unfinished task as the opportunity summary', () => {
