@@ -120,3 +120,17 @@ describe('Outlook calendar', () => {
     expect(merged.map((e) => e.id)).toEqual(['a', 'b'])
   })
 })
+
+describe('Outlook calendar throttling', () => {
+  it('waits and retries when Microsoft returns 429', async () => {
+    let calls = 0
+    const fetchImpl = async () => {
+      calls += 1
+      if (calls === 1) return new Response('', { status: 429, headers: { 'Retry-After': '0' } })
+      return new Response(JSON.stringify({ value: [{ id: 'ok', start: { dateTime: '2026-11-01T15:00:00', timeZone: 'UTC' } }] }))
+    }
+    const list = await listCalendarRange('t', new Date('2026-11-01T00:00:00Z'), new Date('2026-11-30T00:00:00Z'), fetchImpl)
+    expect(list.map((e) => e.id)).toEqual(['ok'])
+    expect(calls).toBe(2)
+  })
+})

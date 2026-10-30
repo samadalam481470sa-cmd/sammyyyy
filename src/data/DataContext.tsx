@@ -77,6 +77,8 @@ import {
 import { withLiveAttention } from '@/lib/attention'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
 import { applyDataFixes } from '@/lib/dataFixes'
+import { CRM_MEETINGS_CHANGED, loadCrmMeetings, saveCrmMeetings } from '@/lib/crmMeetings'
+import type { CrmMeeting } from '@/types/crmMeeting'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
@@ -263,6 +265,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     contacts: loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts),
     activity: activityRef.current,
     documentTypes: storedCustomTypes().map((name) => ({ id: name.toLowerCase(), name })),
+    // Meeting history is shared with every approved workspace user (Newport decision, Oct 30, 2026).
+    meetings: loadCrmMeetings(owner),
   })
 
   const snapshotKeys = () => {
@@ -337,6 +341,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     )
     applyingRemote.current = true
     try {
+      saveCrmMeetings(owner, list<CrmMeeting>('meetings'))
       writeDatabaseRef.current(database, false)
     } finally {
       applyingRemote.current = false
@@ -547,6 +552,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (detail?.resource === 'contacts' && detail.source !== -1) pushCloud()
     }
     const onTypes = () => pushCloud()
+    const onMeetings = () => pushCloud()
     const onState = () => {
       if (!isWorkspaceShared()) return
       if (!sharedRef.current) void refresh()
@@ -555,12 +561,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', poll)
     window.addEventListener(RESOURCE_CHANGED, onLocalChange)
     window.addEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
+    window.addEventListener(CRM_MEETINGS_CHANGED, onMeetings)
     window.addEventListener(WORKSPACE_STATE_EVENT, onState)
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('focus', poll)
       window.removeEventListener(RESOURCE_CHANGED, onLocalChange)
       window.removeEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
+      window.removeEventListener(CRM_MEETINGS_CHANGED, onMeetings)
       window.removeEventListener(WORKSPACE_STATE_EVENT, onState)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

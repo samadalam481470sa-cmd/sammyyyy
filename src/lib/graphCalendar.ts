@@ -209,12 +209,19 @@ export async function listCalendarRange(
     `&endDateTime=${encodeURIComponent(to.toISOString())}&$top=100&$orderby=start/dateTime&$select=${SELECT}`
   const out: OutlookEvent[] = []
   for (let page = 0; url && page < 5; page += 1) {
-    let res: Response
-    try {
-      res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Prefer: 'outlook.timezone="UTC"' } })
-    } catch {
-      throw new CalendarError('network', 'The calendar could not be reached. Check the connection and try again.')
+    let res: Response | null = null
+    // Microsoft throttles bursts (429/503). Wait as told (Retry-After, at most 10 s) and try up to 3 times.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}`, Prefer: 'outlook.timezone="UTC"' } })
+      } catch {
+        throw new CalendarError('network', 'The calendar could not be reached. Check the connection and try again.')
+      }
+      if (res.status !== 429 && res.status !== 503) break
+      const wait = Math.min(10, Number(res.headers.get('Retry-After')) || 2 ** attempt)
+      if (attempt < 2) await new Promise((r) => setTimeout(r, wait * 1000))
     }
+    if (!res) throw new CalendarError('network', 'The calendar could not be reached.')
     if (!res.ok) throw await readGraphError(res)
     const json = (await res.json()) as { value?: GraphEventRow[]; '@odata.nextLink'?: string }
     for (const row of json.value ?? []) {

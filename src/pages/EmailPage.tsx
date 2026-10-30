@@ -35,6 +35,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ensureMsal } from '@/auth/msal'
 import { useAuth } from '@/auth/AuthContext'
 import { EmailCalendar } from '@/components/email/EmailCalendar'
+import { disableSenderPhotos, enableSenderPhotos, senderPhotosEnabled, useSenderPhoto } from '@/lib/senderPhotos'
 import { AddToCalendarDialog } from '@/components/email/AddToCalendarDialog'
 import { MailBody } from '@/components/email/MailBody'
 import { CapabilitiesDialog, MailboxCheckDialog, ShortcutsDialog } from '@/components/email/MailDialogs'
@@ -177,6 +178,17 @@ function avatarTone(value: string): string {
   let hash = 0
   for (const ch of value) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
   return tones[hash % tones.length]
+}
+
+function SenderAvatar({ address, label, size }: { address: string; label: string; size: 'sm' | 'md' }) {
+  const photo = useSenderPhoto(address || null)
+  const box = size === 'sm' ? 'mt-0.5 h-8 w-8 text-xs' : 'h-10 w-10 text-sm'
+  if (photo) return <img src={photo} alt="" aria-hidden="true" className={`${box} shrink-0 rounded-full object-cover`} />
+  return (
+    <span className={`inline-flex ${box} shrink-0 items-center justify-center rounded-full font-semibold text-white ${avatarTone(address || label)}`} aria-hidden="true">
+      {initialsOf(label)}
+    </span>
+  )
 }
 
 function senderLabel(message: MailMessage): string {
@@ -479,6 +491,7 @@ export function EmailPage() {
   // ── actions ───────────────────────────────────────────────────────────────
   // Open a message requested from the notification bell (?open=<id>); opening marks it read.
   const [params, setParams] = useSearchParams()
+  const [photosOn, setPhotosOn] = useState(() => senderPhotosEnabled())
   const [view, setView] = useState<'mail' | 'calendar'>(() => (params.get('view') === 'calendar' ? 'calendar' : 'mail'))
   const openParam = params.get('open')
   // The bell's "View all in Email" arrives as ?filter=unread: show the Inbox with Unread selected.
@@ -1312,9 +1325,7 @@ export function EmailPage() {
                       onClick={() => openMessage(message)}
                       className="flex min-w-0 flex-1 gap-3 py-2.5 pr-4 text-left"
                     >
-                      <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarTone(label)}`}>
-                        {initialsOf(label)}
-                      </span>
+                      <SenderAvatar address={message.folder === 'sent' || message.folder === 'drafts' ? '' : message.from} label={label} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="flex items-baseline justify-between gap-2">
                           <span className={`truncate text-sm ${message.read ? '' : 'font-semibold'}`}>
@@ -1482,9 +1493,7 @@ export function EmailPage() {
                   </p>
                 )}
                 <div className="mt-4 flex items-start gap-3">
-                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarTone(selected.from || account)}`} aria-hidden="true">
-                    {initialsOf(senderDisplayName(selected) || account)}
-                  </span>
+                  <SenderAvatar address={selected.from} label={senderDisplayName(selected) || account} size="md" />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <p className="truncate text-sm font-semibold">
@@ -1583,6 +1592,25 @@ export function EmailPage() {
             </button>
           )}
           {syncedAt && <span>Last checked {new Date(syncedAt).toLocaleTimeString()}</span>}
+          <button
+            type="button"
+            data-testid="email-sender-photos"
+            onClick={() => {
+              if (photosOn) {
+                disableSenderPhotos()
+                setPhotosOn(false)
+                setStatus('Sender photos turned off. Initials are shown.')
+                return
+              }
+              void enableSenderPhotos().then((ok) => {
+                setPhotosOn(ok)
+                setStatus(ok ? 'Sender photos on. Photos appear for people in your Microsoft 365 directory; others keep initials.' : 'Microsoft did not allow sender photos for this account. Initials are shown.')
+              })
+            }}
+            className="inline-flex items-center gap-1 hover:underline"
+          >
+            {photosOn ? 'Hide sender photos' : 'Show sender photos'}
+          </button>
           <button type="button" onClick={() => setDialog('capabilities')} className="inline-flex items-center gap-1 hover:underline">
             <Info className="h-3 w-3" /> Limits
           </button>

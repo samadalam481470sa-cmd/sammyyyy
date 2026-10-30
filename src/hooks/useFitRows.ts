@@ -7,7 +7,7 @@ import { useEffect, useState, type RefObject } from 'react'
  */
 export function useFitRows(
   ref: RefObject<HTMLElement | null>,
-  { rowHeight, headerHeight = 41, min = 5, max = 50, fallback = 12, rowSelector = 'tbody tr', gap = 0 }: {
+  { rowHeight, headerHeight = 41, min = 5, max = 50, fallback = 12, rowSelector = 'tbody tr, [data-card-row]', gap = 0 }: {
     rowHeight: number
     headerHeight?: number
     /** Element whose height is one row (tables use the first body row). */
@@ -27,7 +27,8 @@ export function useFitRows(
       const height = el.clientHeight
       if (!height) return
       // Prefer the real rendered sizes; fall back to the given estimates before rows exist.
-      const measured = el.querySelector(rowSelector)?.getBoundingClientRect().height
+      // First row that is actually shown (phone cards and desktop table rows share the selector).
+      const measured = [...el.querySelectorAll(rowSelector)].map((n) => n.getBoundingClientRect().height).find((h) => h > 0)
       const row = (measured || rowHeight) + gap
       const head = el.querySelector('thead')?.getBoundingClientRect().height ?? headerHeight
       const fit = Math.floor((height - head + gap) / row)

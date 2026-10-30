@@ -15,7 +15,7 @@ import { meetingTitle, type CrmMeeting } from '@/types/crmMeeting'
 const DAY = 86_400_000
 
 /**
- * Meetings: the signed-in user's Outlook calendar, upcoming meetings, private CRM meeting history,
+ * Meetings: the signed-in user's Outlook calendar, upcoming meetings, team CRM meeting history,
  * and the transcript / AI summary workspace. Calls happen in Teams or Zoom, not in this page.
  */
 export function MeetingsPage() {
@@ -28,10 +28,10 @@ export function MeetingsPage() {
   const [adding, setAdding] = useState(false)
   const { from, to } = useMemo(() => monthRange(anchor), [anchor])
   const month = useOutlookCalendar(from, to)
-  const [upFrom, upTo] = useMemo(() => {
+  const [[upFrom, upTo]] = useState(() => {
     const now = new Date()
-    return [new Date(now.getFullYear(), now.getMonth(), now.getDate()), new Date(now.getTime() + 60 * DAY)]
-  }, [])
+    return [now, new Date(now.getTime() + 60 * DAY)] as const
+  })
   const upcomingCal = useOutlookCalendar(upFrom, upTo)
 
   const savedByEvent = useMemo(() => new Map(api.meetings.filter((m) => m.outlookEventId).map((m) => [m.outlookEventId!, m])), [api.meetings])
@@ -40,10 +40,10 @@ export function MeetingsPage() {
     [api.meetings],
   )
 
-  const upcoming = useMemo(() => {
-    const now = Date.now()
-    return upcomingCal.events.filter((e) => new Date(e.end).getTime() >= now).sort((a, b) => a.start.localeCompare(b.start))
-  }, [upcomingCal.events])
+  const upcoming = useMemo(
+    () => upcomingCal.events.filter((e) => new Date(e.end).getTime() >= upFrom.getTime()).sort((a, b) => a.start.localeCompare(b.start)),
+    [upcomingCal.events, upFrom],
+  )
   const dayEvents = useMemo(
     () => (selectedDay ? month.events.filter((e) => localDayOf(e.start) === selectedDay).sort((a, b) => a.start.localeCompare(b.start)) : []),
     [month.events, selectedDay],
@@ -102,7 +102,7 @@ export function MeetingsPage() {
           <div className="flex items-center justify-between border-b border-border px-5 py-3">
             <div>
               <h2 className="font-brand text-lg font-bold text-navy-900">Meeting History</h2>
-              <p className="text-xs text-ink-muted">Saved meetings linked to a project. Visible only to you.</p>
+              <p className="text-xs text-ink-muted">Saved meetings linked to a project. Shared with your approved Newport team.</p>
             </div>
             <button type="button" onClick={() => navigate('/meetings/history')} className="text-sm font-semibold text-accent hover:underline" data-testid="meeting-history-view-all">
               View All

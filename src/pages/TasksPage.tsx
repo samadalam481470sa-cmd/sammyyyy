@@ -17,6 +17,7 @@ import { WarningTriangle } from '@/components/shared/WarningTriangle'
 import { TaskEditor } from '@/components/tasks/TaskEditor'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import { paginate } from '@/lib/paginate'
+import { usePageFor } from '@/hooks/usePageFor'
 import { useFitRows } from '@/hooks/useFitRows'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
@@ -44,7 +45,7 @@ export function TasksPage() {
   const [projectFilter, setProjectFilter] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageFor(JSON.stringify([search, listFilter, projectFilter, ownerFilter]))
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -118,9 +119,6 @@ export function TasksPage() {
     return sortVisibleTasks(rows)
   }, [tasks, search, opportunities, listFilter, projectFilter, ownerFilter])
 
-  useEffect(() => {
-    setPage(1)
-  }, [search, listFilter, projectFilter, ownerFilter])
   const view = paginate(activeTasks, page, pageSize)
 
   const setPill = (value: TaskListFilter) => {
@@ -309,7 +307,27 @@ export function TasksPage() {
         <div className={`flex min-h-0 min-w-0 w-full flex-1 flex-col ${editorOpen ? 'border-r border-border' : ''}`}>
         <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {loading && <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>}
-          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+          <ul className="divide-y divide-border sm:hidden" aria-label="Tasks">
+            {view.rows.map((task) => {
+              const warning = taskWarning(task)
+              return (
+                <li key={task.id} data-card-row>
+                  <button type="button" onClick={() => onRowActivate(task.id)} className={`flex w-full items-start gap-3 px-4 py-3 text-left ${selected?.id === task.id ? 'bg-accent-soft/60' : ''}`}>
+                    <span className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${PRIORITY_BADGES[task.priority] ?? PRIORITY_BADGES.C}`}>{task.priority}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-navy-900">
+                        <span className="truncate">{task.action}</span>
+                        <WarningTriangle warning={warning} />
+                      </span>
+                      <span className="block truncate text-xs text-ink-muted">{task.projectName || 'No project'} · {task.owner || 'Unassigned'}</span>
+                      <span className="block text-xs text-ink-muted">Due {formatDate(task.dueDate)} · {task.status}</span>
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <table className="hidden w-full min-w-[760px] table-fixed text-left text-sm sm:table">
             <colgroup>
               <col className="w-[8%]" />
               <col className="w-[22%]" />
@@ -364,7 +382,7 @@ export function TasksPage() {
                     <td className="truncate px-3 py-3.5 text-ink-muted">{task.projectName || '—'}</td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{entity}</td>
                     <td className="truncate px-3 py-3.5 text-ink-muted">{task.owner || '—'}</td>
-                    <td className="px-3 py-3.5 text-ink-muted">{formatDate(task.dueDate)}</td>
+                    <td className="px-3 py-3.5 whitespace-nowrap text-ink-muted">{formatDate(task.dueDate)}</td>
                     <td className="px-5 py-3.5">
                       <span className="inline-flex items-center gap-1.5">
                         <span

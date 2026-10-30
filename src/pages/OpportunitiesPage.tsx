@@ -15,6 +15,7 @@ import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { primaryDealWarning } from '@/lib/attention'
 import { paginate } from '@/lib/paginate'
+import { usePageFor } from '@/hooks/usePageFor'
 import { useFitRows } from '@/hooks/useFitRows'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
@@ -35,7 +36,7 @@ export function OpportunitiesPage() {
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageFor(JSON.stringify([statusFilter, stageFilter, ownerFilter, needsAttentionOnly]))
   const pageSize = useFitRows(tableRef, { rowHeight: 49 })
 
   useEffect(() => {
@@ -79,9 +80,6 @@ export function OpportunitiesPage() {
   const advancedActive = Boolean(stageFilter || ownerFilter || needsAttentionOnly)
 
   // Filters apply to the whole list before paging; any filter change returns to page 1.
-  useEffect(() => {
-    setPage(1)
-  }, [statusFilter, stageFilter, ownerFilter, needsAttentionOnly])
   const view = paginate(filtered, page, pageSize)
 
   const clearAttention = () => {
@@ -301,7 +299,27 @@ export function OpportunitiesPage() {
           {loading && (
             <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>
           )}
-          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+          <ul className="divide-y divide-border sm:hidden" aria-label="Opportunities">
+            {view.rows.map((opp) => (
+              <li key={opp.id} data-card-row>
+                <button type="button" onClick={() => onRowActivate(opp.id)} className={`w-full px-4 py-3 text-left ${selected?.id === opp.id ? 'bg-accent-soft/60' : ''}`}>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-navy-900">
+                      <span className="truncate">{opp.projectName}</span>
+                      <WarningTriangle warning={primaryDealWarning(opp, tasks)} />
+                    </span>
+                    <span className="shrink-0 text-sm tabular-nums">{formatCurrency(opp.nwp)}</span>
+                  </span>
+                  <span className="block truncate text-xs text-ink-muted">{dealIdFromOpportunity(opp)} · {opp.entityName}</span>
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    <span className={badgeClass(statusBadge(opp.status))}>{opp.status}</span>
+                    <span className={badgeClass(stageBadge(opp.stage))}>{opp.stage}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden w-full min-w-[760px] table-fixed text-left text-sm sm:table">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[20%]" />

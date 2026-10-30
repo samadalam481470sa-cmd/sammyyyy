@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, Download, ExternalLink, MoreHorizontal, Pencil, Search, Trash2, Upload } from 'lucide-react'
 import { useCrmMeetings } from '@/hooks/useCrmMeetings'
@@ -9,6 +9,7 @@ import { MeetingWorkspace } from '@/components/meetings/MeetingWorkspace'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { usePageFor } from '@/hooks/usePageFor'
 import { useFitRows } from '@/hooks/useFitRows'
 import { paginate } from '@/lib/paginate'
 import { inPeriod, resolvePeriod, type PeriodFilter } from '@/lib/reports'
@@ -16,7 +17,7 @@ import { readTranscriptSource } from '@/lib/crmMeetings'
 import { TRANSCRIPT_ACCEPT } from '@/lib/transcript'
 import { meetingTitle, type CrmMeeting } from '@/types/crmMeeting'
 
-/** All saved CRM meetings for the signed-in user (private), searchable and paginated. */
+/** All saved CRM meetings shared with the approved Newport team, searchable and paginated. */
 export function MeetingHistoryPage() {
   const navigate = useNavigate()
   const api = useCrmMeetings()
@@ -30,7 +31,7 @@ export function MeetingHistoryPage() {
   const [removeId, setRemoveId] = useState<string | null>(null)
   const [uploadFor, setUploadFor] = useState<CrmMeeting | null>(null)
   const [note, setNote] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageFor(JSON.stringify([search, period, oppFilter]))
   const tableRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const pageSize = useFitRows(tableRef, { rowHeight: 53 })
@@ -57,9 +58,6 @@ export function MeetingHistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api.meetings, resolved, oppFilter, search, opportunities, contactsApi.items])
 
-  useEffect(() => {
-    setPage(1)
-  }, [search, period, oppFilter])
   const view = paginate(rows, page, pageSize)
   const selected = rows.find((m) => m.id === selectedId) ?? api.meetings.find((m) => m.id === selectedId) ?? null
 
@@ -99,7 +97,7 @@ export function MeetingHistoryPage() {
             <ArrowLeft className="h-4 w-4" /> Meetings
           </button>
           <h1 className="font-brand text-2xl font-bold text-navy-900">Meeting History</h1>
-          <p className="mt-1 text-sm text-ink-muted">Saved meetings linked to a project. Visible only to you on this device for now.</p>
+          <p className="mt-1 text-sm text-ink-muted">Saved meetings linked to a project. Shared with your approved Newport team.</p>
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />

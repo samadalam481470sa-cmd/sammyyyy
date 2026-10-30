@@ -25,7 +25,7 @@ const NO_SERVER =
 const NOT_CONFIGURED =
   'No AI summary service is approved on the Newport server yet. An administrator must enable it before transcripts can be summarized.'
 
-/** Private CRM meeting history for the signed-in user, plus transcript and summary actions. */
+/** Team CRM meeting history, plus transcript and summary actions. */
 export function useCrmMeetings() {
   const { user } = useAuth()
   const owner = calendarOwnerKey(user)
@@ -63,8 +63,10 @@ export function useCrmMeetings() {
     }
   }, [])
 
+  // Ask the server once the page has rendered (an external system, so this belongs in an effect).
   useEffect(() => {
-    void checkService()
+    const id = window.setTimeout(() => void checkService(), 0)
+    return () => window.clearTimeout(id)
   }, [checkService])
 
   const save = useCallback((meeting: CrmMeeting) => upsertCrmMeeting(owner, meeting), [owner])

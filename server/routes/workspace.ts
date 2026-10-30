@@ -13,7 +13,7 @@ import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from 
 export const workspaceRouter = Router()
 export const microsoftAuthRouter = Router()
 
-export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'activity', 'documentTypes'] as const
+export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'activity', 'documentTypes', 'meetings'] as const
 const SESSION_HOURS = 12
 
 function initials(name: string): string {

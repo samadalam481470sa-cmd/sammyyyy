@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { paginate } from '@/lib/paginate'
+import { usePageFor } from '@/hooks/usePageFor'
 import { useFitRows } from '@/hooks/useFitRows'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
@@ -20,7 +21,7 @@ export function RelationshipsPage() {
   const [status, setStatus] = useState('All Relationships')
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const tableRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageFor(JSON.stringify([search, status]))
   const pageSize = useFitRows(tableRef, { rowHeight: 49 })
 
   const rows = useMemo(() => {
@@ -32,9 +33,6 @@ export function RelationshipsPage() {
     })
   }, [api.items, search, status])
 
-  useEffect(() => {
-    setPage(1)
-  }, [search, status])
   const view = paginate(rows, page, pageSize)
   const chips: ActiveFilterChip[] = [
     ...(status !== 'All Relationships' ? [{ key: 'status', label: `Status: ${status}`, onRemove: () => setStatus('All Relationships') }] : []),
@@ -105,7 +103,18 @@ export function RelationshipsPage() {
         <div className={`flex min-h-0 min-w-0 w-full flex-1 flex-col ${selected ? 'border-r border-border' : ''}`}>
         <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {api.loading && <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>}
-          <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+          <ul className="divide-y divide-border sm:hidden" aria-label="Relationships">
+            {view.rows.map((contact) => (
+              <li key={contact.id} data-card-row>
+                <button type="button" onClick={() => requestSelect(contact.id)} className={`w-full px-4 py-3 text-left ${selectedId === contact.id ? 'bg-accent-soft/60' : ''}`}>
+                  <span className="block truncate text-sm font-semibold text-navy-900">{contact.name}</span>
+                  <span className="block truncate text-xs text-ink-muted">{[contact.title, contact.company].filter(Boolean).join(' · ') || '—'}</span>
+                  <span className="block truncate text-xs text-ink-muted">{projectLabel(contact)} · {contact.status}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden w-full min-w-[760px] table-fixed text-left text-sm sm:table">
             <colgroup>
               <col className="w-[17%]" />
               <col className="w-[16%]" />

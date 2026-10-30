@@ -15,6 +15,7 @@ import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import type { OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import type { AcquisitionStage, OpportunityStatus } from '@/types'
 import { paginate } from '@/lib/paginate'
+import { usePageFor } from '@/hooks/usePageFor'
 import { useFitRows, useGridColumns } from '@/hooks/useFitRows'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
@@ -34,7 +35,7 @@ export function DocumentsPage() {
   const filterRef = useRef<HTMLDivElement>(null)
   const areaRef = useRef<HTMLDivElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = usePageFor(JSON.stringify([search, statusFilter, stageFilter]))
   // One row is a measured card plus the 16px grid gap; the area has 48px of vertical padding.
   const rowsThatFit = useFitRows(areaRef, { rowHeight: 126, headerHeight: 48, gap: 16, rowSelector: '[data-doc-card]', min: 1, max: 20, fallback: 3 })
   const columns = useGridColumns(gridRef, 3)
@@ -65,9 +66,6 @@ export function DocumentsPage() {
 
   const selected = selectedId ? (opportunities.find((o) => o.id === selectedId) ?? null) : null
 
-  useEffect(() => {
-    setPage(1)
-  }, [search, statusFilter, stageFilter])
   const view = paginate(filtered, page, Math.max(1, rowsThatFit * columns))
   const chips: ActiveFilterChip[] = [
     ...(statusFilter ? [{ key: 'status', label: `Status: ${statusFilter}`, onRemove: () => setStatusFilter('') }] : []),

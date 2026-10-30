@@ -70,8 +70,10 @@ export function useOutlookCalendar(from: Date, to: Date): OutlookCalendarState {
     }
   }, [account, owner, fromMs, toMs])
 
+  // Load from Outlook after render; refresh() updates loading state, so it is not run synchronously here.
   useEffect(() => {
-    void refresh()
+    const id = window.setTimeout(() => void refresh(), 0)
+    return () => window.clearTimeout(id)
   }, [refresh])
 
   const connect = useCallback(async () => {

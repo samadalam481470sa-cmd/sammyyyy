@@ -8,7 +8,7 @@ import { getMicrosoftIdToken } from '@/auth/msal'
 export const WORKSPACE_SESSION_KEY = 'newport_crm_workspace_session'
 export const WORKSPACE_STATE_EVENT = 'newport-workspace-state'
 
-export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'activity' | 'documentTypes'
+export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'activity' | 'documentTypes' | 'meetings'
 
 export interface WorkspaceRecord {
   collection: WorkspaceCollection
