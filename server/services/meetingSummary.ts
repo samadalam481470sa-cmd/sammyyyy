@@ -50,6 +50,47 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export class SummaryUnavailable extends Error {}
 
+const stringList = { type: 'ARRAY', items: { type: 'STRING' } }
+/** The exact answer shape, so Gemini's JSON mode cannot wander or run on. */
+export const GEMINI_SUMMARY_SCHEMA: Record<string, unknown> = {
+  type: 'OBJECT',
+  properties: {
+    discussion: stringList,
+    decisions: stringList,
+    openQuestions: stringList,
+    nextSteps: stringList,
+    proposedActions: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: { action: { type: 'STRING' }, owner: { type: 'STRING', nullable: true } },
+        required: ['action'],
+      },
+    },
+  },
+  required: ['discussion', 'decisions', 'openQuestions', 'nextSteps', 'proposedActions'],
+}
+
+/** Keeps a well-formed answer within the stored limits instead of rejecting it for being long. */
+export function normalizeSummary(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw
+  const r = raw as Record<string, unknown>
+  // Only trim answers that already have the right shape; anything else is rejected by the schema.
+  const keys = ['discussion', 'decisions', 'openQuestions', 'nextSteps', 'proposedActions']
+  if (!keys.every((k) => Array.isArray(r[k]))) return raw
+  const list = (v: unknown) =>
+    (Array.isArray(v) ? v : [])
+      .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      .map((x) => x.trim().slice(0, 600))
+      .slice(0, 25)
+  const actions = (Array.isArray(r.proposedActions) ? r.proposedActions : [])
+    .filter((a): a is { action: unknown; owner?: unknown } => Boolean(a) && typeof a === 'object' && typeof (a as { action?: unknown }).action === 'string')
+    .map((a) => ({ action: String(a.action).trim().slice(0, 300), owner: typeof a.owner === 'string' && a.owner.trim() ? a.owner.trim().slice(0, 120) : null }))
+    .filter((a) => a.action.length >= 3)
+    .slice(0, 15)
+  return { discussion: list(r.discussion), decisions: list(r.decisions), openQuestions: list(r.openQuestions), nextSteps: list(r.nextSteps), proposedActions: actions }
+}
+
 export async function summarizeTranscript(transcript: string, fetchImpl: FetchLike = httpsFetch): Promise<{ summary: ParsedSummary; provider: string; truncated: boolean }> {
   const provider = meetingSummaryProvider()
   if (!provider) throw new SummaryUnavailable('No AI summary service is configured for this CRM.')
@@ -59,7 +100,10 @@ export async function summarizeTranscript(transcript: string, fetchImpl: FetchLi
   const userText = `TRANSCRIPT:\n${text.slice(0, SUMMARY_MAX_CHARS)}`
   let content: string
   if (geminiConfigured()) {
-    content = await geminiGenerate({ system: SYSTEM, user: userText, json: true }, fetchImpl)
+    content = await geminiGenerate(
+      { system: SYSTEM, user: userText, json: true, schema: GEMINI_SUMMARY_SCHEMA, thinking: 'minimal', maxOutputTokens: 8192 },
+      fetchImpl,
+    )
   } else {
     const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -80,11 +124,11 @@ export async function summarizeTranscript(transcript: string, fetchImpl: FetchLi
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(content)
+    parsed = JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g, ""))
   } catch {
     throw new Error('The AI service returned an unreadable summary.')
   }
-  const checked = summarySchema.safeParse(parsed)
+  const checked = summarySchema.safeParse(normalizeSummary(parsed))
   if (!checked.success) throw new Error('The AI service returned a summary in the wrong shape.')
   return { summary: checked.data, provider, truncated }
 }

@@ -75,7 +75,18 @@ async function readGoogleError(res: Response): Promise<string> {
  * not accept that setting, the call is repeated once without it.
  */
 export async function geminiGenerate(
-  opts: { system: string; user: string; json?: boolean; temperature?: number; thinking?: ThinkingLevel | null; timeoutMs?: number },
+  opts: {
+    system: string
+    user: string
+    json?: boolean
+    temperature?: number
+    thinking?: ThinkingLevel | null
+    timeoutMs?: number
+    /** Caps the answer length so a runaway answer cannot run for minutes. */
+    maxOutputTokens?: number
+    /** Gemini response schema (OpenAPI subset). Keeps JSON answers to the exact shape. */
+    schema?: Record<string, unknown>
+  },
   fetchImpl: FetchLike = httpsFetch,
 ): Promise<string> {
   const key = geminiKey()
@@ -87,7 +98,7 @@ export async function geminiGenerate(
   const deadline = AbortSignal.timeout(timeoutMs)
   const models = geminiModels()
 
-  const call = (model: string, withThinking: boolean) =>
+  const call = (model: string, full: boolean) =>
     fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
@@ -98,7 +109,9 @@ export async function geminiGenerate(
         generationConfig: {
           temperature: opts.temperature ?? 0,
           ...(opts.json ? { responseMimeType: 'application/json' } : {}),
-          ...(withThinking && thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}),
+          ...(opts.maxOutputTokens ? { maxOutputTokens: opts.maxOutputTokens } : {}),
+          ...(full && opts.json && opts.schema ? { responseSchema: opts.schema } : {}),
+          ...(full && thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}),
         },
       }),
     })
@@ -108,9 +121,10 @@ export async function geminiGenerate(
     const isLast = i === models.length - 1
     try {
       res = await call(models[i], true)
-      if (res.status === 400 && thinking) {
+      if (res.status === 400 && (thinking || opts.schema)) {
+        // A model that does not accept the thinking or schema settings gets one plain retry.
         const detail = await readGoogleError(res.clone())
-        if (/thinking/i.test(detail)) res = await call(models[i], false)
+        if (/thinking|schema/i.test(detail)) res = await call(models[i], false)
       }
     } catch (err) {
       if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
@@ -137,13 +151,18 @@ export async function geminiGenerate(
     throw new Error(`The AI service returned ${res.status}.${detail}${hint}`)
   }
   const data = (await res.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+    candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
   }
-  return (data.candidates?.[0]?.content?.parts ?? [])
+  const candidate = data.candidates?.[0]
+  const text = (candidate?.content?.parts ?? [])
     .filter((p) => !p.thought)
     .map((p) => p.text ?? '')
     .join('')
     .trim()
+  if (!text && candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Google Gemini stopped without an answer (${candidate.finishReason}).`)
+  }
+  return text
 }
 
 export interface AiSelfTest {
@@ -165,14 +184,27 @@ export async function geminiSelfTest(fetchImpl: FetchLike = httpsFetch): Promise
   if (!reach.ok) {
     return { ok: false, provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: `The Newport server cannot reach Google (${reach.error ?? 'no answer'}).` }
   }
+  const steps: string[] = []
+  let t = Date.now()
   try {
     const text = await geminiGenerate(
-      { system: 'You are a connection test.', user: 'Reply with the single word OK.', thinking: 'minimal', timeoutMs: 45_000 },
+      { system: 'You are a connection test.', user: 'Reply with the single word OK.', thinking: 'minimal', timeoutMs: 45_000, maxOutputTokens: 256 },
       fetchImpl,
     )
-    return { ok: Boolean(text), provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: text ? `Gemini answered: ${text.slice(0, 40)}` : 'Gemini answered with no text.' }
+    if (!text) throw new Error('Gemini answered with no text.')
+    steps.push(`Small test: ${text.slice(0, 20)} in ${((Date.now() - t) / 1000).toFixed(1)} s`)
+    // A request about the size of a meeting transcript, to tell a large-request stall from a slow answer.
+    t = Date.now()
+    const filler = 'This line is filler text for a connection test and needs no attention. '.repeat(380)
+    const big = await geminiGenerate(
+      { system: 'You are a connection test.', user: `${filler}\n\nIgnore the filler above. Reply with the single word OK.`, thinking: 'minimal', timeoutMs: 60_000, maxOutputTokens: 256 },
+      fetchImpl,
+    )
+    steps.push(`Large test (${filler.length.toLocaleString('en-US')} characters): ${(big || 'no text').slice(0, 20)} in ${((Date.now() - t) / 1000).toFixed(1)} s`)
+    return { ok: Boolean(big), provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: steps.join(' · ') }
   } catch (err) {
-    return { ok: false, provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: err instanceof Error ? err.message : String(err) }
+    steps.push(`${steps.length ? 'Large test' : 'Small test'} failed after ${((Date.now() - t) / 1000).toFixed(1)} s: ${err instanceof Error ? err.message : String(err)}`)
+    return { ok: false, provider: 'Google Gemini', model: geminiModel(), ms: Date.now() - started, message: steps.join(' · ') }
   }
 }
 
