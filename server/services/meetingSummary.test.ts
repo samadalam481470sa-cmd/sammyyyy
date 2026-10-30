@@ -52,3 +52,27 @@ describe('meeting summary with Gemini', () => {
     expect(body.contents[0].parts[0].text).toBe('TRANSCRIPT:\nDennis: I will send the checklist.')
   })
 })
+
+describe('Google key saved under OPENAI_API_KEY', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('routes it to Gemini instead of OpenAI', async () => {
+    vi.stubEnv('MEETING_SUMMARY_ENABLED', '1')
+    vi.stubEnv('GEMINI_API_KEY', '')
+    vi.stubEnv('OPENAI_API_KEY', 'AQ.example-google-key')
+    expect(meetingSummaryProvider()).toMatch(/Gemini/)
+    const content = { discussion: [], decisions: [], openQuestions: [], nextSteps: [], proposedActions: [] }
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(content) }] } }] })))
+    await summarizeTranscript('Mary: ok.', fetchImpl)
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toContain('generativelanguage.googleapis.com')
+    expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('AQ.example-google-key')
+  })
+
+  it('still uses OpenAI for a real OpenAI key', () => {
+    vi.stubEnv('MEETING_SUMMARY_ENABLED', '1')
+    vi.stubEnv('GEMINI_API_KEY', '')
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test')
+    expect(meetingSummaryProvider()).toMatch(/OpenAI/)
+  })
+})

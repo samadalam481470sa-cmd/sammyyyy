@@ -5,6 +5,10 @@
  *   GEMINI_API_KEY   secret from Google AI Studio; never sent to browsers
  *   GEMINI_MODEL     optional, default gemini-flash-latest
  *
+ * If GEMINI_API_KEY is not set but OPENAI_API_KEY holds a Google key
+ * (starts with "AIza" or "AQ."), that key is used for Gemini instead,
+ * because a Google key can never work against OpenAI.
+ *
  * The key goes in the x-goog-api-key header, never in the URL, so it cannot
  * appear in request logs.
  */
@@ -13,8 +17,20 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest'
 
+export function isGoogleKey(key: string | undefined): boolean {
+  const k = key?.trim() ?? ''
+  return k.startsWith('AIza') || k.startsWith('AQ.')
+}
+
+export function geminiKey(): string | null {
+  const direct = process.env.GEMINI_API_KEY?.trim()
+  if (direct) return direct
+  const fallback = process.env.OPENAI_API_KEY?.trim()
+  return isGoogleKey(fallback) ? fallback! : null
+}
+
 export function geminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY?.trim())
+  return geminiKey() !== null
 }
 
 export function geminiModel(): string {
@@ -27,8 +43,8 @@ export async function geminiGenerate(
   opts: { system: string; user: string; json?: boolean; temperature?: number },
   fetchImpl: FetchLike = fetch,
 ): Promise<string> {
-  const key = process.env.GEMINI_API_KEY?.trim()
-  if (!key) throw new Error('GEMINI_API_KEY is not set.')
+  const key = geminiKey()
+  if (!key) throw new Error('No Gemini API key is set.')
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:generateContent`
   const res = await fetchImpl(url, {
     method: 'POST',
