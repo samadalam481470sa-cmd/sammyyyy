@@ -1,12 +1,12 @@
 import type { DocumentRecord } from '@/data/mockModules'
 
 export const DOCUMENT_SLOT_META = [
-  { id: 'NDA', abbr: 'NDA', label: 'NDA' },
+  { id: 'NDA', abbr: 'NDA', label: 'Non-Disclosure Agreement' },
   { id: 'LOI', abbr: 'LOI', label: 'Letter of Intent' },
   { id: 'CIM', abbr: 'CIM', label: 'Confidential Information Memorandum' },
   { id: 'IOI', abbr: 'IOI', label: 'Indication of Interest' },
   { id: 'Draft Agreement', abbr: 'DA', label: 'Draft Agreement' },
-  { id: 'Finalized Agreement', abbr: 'FA', label: 'Finalized Agreement' },
+  { id: 'Finalized Agreement', abbr: 'FA', label: 'Final Agreement' },
 ] as const
 
 export type DefaultDocumentSlot = (typeof DOCUMENT_SLOT_META)[number]['id']
