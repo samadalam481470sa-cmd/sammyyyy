@@ -65,6 +65,15 @@ export function useMeetingController(api: MeetingsApi, meeting: CrmMeeting) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current.id])
 
+  // Relationships can finish loading after the meeting opens: suggest email matches then,
+  // unless the user already chose contacts for this unsaved meeting.
+  const matchedKey = matched.join(',')
+  useEffect(() => {
+    if (stored || !matchedKey) return
+    setDraft((d) => (d.contactIds.length ? d : { ...d, contactIds: matchedKey.split(',') }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedKey, current.id])
+
   useEffect(() => {
     let alive = true
     setTranscriptText(null)
