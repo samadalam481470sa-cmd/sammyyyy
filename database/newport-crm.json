@@ -28,7 +28,9 @@
         "Review sample materials",
         "Confirm NDA scope with counsel"
       ],
-      "diligenceNotes": "Sample NDA review in progress (demo)."
+      "diligenceNotes": "Sample NDA review in progress (demo).",
+      "createdAt": "2025-01-07T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-b",
@@ -58,7 +60,9 @@
         "Schedule follow-up with management",
         "Call accountant re: sample comps"
       ],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-01-22T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-c",
@@ -86,7 +90,9 @@
         "Finalize LOI terms",
         "Call lawyer on exclusivity language"
       ],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-02-06T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-d",
@@ -116,7 +122,9 @@
         "Review diligence findings pack",
         "Confirm data room access"
       ],
-      "diligenceNotes": "Sample financial, legal, and carrier reviews outstanding (demo)."
+      "diligenceNotes": "Sample financial, legal, and carrier reviews outstanding (demo).",
+      "createdAt": "2025-02-21T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-e",
@@ -143,7 +151,9 @@
       "outstandingItems": [
         "Confirm exclusivity extension"
       ],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-03-08T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-f",
@@ -168,7 +178,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-03-23T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-g",
@@ -199,7 +211,9 @@
         "Assign next action",
         "Re-engage banker"
       ],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-04-07T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-h",
@@ -228,7 +242,9 @@
       "outstandingItems": [
         "Assign deal lead"
       ],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-04-22T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-i",
@@ -253,7 +269,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-04-28T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-j",
@@ -278,7 +296,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-05-13T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-k",
@@ -303,7 +323,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-05-28T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-l",
@@ -328,7 +350,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-06-12T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-m",
@@ -353,7 +377,17 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-06-27T15:00:00.000Z",
+      "seedDates": true,
+      "closedAt": "2025-11-13",
+      "completionConfirmedAt": "2025-11-13T17:00:00.000Z",
+      "completedAt": "2025-11-13T17:00:00.000Z",
+      "closingSnapshot": {
+        "nwp": 13000000,
+        "pfEbitda": 1300000,
+        "netRevenue": 2600000
+      }
     },
     {
       "id": "opp-n",
@@ -378,7 +412,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-07-12T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-o",
@@ -403,7 +439,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-07-27T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-p",
@@ -428,7 +466,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": ""
+      "diligenceNotes": "",
+      "createdAt": "2025-08-11T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-q",
@@ -453,7 +493,17 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-08-26T15:00:00.000Z",
+      "seedDates": true,
+      "closedAt": "2025-12-25",
+      "completionConfirmedAt": "2025-12-25T17:00:00.000Z",
+      "completedAt": "2025-12-25T17:00:00.000Z",
+      "closingSnapshot": {
+        "nwp": 14400000,
+        "pfEbitda": 1280000,
+        "netRevenue": 2820000
+      }
     },
     {
       "id": "opp-r",
@@ -478,7 +528,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-09-01T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-s",
@@ -503,7 +555,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-09-16T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-t",
@@ -528,7 +582,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-10-01T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-u",
@@ -553,7 +609,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-10-16T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-v",
@@ -578,7 +636,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-10-31T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-w",
@@ -603,7 +663,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-11-15T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-x",
@@ -628,7 +690,17 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-11-30T15:00:00.000Z",
+      "seedDates": true,
+      "closedAt": "2026-04-21",
+      "completionConfirmedAt": "2026-04-21T17:00:00.000Z",
+      "completedAt": "2026-04-21T17:00:00.000Z",
+      "closingSnapshot": {
+        "nwp": 18950000,
+        "pfEbitda": 1665000,
+        "netRevenue": 3660000
+      }
     },
     {
       "id": "opp-y",
@@ -653,7 +725,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-12-15T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-z",
@@ -678,7 +752,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2025-12-30T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-aa",
@@ -703,7 +779,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-01-05T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ab",
@@ -728,7 +806,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-01-20T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ac",
@@ -753,7 +833,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-02-04T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ad",
@@ -778,7 +860,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-02-19T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ae",
@@ -803,7 +887,17 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-03-06T15:00:00.000Z",
+      "seedDates": true,
+      "closedAt": "2026-08-16",
+      "completionConfirmedAt": "2026-08-16T17:00:00.000Z",
+      "completedAt": "2026-08-16T17:00:00.000Z",
+      "closingSnapshot": {
+        "nwp": 23500000,
+        "pfEbitda": 2050000,
+        "netRevenue": 4500000
+      }
     },
     {
       "id": "opp-af",
@@ -828,7 +922,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-03-21T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ag",
@@ -853,7 +949,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-04-05T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ah",
@@ -878,7 +976,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-04-20T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ai",
@@ -903,7 +1003,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-05-05T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-aj",
@@ -928,7 +1030,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-05-11T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ak",
@@ -953,7 +1057,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-05-26T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-al",
@@ -978,7 +1084,17 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-06-10T15:00:00.000Z",
+      "seedDates": true,
+      "closedAt": "2026-10-02",
+      "completionConfirmedAt": "2026-10-02T17:00:00.000Z",
+      "completedAt": "2026-10-02T17:00:00.000Z",
+      "closingSnapshot": {
+        "nwp": 28050000,
+        "pfEbitda": 2435000,
+        "netRevenue": 5340000
+      }
     },
     {
       "id": "opp-am",
@@ -1003,7 +1119,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-06-25T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-an",
@@ -1028,7 +1146,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-07-10T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ao",
@@ -1053,7 +1173,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-07-25T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-ap",
@@ -1078,7 +1200,9 @@
       "needsAttention": false,
       "attentionReasons": [],
       "outstandingItems": [],
-      "diligenceNotes": "Fictional sprint sample. Not a live Newport target."
+      "diligenceNotes": "Fictional sprint sample. Not a live Newport target.",
+      "createdAt": "2026-08-09T15:00:00.000Z",
+      "seedDates": true
     },
     {
       "id": "opp-aq",
