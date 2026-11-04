@@ -18,7 +18,7 @@ import { coverOpportunities, mergeMissingById, sprintExtraTasks } from '@/data/s
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { seedV2Contacts, seedV2Opportunities, seedV2Tasks } from '@/data/sprintSeedV2'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
-import { applyDataFixes, fixOpportunity } from '@/lib/dataFixes'
+import { applyDataFixes, applyTaskDataFixes, fixOpportunity } from '@/lib/dataFixes'
 
 /** 1 = device records with no portable marker. 2 = current portable document. */
 export const SCHEMA_VERSION = 2
@@ -151,6 +151,7 @@ export function applySchemaMigrations(doc: PortableDatabase): PortableDatabase {
     schemaVersion: SCHEMA_VERSION,
     appVersion: doc.appVersion || APP_VERSION,
     opportunities: applyDataFixes(doc.opportunities.map((row) => normalizeOpportunity(row))),
+    tasks: applyTaskDataFixes(doc.tasks),
   }
 }
 

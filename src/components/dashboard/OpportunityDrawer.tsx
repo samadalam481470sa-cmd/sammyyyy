@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
-import { X } from 'lucide-react'
 import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
+import { DrawerHeader, SideDrawer } from '@/components/shared/Overlay'
+import { OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
+import { useData } from '@/data/DataContext'
+import { dealIdFromOpportunity } from '@/lib/dealId'
 import type { Opportunity } from '@/types'
 import { formatCurrency, formatDate } from '@/utils/dashboard'
 
@@ -9,114 +11,52 @@ interface OpportunityDrawerProps {
   onClose: () => void
 }
 
+/**
+ * The one READ-ONLY opportunity drawer used by Deals Requiring Action, This Week's Priorities
+ * and Needs Attention. Same navy header as the edit drawer, no editing controls.
+ */
 export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerProps) {
-  useEffect(() => {
-    if (!opportunity) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
-    }
-  }, [opportunity, onClose])
-
-  if (!opportunity) return null
-
-  const fields: { label: string; value: string }[] = [
-    { label: 'Company', value: opportunity.entityName },
-    { label: 'Status', value: opportunity.status },
-    { label: 'Stage', value: opportunity.stage },
-    { label: 'Deal Lead', value: opportunity.dealLead || 'Unassigned' },
-    { label: 'Type', value: opportunity.type },
-    { label: 'Specialty', value: opportunity.specialty },
-    { label: 'Geography', value: opportunity.geography },
-    { label: 'NWP', value: formatCurrency(opportunity.nwp) },
-    { label: 'Net Revenue', value: formatCurrency(opportunity.netRevenue) },
-    { label: 'PF EBITDA', value: formatCurrency(opportunity.pfEbitda) },
-    { label: 'Next Action', value: opportunity.nextAction ?? 'None assigned' },
-    { label: 'Next Action Date', value: formatDate(opportunity.nextActionDate) },
-  ]
-
+  const { tasks, opportunities } = useData()
+  // Always show the live record so the drawer matches the rest of the CRM.
+  const live = opportunity ? (opportunities.find((o) => o.id === opportunity.id) ?? opportunity) : null
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button
-        type="button"
-        className="absolute inset-0 bg-navy-950/40 backdrop-blur-[2px]"
-        aria-label="Close opportunity details"
-        onClick={onClose}
-      />
-      <aside
-        className="relative flex h-full w-full max-w-md animate-[slideIn_200ms_ease-out] flex-col bg-surface shadow-(--shadow-drawer)"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="opportunity-drawer-title"
-      >
-        <div className="flex items-start justify-between border-b border-border px-5 py-4">
-          <div>
-            <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
-              Opportunity
-            </p>
-            <h2
-              id="opportunity-drawer-title"
-              className="mt-1 font-brand text-xl font-bold text-navy-900"
-            >
-              {opportunity.projectName}
-            </h2>
-            <p className="mt-0.5 text-sm text-ink-muted">{opportunity.entityName}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" strokeWidth={1.75} />
-          </button>
-        </div>
-
-        <div className="custom-scroll flex-1 overflow-y-auto px-5 py-4">
-          <dl className="space-y-3">
-            {fields.map((field) => (
-              <div
-                key={field.label}
-                className="grid grid-cols-[120px_1fr] gap-3 border-b border-border/70 pb-3 last:border-0"
-              >
-                <dt className="text-xs font-semibold tracking-[0.04em] text-ink-subtle uppercase">
-                  {field.label}
-                </dt>
-                <dd className="text-sm font-medium text-ink">{field.value}</dd>
+    <SideDrawer open={Boolean(live)} onRequestClose={onClose} label="Opportunity details" testId="dashboard-opportunity-drawer">
+      {live && (
+        <div className="flex h-full min-h-0 flex-col">
+          <DrawerHeader eyebrow={dealIdFromOpportunity(live)} title={live.projectName} subtitle={live.entityName} onClose={onClose} closeLabel="Close opportunity details">
+            <OpportunityHeaderDetails opportunity={live} tasks={tasks} showFinancials />
+          </DrawerHeader>
+          <div className="custom-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm" data-testid="dashboard-drawer-fields">
+              {[
+                ['Acquisition type', live.type],
+                ['Specialty', live.specialty || '—'],
+                ['Geography', live.geography || '—'],
+                ['Source', [live.sourceType, live.sourceName].filter(Boolean).join(' · ') || '—'],
+                ['Net Revenue', formatCurrency(live.netRevenue)],
+                ['Created', live.createdAt ? formatDate(live.createdAt) : 'Not recorded'],
+                ['Last updated', formatDate(live.updatedAt ?? live.lastActivityDate ?? null)],
+                ['Legally closed', live.status === 'Completed' && live.closedAt ? formatDate(live.closedAt) : '—'],
+              ].map(([label, value]) => (
+                <div key={label} className="min-w-0 border-b border-border/70 pb-2">
+                  <dt className="text-[10px] font-semibold tracking-[0.08em] text-ink-subtle uppercase">{label}</dt>
+                  <dd className="mt-0.5 truncate font-medium text-ink" title={value}>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {live.diligenceNotes && (
+              <div className="mt-4">
+                <p className="text-[10px] font-semibold tracking-[0.08em] text-ink-subtle uppercase">Diligence notes</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap text-ink">{live.diligenceNotes}</p>
               </div>
-            ))}
-          </dl>
-
-          {opportunity.needsAttention && opportunity.attentionReasons.length > 0 && (
-            <div className="mt-4 rounded-lg border border-attention-border bg-attention-bg p-3">
-              <p className="text-xs font-semibold text-attention">Needs Attention</p>
-              <ul className="mt-1.5 space-y-1">
-                {opportunity.attentionReasons.map((reason) => (
-                  <li key={reason} className="text-sm text-ink">
-                    {reason}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            )}
+            <p className="mt-4 text-[11px] text-ink-subtle">Read-only summary. Open the full profile to edit.</p>
+          </div>
+          <div className="shrink-0 border-t border-border bg-surface px-5 py-3">
+            <ProfileLinkButton opportunityId={live.id} />
+          </div>
         </div>
-
-        <div className="border-t border-border bg-canvas px-5 py-4">
-          <ProfileLinkButton opportunityId={opportunity.id} onNavigate={onClose} />
-        </div>
-      </aside>
-
-      <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0.6; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-      `}</style>
-    </div>
+      )}
+    </SideDrawer>
   )
 }

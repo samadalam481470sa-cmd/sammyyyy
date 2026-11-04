@@ -24,14 +24,15 @@ export const STAGE_BADGE: Record<AcquisitionStage, string> = {
   Closing: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
 }
 
+/** Restrained chart colors per status (Reports). */
 export const STATUS_CHART_COLORS: Record<string, string> = {
-  Active: '#047857',
-  Pending: '#0369a1',
-  Inactive: '#64748b',
-  Closed: '#3f3f46',
-  Declined: '#e11d48',
-  Withdrew: '#ea580c',
-  Completed: '#0f766e',
+  Active: '#0b1f3a',
+  Pending: '#3d7eb8',
+  Inactive: '#a3adbd',
+  Closed: '#5a6577',
+  Declined: '#c0675c',
+  Withdrew: '#d2a058',
+  Completed: '#2f8f83',
 }
 
 export function statusBadge(status: string): string {

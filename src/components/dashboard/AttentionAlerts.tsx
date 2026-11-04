@@ -1,72 +1,55 @@
-import { AlertCircle, CalendarClock, Clock, UserX, Activity } from 'lucide-react'
-import type { AttentionAlert, AttentionReason } from '@/types'
-import type { LucideIcon } from 'lucide-react'
+import { AlertCircle, CalendarClock, Clock, UserX } from 'lucide-react'
+import type { AttentionRow } from '@/lib/attention'
+import { dealIdFromOpportunity } from '@/lib/dealId'
 
 interface AttentionAlertsProps {
-  alerts: AttentionAlert[]
-  uniqueDealCount?: number
+  rows: AttentionRow[]
+  limit?: number
   onProjectClick?: (projectId: string) => void
   onViewAll?: () => void
 }
 
-const ICONS: Record<AttentionReason, LucideIcon> = {
-  'Next action overdue': Clock,
-  'No next action assigned': AlertCircle,
-  'No activity in 30+ days': Activity,
-  'Upcoming deadline within 7 days': CalendarClock,
-  'No deal owner assigned': UserX,
-}
-
-export function AttentionAlerts({
-  alerts,
-  uniqueDealCount,
-  onProjectClick,
-  onViewAll,
-}: AttentionAlertsProps) {
-  const dealCount = uniqueDealCount ?? new Set(alerts.map((row) => row.projectId)).size
+/** Needs Attention: one row per Active/Pending deal, most urgent first (see attentionRows). */
+export function AttentionAlerts({ rows, limit = 6, onProjectClick, onViewAll }: AttentionAlertsProps) {
+  const shown = rows.slice(0, limit)
   return (
-    <section className="flex h-full flex-col rounded-xl border border-attention-border bg-surface shadow-(--shadow-card)">
-      <div className="flex items-start justify-between gap-2 border-b border-attention-border/60 bg-attention-bg/50 px-5 py-4">
+    <section className="flex h-full flex-col rounded-xl border border-border bg-surface shadow-(--shadow-card)" data-testid="needs-attention">
+      <div className="flex items-start justify-between gap-2 border-b border-border px-5 py-3.5">
         <div>
           <h2 className="font-brand text-lg font-bold text-navy-900">Needs Attention</h2>
           <p className="mt-0.5 text-sm text-ink-muted">
-            {dealCount} unique deal{dealCount === 1 ? '' : 's'} · showing {alerts.length} alert
-            {alerts.length === 1 ? '' : 's'}
+            {rows.length} Active/Pending deal{rows.length === 1 ? '' : 's'} · most overdue first
           </p>
         </div>
         {onViewAll && (
-          <button
-            type="button"
-            onClick={onViewAll}
-            className="text-xs font-semibold text-attention hover:underline"
-          >
+          <button type="button" onClick={onViewAll} className="text-xs font-semibold text-accent hover:underline">
             View all
           </button>
         )}
       </div>
-
       <ul className="divide-y divide-border/70">
-        {alerts.length === 0 && (
-          <li className="px-5 py-8 text-sm text-ink-muted">No outstanding date warnings.</li>
-        )}
-        {alerts.map((alert) => {
-          const Icon = ICONS[alert.reason]
+        {shown.length === 0 && <li className="px-5 py-8 text-sm text-ink-muted">No Active or Pending deal needs attention.</li>}
+        {shown.map((row) => {
+          const red = row.primary.level === 'red'
+          const Icon = row.group === 0 ? Clock : row.group === 1 ? AlertCircle : row.group === 2 ? UserX : CalendarClock
           return (
-            <li key={alert.id} className="flex gap-3 px-5 py-3.5">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning-bg text-warning">
-                <Icon className="h-4 w-4" strokeWidth={1.75} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink">{alert.reason}</p>
-                <button
-                  type="button"
-                  onClick={() => onProjectClick?.(alert.projectId)}
-                  className="mt-0.5 text-sm font-medium text-accent hover:underline"
-                >
-                  {alert.projectName}
-                </button>
-                <p className="mt-0.5 text-xs text-ink-muted">{alert.detail}</p>
-              </div>
+            <li key={row.opportunity.id}>
+              <button type="button" onClick={() => onProjectClick?.(row.opportunity.id)} className="flex w-full gap-3 px-5 py-3 text-left hover:bg-accent-soft/30" data-testid={`attention-row-${row.opportunity.id}`}>
+                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${red ? 'bg-[#fdecea] text-[var(--color-danger)]' : 'bg-accent-soft text-accent'}`}>
+                  <Icon className="h-4 w-4" strokeWidth={1.75} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-navy-900">{row.opportunity.projectName}</span>
+                    <span className="shrink-0 text-[11px] text-ink-subtle">{dealIdFromOpportunity(row.opportunity)}</span>
+                  </span>
+                  <span className={`block text-xs font-semibold ${red ? 'text-[var(--color-danger)]' : 'text-accent'}`}>
+                    {row.group === 0 ? `${row.overdueDays} day${row.overdueDays === 1 ? '' : 's'} overdue` : row.primary.reason}
+                    {row.warnings.length > 1 && <span className="font-normal text-ink-muted"> · +{row.warnings.length - 1} more</span>}
+                  </span>
+                  <span className="block truncate text-xs text-ink-muted">{row.primary.detail}</span>
+                </span>
+              </button>
             </li>
           )
         })}

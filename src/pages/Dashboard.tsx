@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TopHeader } from '@/components/layout/TopHeader'
 import { StatusFilter } from '@/components/dashboard/StatusFilter'
@@ -29,7 +29,6 @@ import type {
   ActivityItem,
   DashboardFilters,
   Opportunity,
-  PriorityTask,
 } from '@/types'
 import {
   computeFinancialTotals,
@@ -38,11 +37,9 @@ import {
   filterDashboardOpportunities,
   hasActiveFilters,
 } from '@/utils/dashboard'
-import {
-  rankOpportunitiesByNextAction,
-  topAttentionAlerts,
-  uniqueAttentionCount,
-} from '@/lib/attention'
+import { attentionRows, rankOpportunitiesByNextAction, uniqueAttentionCount } from '@/lib/attention'
+import { useRestorableSelection, useRestoringFromProfile } from '@/hooks/useSessionState'
+import { useActivityArchive } from '@/lib/activityArchive'
 import { rankWeekPriorityTasks } from '@/lib/taskSort'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 
@@ -66,7 +63,32 @@ export function Dashboard() {
   const owner = sessionOwnerKey(user)
   const navigate = useNavigate()
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
-  const [selected, setSelected] = useState<Opportunity | null>(null)
+  const [selectedId, setSelectedId] = useRestorableSelection('dashboard')
+  const selected = selectedId ? (opportunities.find((o) => o.id === selectedId) ?? null) : null
+  const setSelected = (opp: Opportunity | null) => setSelectedId(opp?.id ?? null)
+  const activityArchive = useActivityArchive(owner)
+  const restoring = useRestoringFromProfile()
+  // Dashboard is the one page that scrolls: Back from a profile returns to the same scroll position.
+  useEffect(() => {
+    if (restoring) {
+      try {
+        const top = Number(sessionStorage.getItem('newport_view_state:dashboard:scroll') ?? 0)
+        requestAnimationFrame(() => window.scrollTo({ top }))
+      } catch {
+        // ignore
+      }
+    }
+    const onScroll = () => {
+      try {
+        sessionStorage.setItem('newport_view_state:dashboard:scroll', String(window.scrollY))
+      } catch {
+        // ignore
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [taskOpen, setTaskOpen] = useState(false)
   const [relationshipOpen, setRelationshipOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -115,40 +137,15 @@ export function Dashboard() {
     [filtered, tasks],
   )
 
-  const weekTasks = useMemo<PriorityTask[]>(() => {
-    return rankWeekPriorityTasks(tasks)
-      .slice(0, 5)
-      .map((task) => ({
-        id: task.id,
-        priority: (task.priority === 'A' || task.priority === 'B' || task.priority === 'C'
-          ? task.priority
-          : 'B') as PriorityTask['priority'],
-        action: task.action,
-        projectId: task.opportunityId || '',
-        projectName: task.projectName,
-        owner: task.owner,
-        dueDate: task.dueDate || '',
-      }))
-  }, [tasks])
-
-  const recentActivity = useMemo(
-    () =>
-      [...activity]
-        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-        .slice(0, 4),
-    [activity],
-  )
+  // Same eligibility as Tasks & Follow-Ups (paused tasks of inactive deals never appear here).
+  const weekTasks = useMemo(() => rankWeekPriorityTasks(tasks, new Date(), opportunities).slice(0, 6), [tasks, opportunities])
 
   const allActivity = useMemo(
     () => [...activity].sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
     [activity],
   )
 
-  const alerts = useMemo(() => topAttentionAlerts(opportunities, tasks, 5), [opportunities, tasks])
-  const uniqueAlerts = useMemo(
-    () => uniqueAttentionCount(opportunities, tasks),
-    [opportunities, tasks],
-  )
+  const attention = useMemo(() => attentionRows(opportunities, tasks), [opportunities, tasks])
 
   const setStatus = (status: DashboardFilters['status']) => {
     setFilters((prev) => ({
@@ -247,22 +244,19 @@ export function Dashboard() {
               onProjectClick={openById}
               onViewAll={() => void navigate('/tasks?filter=all')}
             />
-            <AttentionAlerts
-              alerts={alerts}
-              uniqueDealCount={uniqueAlerts}
-              onProjectClick={openById}
-              onViewAll={() => void navigate('/opportunities?attention=1')}
-            />
+            <AttentionAlerts rows={attention} onProjectClick={openById} onViewAll={() => void navigate('/opportunities?attention=1')} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-1">
               <RecentActivity
-                items={recentActivity}
                 allItems={allActivity}
-                onViewAll={() => setActivityOpen(true)}
+                archived={activityArchive.archived}
+                onArchive={activityArchive.archive}
+                onRestore={activityArchive.restore}
                 onItemClick={openActivity}
                 historyOpen={activityOpen}
+                onOpenHistory={() => setActivityOpen(true)}
                 onCloseHistory={() => setActivityOpen(false)}
               />
             </div>

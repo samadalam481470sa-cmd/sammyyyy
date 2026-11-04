@@ -76,7 +76,7 @@ import {
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
-import { applyDataFixes } from '@/lib/dataFixes'
+import { applyDataFixes, applyTaskDataFixes } from '@/lib/dataFixes'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
@@ -155,10 +155,10 @@ function snapshotLocalCrm(owner: string, users: CrmUser[]) {
 }
 
 function presentDatabase(database: PortableDatabase, users: CrmUser[]) {
-  const rawTasks = applyTaskArchiveRules(database.tasks.map((row) => migrateTaskRecord(row, users)))
+  const rawTasks = applyTaskArchiveRules(applyTaskDataFixes(database.tasks).map((row) => migrateTaskRecord(row, users)))
   return {
     tasks: rawTasks.tasks,
-    opportunities: decorateOpportunities(database.opportunities, rawTasks.tasks),
+    opportunities: decorateOpportunities(applyDataFixes(database.opportunities), rawTasks.tasks),
     documents: database.documents,
     activity: database.activity,
   }
@@ -241,7 +241,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const pushActivity = (item: ActivityItem | null) => {
     if (!item) return
-    persistActivity([item, ...activityRef.current].slice(0, 200))
+    persistActivity([item, ...activityRef.current].slice(0, 1000))
   }
 
   const cloudTimer = useRef<number | null>(null)

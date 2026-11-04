@@ -41,8 +41,7 @@ export function dealWarnings(
   } else {
     const label = summary.nextAction || 'Task'
     if (isOverdueDate(summary.nextActionDate, now)) {
-      const days = daysOverdue(summary.nextActionDate, now)
-      out.push({ level: 'red', reason: 'Next action overdue', detail: `${label} was due ${formatDate(summary.nextActionDate)}${days > 0 ? ` (${days} day${days === 1 ? '' : 's'} overdue)` : ''}` })
+      out.push({ level: 'red', reason: 'Next action overdue', detail: `${label} was due ${formatDate(summary.nextActionDate)}` })
     } else if (isWithinNextDays(summary.nextActionDate, 7, now)) {
       out.push({ level: 'navy', reason: 'Upcoming deadline within 7 days', detail: `${label} is due ${formatDate(summary.nextActionDate)}` })
     }

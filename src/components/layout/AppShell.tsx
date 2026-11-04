@@ -31,11 +31,13 @@ function AppFrame() {
   const location = useLocation()
   const onDashboard = location.pathname === '/'
 
-  // Every route change opens the target page at the top, not at the old scroll position.
+  // Every route change opens the target page at the top, except Back from a Full Opportunity
+  // Profile, which restores the page's own scroll position.
   useLayoutEffect(() => {
+    if ((location.state as { restore?: boolean } | null)?.restore) return
     window.scrollTo({ top: 0, left: 0 })
     document.scrollingElement?.scrollTo?.({ top: 0, left: 0 })
-  }, [location.pathname, location.search])
+  }, [location.pathname, location.search, location.state])
   const offset = sidebarOffset(collapsed, sheets.length, onDashboard)
 
   useEffect(() => {

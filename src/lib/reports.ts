@@ -4,8 +4,8 @@
  * Period semantics (no historical snapshots are stored):
  * - Active + Pending figures: deals whose CURRENT status is Active or Pending and whose recorded
  *   creation date falls in the period.
- * - Completed figures: deals whose CURRENT status is Completed and whose recorded first completion
- *   date falls in the period.
+ * - Completed figures: deals whose CURRENT status is Completed (legally closed), counted 24 hours
+ *   after the user confirmed it, on the legal closing date, using the closing NWP / PF EBITDA.
  * - All Time includes every deal, dated or not. A period filter leaves out deals with no recorded
  *   date, and the page says how many.
  * Trends use recorded events only:
@@ -17,7 +17,7 @@ import type { Opportunity } from '@/types'
 import type { TaskRecord } from '@/data/mockModules'
 import { ACQUISITION_STAGES, OPPORTUNITY_STATUSES } from '@/data/constants'
 import { safeMoney } from '@/utils/dashboard'
-import { completionEvents } from '@/lib/statusHistory'
+import { closingValues, completionReportState, legalClosingDate } from '@/lib/statusHistory'
 import { parseDateValue, startOfLocalDay } from '@/lib/calendarDate'
 
 export type PeriodKind = 'all' | 'month' | 'year' | 'range' | 'last30'
@@ -102,8 +102,10 @@ function totals(rows: Opportunity[]): Totals {
 export interface ScopedDeals {
   /** Active + Pending deals in scope. */
   pipeline: Opportunity[]
-  /** Completed deals in scope. */
+  /** Completed deals counted in completion reports: FINAL (24 h after confirmation), legal closing date in period. */
   completed: Opportunity[]
+  /** Completed deals still inside their 24-hour provisional window (shown, not counted). */
+  provisional: Opportunity[]
   /** All statuses in scope (by creation date), for Deals by Status. */
   allStatuses: Opportunity[]
   /** Deals left out of a period view because the needed date was never recorded. */
@@ -111,15 +113,26 @@ export interface ScopedDeals {
   undatedCompleted: number
 }
 
-export function scopeDeals(opportunities: Opportunity[], period: Period): ScopedDeals {
+/**
+ * Period scope. Active + Pending by creation date; Completed by LEGAL CLOSING DATE, counted only
+ * once the completion is final (24 hours after the user confirmed it). Everything is derived from
+ * the saved record and the clock at read time, so a reversal removes the deal at once and
+ * reopening the app after 24 hours finalizes it without any timer.
+ */
+export function scopeDeals(opportunities: Opportunity[], period: Period, now = new Date()): ScopedDeals {
   const created = (o: Opportunity) => inPeriod(o.createdAt, period)
-  const completedAt = (o: Opportunity) => o.completedAt ?? completionEvents(o).find((e) => e.delta === 1)?.at ?? null
+  const closing = (o: Opportunity) => {
+    const d = legalClosingDate(o)
+    return d ? `${d}T12:00:00` : null
+  }
+  const completedNow = opportunities.filter((o) => o.status === 'Completed')
   return {
     pipeline: opportunities.filter((o) => isPipeline(o) && created(o)),
-    completed: opportunities.filter((o) => o.status === 'Completed' && inPeriod(completedAt(o), period)),
+    completed: completedNow.filter((o) => completionReportState(o, now) === 'final' && inPeriod(closing(o), period)),
+    provisional: completedNow.filter((o) => completionReportState(o, now) === 'provisional' && inPeriod(closing(o), period)),
     allStatuses: opportunities.filter(created),
     undatedCreated: period.isAllTime ? 0 : opportunities.filter((o) => !o.createdAt).length,
-    undatedCompleted: period.isAllTime ? 0 : opportunities.filter((o) => o.status === 'Completed' && !completedAt(o)).length,
+    undatedCompleted: period.isAllTime ? 0 : completedNow.filter((o) => !legalClosingDate(o)).length,
   }
 }
 
@@ -128,8 +141,18 @@ export interface ReportKpis {
   completed: Totals
 }
 
+function closingTotals(rows: Opportunity[]): Totals {
+  return rows.reduce(
+    (acc, o) => {
+      const v = closingValues(o)
+      return { deals: acc.deals + 1, nwp: acc.nwp + safeMoney(v.nwp), pfEbitda: acc.pfEbitda + safeMoney(v.pfEbitda) }
+    },
+    { deals: 0, nwp: 0, pfEbitda: 0 },
+  )
+}
+
 export function reportKpis(scoped: ScopedDeals): ReportKpis {
-  return { pipeline: totals(scoped.pipeline), completed: totals(scoped.completed) }
+  return { pipeline: totals(scoped.pipeline), completed: closingTotals(scoped.completed) }
 }
 
 export function dealsByStatus(rows: Opportunity[]) {
@@ -161,10 +184,10 @@ export function financialGroups(k: ReportKpis) {
 export function leadFinancials(scoped: ScopedDeals, leads: string[]) {
   const names = new Set(leads)
   ;[...scoped.pipeline, ...scoped.completed].forEach((o) => names.add(o.dealLead?.trim() || 'Unassigned'))
-  const of = (rows: Opportunity[], lead: string) => totals(rows.filter((o) => (o.dealLead?.trim() || 'Unassigned') === lead))
+  const byLead = (rows: Opportunity[], lead: string) => rows.filter((o) => (o.dealLead?.trim() || 'Unassigned') === lead)
   return [...names].sort().map((lead) => {
-    const p = of(scoped.pipeline, lead)
-    const c = of(scoped.completed, lead)
+    const p = totals(byLead(scoped.pipeline, lead))
+    const c = closingTotals(byLead(scoped.completed, lead))
     return { lead, pipelineNwp: p.nwp, pipelinePfEbitda: p.pfEbitda, completedNwp: c.nwp, completedPfEbitda: c.pfEbitda }
   })
 }
@@ -229,37 +252,53 @@ export interface Trends {
   points: TrendPoint[]
   undatedCreated: number
   undatedCompleted: number
+  /** Kept for compatibility; reversals now remove the deal from completion reports entirely. */
   reversals: number
+  /** Completed deals still in their 24-hour provisional window (not in the series). */
+  provisional: number
 }
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-/** Monthly trend points from recorded created and completion events. */
+/**
+ * Monthly trend points.
+ * - Created: every deal by its createdAt month (whatever its status now).
+ * - Completed: deals that are Completed NOW and FINAL (24 h rule), on their legal closing month.
+ *   A reversed deal is simply not Completed any more, so it drops out everywhere (no double count).
+ * - Cumulative NWP / PF EBITDA at legal closing: running totals that start from everything closed
+ *   before the selected window (opening balance) and add each finalized closing in the window.
+ */
 export function buildTrends(opportunities: Opportunity[], period: Period, now = new Date()): Trends {
-  type Ev = { at: Date; kind: 'created' | 'completed'; delta: number; nwp: number; pfEbitda: number }
+  type Ev = { at: Date; kind: 'created' | 'completed'; nwp: number; pfEbitda: number }
   const events: Ev[] = []
   let undatedCreated = 0
   let undatedCompleted = 0
-  let reversals = 0
+  let provisional = 0
   for (const o of opportunities) {
-    if (o.createdAt) events.push({ at: new Date(o.createdAt), kind: 'created', delta: 1, nwp: 0, pfEbitda: 0 })
+    if (o.createdAt) events.push({ at: new Date(o.createdAt), kind: 'created', nwp: 0, pfEbitda: 0 })
     else undatedCreated += 1
-    const comp = completionEvents(o)
-    if (!comp.length && o.status === 'Completed') undatedCompleted += 1
-    for (const e of comp) {
-      if (e.delta < 0) reversals += 1
-      events.push({ at: new Date(e.at), kind: 'completed', delta: e.delta, nwp: safeMoney(o.nwp) * e.delta, pfEbitda: safeMoney(o.pfEbitda) * e.delta })
+    if (o.status !== 'Completed') continue
+    const state = completionReportState(o, now)
+    if (state === 'provisional') {
+      provisional += 1
+      continue
     }
+    const closed = legalClosingDate(o)
+    if (!closed) {
+      undatedCompleted += 1
+      continue
+    }
+    const v = closingValues(o)
+    events.push({ at: new Date(`${closed}T12:00:00`), kind: 'completed', nwp: safeMoney(v.nwp), pfEbitda: safeMoney(v.pfEbitda) })
   }
   const valid = events.filter((e) => !Number.isNaN(e.at.getTime())).sort((a, b) => a.at.getTime() - b.at.getTime())
-  if (!valid.length) return { points: [], undatedCreated, undatedCompleted, reversals }
+  if (!valid.length) return { points: [], undatedCreated, undatedCompleted, reversals: 0, provisional }
   const first = period.from ?? new Date(valid[0].at.getFullYear(), valid[0].at.getMonth(), 1)
-  const lastBound = period.to ? new Date(period.to.getTime() - 1) : now
+  const lastBound = period.to ? new Date(Math.min(period.to.getTime() - 1, Math.max(now.getTime(), valid[valid.length - 1].at.getTime()))) : now
   const end = new Date(lastBound.getFullYear(), lastBound.getMonth(), 1)
   const points: TrendPoint[] = []
-  // Cumulative completed values start from everything completed before the window.
   let cumNwp = 0
   let cumPfe = 0
   for (const e of valid) {
@@ -272,9 +311,8 @@ export function buildTrends(opportunities: Opportunity[], period: Period, now = 
     const key = monthKey(cursor)
     const inMonth = valid.filter((e) => monthKey(e.at) === key && (!period.from || e.at >= period.from) && (!period.to || e.at < period.to))
     const created = inMonth.filter((e) => e.kind === 'created').length
-    const completed = inMonth.filter((e) => e.kind === 'completed').reduce((s, e) => s + e.delta, 0)
-    for (const e of inMonth) {
-      if (e.kind !== 'completed') continue
+    const completedRows = inMonth.filter((e) => e.kind === 'completed')
+    for (const e of completedRows) {
       cumNwp += e.nwp
       cumPfe += e.pfEbitda
     }
@@ -282,19 +320,19 @@ export function buildTrends(opportunities: Opportunity[], period: Period, now = 
       month: key,
       label: cursor.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
       created,
-      completed,
+      completed: completedRows.length,
       cumulativeNwp: cumNwp,
       cumulativePfEbitda: cumPfe,
     })
     if (points.length > 240) break
   }
-  return { points, undatedCreated, undatedCompleted, reversals }
+  return { points, undatedCreated, undatedCompleted, reversals: 0, provisional }
 }
 
 /** Opportunities in scope for an export of the current tab and period. */
 export function exportScope(opportunities: Opportunity[], period: Period): Opportunity[] {
   if (period.isAllTime) return opportunities
   const s = scopeDeals(opportunities, period)
-  const ids = new Set([...s.allStatuses, ...s.completed].map((o) => o.id))
+  const ids = new Set([...s.allStatuses, ...s.completed, ...s.provisional].map((o) => o.id))
   return opportunities.filter((o) => ids.has(o.id))
 }

@@ -1,3 +1,4 @@
+import { isWorkingTask } from '@/lib/taskLifecycle'
 import { describe, expect, it } from 'vitest'
 import { bundledSeedSnapshot } from './portableDatabase'
 import { runConsistencyAudit } from './consistencyAudit'
@@ -27,14 +28,15 @@ describe('consistency audit', () => {
     const { opportunities, tasks } = dataset()
     const audit = runConsistencyAudit(opportunities, tasks, NOW)
     // Tasks page, Overdue pill.
-    const tasksPageOverdue = tasks.filter((t) => isActiveListTask(t, NOW) && isOverdueUnfinishedTask(t, NOW))
+    const tasksPageOverdue = tasks.filter((t) => isActiveListTask(t, NOW) && isOverdueUnfinishedTask(t, NOW) && isWorkingTask(t, opportunities, NOW))
     expect(audit.overdueUnfinishedTasks).toBe(tasksPageOverdue.length)
-    expect(audit.overdueUnfinishedTasks).toBe(overdueTaskList(tasks, NOW).length)
+    expect(audit.overdueUnfinishedTasks).toBe(overdueTaskList(tasks, NOW, opportunities).length)
     // Opportunities page and Dashboard, Needs Attention.
     const attention = filterOpportunities(opportunities, { status: 'Needs Attention', stage: null, search: '' })
     expect(audit.uniqueAtRiskOpportunities).toBe(attention.length)
     expect(computeKpis(opportunities).needsAttention).toBe(attention.length)
-    expect(audit.redOverdueOpportunities + audit.missingTaskOpportunities + audit.navyDueSoonOpportunities).toBe(
+    // A deal with no lead and no other issue counts once as at risk (no deal owner assigned).
+    expect(audit.redOverdueOpportunities + audit.missingTaskOpportunities + audit.navyDueSoonOpportunities).toBeLessThanOrEqual(
       audit.uniqueAtRiskOpportunities,
     )
     // Only Active and Pending deals can need attention.
@@ -50,7 +52,7 @@ describe('consistency audit', () => {
     const later = new Date(2026, 11, 1, 9, 0, 0)
     const { opportunities, tasks } = dataset(later)
     const audit = runConsistencyAudit(opportunities, tasks, later)
-    expect(audit.overdueUnfinishedTasks).toBe(overdueTaskList(tasks, later).length)
+    expect(audit.overdueUnfinishedTasks).toBe(overdueTaskList(tasks, later, opportunities).length)
     const today = dataset()
     expect(audit.overdueUnfinishedTasks).toBeGreaterThan(runConsistencyAudit(today.opportunities, today.tasks, NOW).overdueUnfinishedTasks)
   })
