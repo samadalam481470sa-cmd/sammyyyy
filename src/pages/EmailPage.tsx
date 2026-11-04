@@ -198,6 +198,12 @@ function senderLabel(message: MailMessage): string {
 
 const PROVIDER_NAME: Record<MailProvider, string> = { outlook: 'Outlook', gmail: 'Gmail' }
 
+/**
+ * Newport uses Outlook only (Nov 2026 sprint): the Gmail connect option is hidden. The Gmail code
+ * stays so a mailbox connected earlier can still be disconnected; flip this to show it again.
+ */
+const GMAIL_UI_ENABLED = false
+
 function ProviderBadge({ provider }: { provider: MailProvider }) {
   return (
     <span
@@ -586,7 +592,7 @@ export function EmailPage() {
     const q = query.trim()
     if (!q) return
     if (!anyConnected) {
-      setStatus('Connect Outlook or Gmail to search the whole mailbox.')
+      setStatus('Connect Outlook to search the whole mailbox.')
       return
     }
     setSearching(true)
@@ -1171,11 +1177,11 @@ export function EmailPage() {
                 Disconnect
               </button>
             </span>
-          ) : (
+          ) : GMAIL_UI_ENABLED ? (
             <button type="button" data-testid="email-connect-gmail" onClick={connectGmailNow} className="inline-flex h-8 items-center rounded-md border border-[#c5221f] px-3 text-sm font-semibold text-[#c5221f] hover:bg-[#fce8e6]">
               {gmailNeedsRenewal(account) ? 'Reconnect Gmail' : 'Connect Gmail'}
             </button>
-          )}
+          ) : null}
           <button type="button" title="Mailbox check" aria-label="Mailbox check" data-testid="email-check" onClick={() => setDialog('check')} className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-[#f0f0f0]">
             <Stethoscope className="h-4 w-4 text-[#424242]" />
           </button>
@@ -1287,16 +1293,18 @@ export function EmailPage() {
               <div data-testid="outlook-not-connected" className="border-b border-[#e0e0e0] bg-[#fff8e6] px-4 py-3 text-xs text-[#7a5b00]">
                 <p className="font-semibold">No mailbox connected</p>
                 <p className="mt-1">
-                  No mail has been retrieved for {account}. Connect Outlook for a Microsoft mailbox (work, school, or Outlook.com) or Gmail for a Google
-                  mailbox. You approve mail access on the provider’s own page the first time.
+                  No mail has been retrieved for {account}. Connect Outlook for your Microsoft mailbox (work, school, or Outlook.com). You approve
+                  mail access on Microsoft’s own page the first time.
                 </p>
                 {graphTokenError() && <p className="mt-1">Last error: {graphTokenError()}</p>}
                 <button type="button" onClick={connectOutlook} className="mt-2 inline-flex h-7 items-center rounded-md bg-[#0f6cbd] px-3 font-semibold text-white hover:bg-[#115ea3]">
                   Connect Outlook
                 </button>
-                <button type="button" onClick={connectGmailNow} className="mt-2 ml-2 inline-flex h-7 items-center rounded-md bg-[#c5221f] px-3 font-semibold text-white hover:bg-[#a50e0e]">
-                  Connect Gmail
-                </button>
+                {GMAIL_UI_ENABLED && (
+                  <button type="button" onClick={connectGmailNow} className="mt-2 ml-2 inline-flex h-7 items-center rounded-md bg-[#c5221f] px-3 font-semibold text-white hover:bg-[#a50e0e]">
+                    Connect Gmail
+                  </button>
+                )}
               </div>
             )}
 

@@ -192,7 +192,7 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
                   }}
                   className="h-9 rounded-lg border border-border px-4 text-sm font-semibold text-ink hover:bg-canvas"
                 >
-                  Gmail and more
+                  Open Email
                 </button>
               </div>
               {note && <p className="mt-2 text-xs text-attention">{note}</p>}
