@@ -244,7 +244,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         </div>
 
         <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
+          {!hideHeader && <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
             <label className="block min-w-0">
               <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
               <select
@@ -287,7 +287,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                 />
               </label>
             )}
-          </div>
+          </div>}
 
           {tab === 'overview' && (
             <>

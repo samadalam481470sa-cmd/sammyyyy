@@ -1,6 +1,13 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, FileText, Plus } from 'lucide-react'
+import { SideDrawer } from '@/components/shared/Overlay'
+import { StatusStageControls } from '@/components/opportunities/StatusStageControls'
+import { MeetingDrawer } from '@/components/meetings/MeetingDrawer'
+import { AddMeetingDrawer } from '@/components/meetings/AddMeetingDrawer'
+import { useCrmMeetings } from '@/hooks/useCrmMeetings'
+import { meetingTitle } from '@/types/crmMeeting'
+import { priorityChipClass } from '@/lib/priorityStyles'
 import { useData } from '@/data/DataContext'
 import { mockContacts, type ContactRecord, type TaskRecord } from '@/data/mockModules'
 import { useResource } from '@/hooks/useResource'
@@ -11,7 +18,6 @@ import { customDocumentsForOpportunity, DOCUMENT_SLOT_META, hasAttachedFile, slo
 import { isDeletedTask, isHistoryTask, isUnfinishedTask } from '@/lib/taskLifecycle'
 import { sortVisibleTasks } from '@/lib/taskSort'
 import { taskWarning } from '@/lib/taskWarning'
-import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 import { formatCurrency, formatDate, formatRelativeTime } from '@/utils/dashboard'
 import { DocumentWorkspace } from '@/components/documents/DocumentWorkspace'
 import { SlotPresenceIcon } from '@/components/documents/SlotPresenceIcon'
@@ -25,18 +31,14 @@ import { TaskEditor } from '@/components/tasks/TaskEditor'
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'tasks', label: 'Tasks & Next Action' },
+  { id: 'tasks', label: 'Tasks' },
   { id: 'relationships', label: 'Relationships' },
   { id: 'documents', label: 'Documents' },
+  { id: 'meetings', label: 'Meetings' },
   { id: 'activity', label: 'Activity' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 
-const PRIORITY_BADGES: Record<string, string> = {
-  A: 'bg-navy-900 text-white',
-  B: 'bg-accent-soft text-navy-800',
-  C: 'bg-canvas text-ink-muted border border-border',
-}
 
 function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -83,6 +85,10 @@ export function OpportunityProfilePage() {
   const [newTask, setNewTask] = useState(false)
   const [newContact, setNewContact] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [meetingId, setMeetingId] = useState<string | null>(null)
+  const [addMeeting, setAddMeeting] = useState(false)
+  const meetingsApi = useCrmMeetings()
+  const myMeetings = useMemo(() => meetingsApi.meetings.filter((m) => m.opportunityId === opportunityId).sort((a, b) => b.start.localeCompare(a.start)), [meetingsApi.meetings, opportunityId])
   const panel = useRef<OpportunityEditorHandle>(null)
   const from = (location.state as { from?: string } | null)?.from
 
@@ -160,46 +166,50 @@ export function OpportunityProfilePage() {
     setTab('overview')
   }
 
-  const sideGrid = (open: boolean) =>
-    open ? 'grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]' : 'grid h-full min-h-0 gap-4'
+  const pausedDeal = !['Active', 'Pending'].includes(opportunity.status)
   const panel_ = 'h-full min-h-[420px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card) lg:min-h-0'
   const conflict = statusStageConflict(opportunity)
 
   return (
-    <div className="custom-scroll flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-y-auto" data-testid="opportunity-profile">
-      <header className="shrink-0 border-b border-border bg-surface px-6 py-5 lg:px-8">
-        <button type="button" onClick={goBack} className="mb-3 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-muted hover:text-ink" data-testid="profile-back">
-          <ArrowLeft className="h-4 w-4" /> Back
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-y-auto bg-canvas lg:overflow-hidden" data-testid="opportunity-profile">
+      <header className="shrink-0 border-b border-border bg-surface px-6 pt-3 lg:px-8">
+        <button type="button" onClick={goBack} className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="profile-back">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
         </button>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.12em] text-accent uppercase">{dealId}</p>
-            <h1 className="mt-1 flex items-center gap-2 font-brand text-2xl font-bold text-navy-900">
+            <h1 className="flex items-center gap-2 font-brand text-2xl leading-tight font-bold text-navy-900">
               {opportunity.projectName}
               <WarningTriangle warning={warning} className="mt-1" />
             </h1>
-            <p className="mt-0.5 text-sm text-ink-muted">{opportunity.entityName}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className={badgeClass(statusBadge(opportunity.status))}>{opportunity.status}</span>
-              <span className={badgeClass(stageBadge(opportunity.stage))}>{opportunity.stage}</span>
-              <span className="text-ink-muted">Deal owner: <span className="font-semibold text-ink">{opportunity.dealLead || 'Unassigned'}</span></span>
-              {conflict && (
-                <span className="rounded-md border border-attention-border bg-attention-bg px-2 py-0.5 text-xs font-semibold text-attention" data-testid="profile-stage-conflict">
-                  {conflict}
-                </span>
-              )}
-            </div>
+            <p className="text-sm text-ink-muted">
+              {opportunity.entityName} · Deal lead: <span className={`font-semibold ${opportunity.dealLead ? 'text-ink' : 'text-[var(--color-danger)]'}`}>{opportunity.dealLead || 'Unassigned'}</span>
+            </p>
+            <p className="mt-0.5 text-[11px] text-ink-subtle" data-testid="profile-dates">
+              Created {opportunity.createdAt ? formatDate(opportunity.createdAt) : 'not recorded'} · Updated {formatDate(opportunity.updatedAt ?? opportunity.lastActivityDate ?? null)}
+              {opportunity.status === 'Completed' && opportunity.closedAt ? ` · Legally closed ${formatDate(opportunity.closedAt)}` : ''}
+              {opportunity.seedDates ? ' · demo dates on fictional record' : ''}
+            </p>
           </div>
-          {(warning || opportunity.needsAttention) && (
-            <div className={`max-w-sm rounded-lg border px-3 py-2 text-sm ${warning?.level === 'navy' ? 'border-accent-muted bg-accent-soft text-navy-900' : 'border-attention-border bg-attention-bg text-attention'}`} data-testid="profile-attention">
-              <p className="flex items-center gap-1.5 font-semibold">
-                <AlertTriangle className="h-4 w-4" /> Needs Attention
-              </p>
-              <p className="mt-0.5 text-ink">{warning?.detail ?? opportunity.attentionReasons.join(', ')}</p>
-            </div>
-          )}
+          <div className="flex flex-wrap items-start gap-3">
+            <StatusStageControls opportunity={opportunity} />
+            {(warning || opportunity.needsAttention) && (
+              <div className={`max-w-xs rounded-lg border px-3 py-1.5 text-xs ${warning?.level === 'navy' ? 'border-accent-muted bg-accent-soft text-navy-900' : 'border-attention-border bg-[#fdecea] text-[var(--color-danger)]'}`} data-testid="profile-attention">
+                <p className="flex items-center gap-1.5 font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Needs Attention
+                </p>
+                <p className="mt-0.5 text-ink">{warning?.detail ?? opportunity.attentionReasons.join(', ')}</p>
+              </div>
+            )}
+          </div>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        {conflict && (
+          <p className="mt-2 inline-block rounded-md border border-attention-border bg-attention-bg px-2 py-0.5 text-xs font-semibold text-attention" data-testid="profile-stage-conflict">
+            {conflict}
+          </p>
+        )}
+        <dl className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {[
             ['NWP', formatCurrency(opportunity.nwp)],
             ['Net Revenue', formatCurrency(opportunity.netRevenue)],
@@ -209,13 +219,13 @@ export function OpportunityProfilePage() {
             ['Geography', opportunity.geography || '—'],
             ['Specialty', opportunity.specialty || '—'],
           ].map(([term, value]) => (
-            <div key={term} className="rounded-lg border border-border bg-canvas px-3 py-2">
+            <div key={term} className="rounded-lg border border-border bg-canvas px-2.5 py-1.5">
               <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">{term}</dt>
-              <dd className="mt-0.5 truncate text-sm font-semibold text-ink" title={value}>{value}</dd>
+              <dd className="truncate text-sm font-semibold text-ink" title={value}>{value}</dd>
             </div>
           ))}
         </dl>
-        <nav className="mt-5 -mb-5 flex flex-wrap gap-1" aria-label="Profile sections">
+        <nav className="mt-2 flex flex-wrap gap-1" aria-label="Profile sections">
           {TABS.map((row) => (
             <button
               key={row.id}
@@ -223,17 +233,18 @@ export function OpportunityProfilePage() {
               data-testid={`profile-tab-${row.id}`}
               aria-current={tab === row.id ? 'page' : undefined}
               onClick={() => setTab(row.id)}
-              className={`rounded-t-lg border-b-2 px-3.5 py-2.5 text-sm font-semibold ${tab === row.id ? 'border-navy-900 text-navy-900' : 'border-transparent text-ink-muted hover:text-ink'}`}
+              className={`border-b-2 px-3.5 py-2 text-sm font-semibold ${tab === row.id ? 'border-navy-900 text-navy-900' : 'border-transparent text-ink-muted hover:text-ink'}`}
             >
               {row.label}
               {row.id === 'tasks' && openTasks.length > 0 && <span className="ml-1.5 rounded-full bg-canvas px-1.5 text-xs">{openTasks.length}</span>}
               {row.id === 'relationships' && contacts.length > 0 && <span className="ml-1.5 rounded-full bg-canvas px-1.5 text-xs">{contacts.length}</span>}
+              {row.id === 'meetings' && myMeetings.length > 0 && <span className="ml-1.5 rounded-full bg-canvas px-1.5 text-xs">{myMeetings.length}</span>}
             </button>
           ))}
         </nav>
       </header>
 
-      <main className="flex min-h-[460px] flex-1 flex-col px-6 py-5 lg:px-8">
+      <main className="flex min-h-[420px] flex-1 flex-col px-6 py-4 lg:min-h-0 lg:px-8">
         {notice && (
           <p role="status" className="mb-4 rounded-lg border border-border bg-canvas px-3 py-2 text-sm text-ink-muted">
             {notice}
@@ -253,38 +264,36 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'tasks' && (
-          <div className={`${sideGrid(Boolean(selectedTask))} flex-1`}>
-            <div className="custom-scroll min-h-0 space-y-4 overflow-y-auto">
-              <Card title="Next Action">
-                <div className="px-5 py-4 text-sm">
-                  {opportunity.nextAction ? (
-                    <p>
-                      <span className="font-semibold text-ink">{opportunity.nextAction}</span>
-                      <span className="text-ink-muted"> · due {formatDate(opportunity.nextActionDate)} · priority {opportunity.priority}</span>
-                    </p>
-                  ) : (
-                    <p className="text-ink-muted">No next action assigned. Add an unfinished task to set one.</p>
-                  )}
-                </div>
-              </Card>
-              <Card title={`Open tasks (${openTasks.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewTask(true))} data-testid="profile-new-task"><Plus className="h-4 w-4" /> New Task</button>}>
-                <TaskTable rows={openTasks} selectedId={taskId} drivingId={opportunity.nextActionTaskId ?? null} onOpen={(id) => guarded(() => setTaskId(taskId === id ? null : id))} empty="No open tasks for this opportunity." />
-              </Card>
-              <Card title={`Completed (${doneTasks.length})`}>
-                <TaskTable rows={doneTasks} selectedId={taskId} onOpen={(id) => guarded(() => setTaskId(taskId === id ? null : id))} empty="No completed tasks yet." />
-              </Card>
-            </div>
-            {selectedTask && (
-              <aside className={panel_}>
-                <TaskEditor ref={panel} mode="existing" task={selectedTask} onClose={() => setTaskId(null)} onDeleted={() => setTaskId(null)} />
-              </aside>
-            )}
+          <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto">
+            <Card title="Next Action">
+              <div className="px-5 py-3 text-sm">
+                {opportunity.nextAction ? (
+                  <p>
+                    <span className="font-semibold text-ink">{opportunity.nextAction}</span>
+                    <span className="text-ink-muted"> · due {formatDate(opportunity.nextActionDate)} · priority {opportunity.priority}</span>
+                  </p>
+                ) : (
+                  <p className="text-ink-muted">No next action. The earliest-due unfinished task becomes the Next Action.</p>
+                )}
+              </div>
+            </Card>
+            <Card title={`Open tasks (${openTasks.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewTask(true))} data-testid="profile-new-task"><Plus className="h-4 w-4" /> New Task</button>}>
+              {pausedDeal && openTasks.length > 0 && (
+                <p className="border-b border-border bg-canvas px-5 py-2 text-xs text-ink-muted" data-testid="paused-note">
+                  Paused — this deal is {opportunity.status}. Its unfinished tasks stay here unchanged, are hidden from Tasks & Follow-Ups and the Dashboard, and return there if the deal becomes Active or Pending.
+                </p>
+              )}
+              <TaskTable rows={openTasks} selectedId={taskId} paused={pausedDeal} drivingId={opportunity.nextActionTaskId ?? null} onOpen={(id) => setTaskId(id)} empty="No open tasks for this opportunity." />
+            </Card>
+            <Card title={`Completed & archived (${doneTasks.length})`}>
+              <TaskTable rows={doneTasks} selectedId={taskId} onOpen={(id) => setTaskId(id)} empty="No completed tasks yet." />
+            </Card>
           </div>
         )}
 
         {tab === 'relationships' && (
-          <div className={`${sideGrid(Boolean(selectedContact))} flex-1`}>
-            <div className="custom-scroll min-h-0 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
             <Card title={`Contacts (${contacts.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewContact(true))} data-testid="profile-new-relationship"><Plus className="h-4 w-4" /> New Relationship</button>}>
               {contacts.length === 0 ? (
                 <Empty>No contacts are linked to {opportunity.projectName}. Add one, or link an existing contact from Relationships.</Empty>
@@ -305,7 +314,7 @@ export function OpportunityProfilePage() {
                         key={contact.id}
                         tabIndex={0}
                         aria-selected={contactId === contact.id}
-                        onClick={() => guarded(() => setContactId(contactId === contact.id ? null : contact.id))}
+                        onClick={() => setContactId(contact.id)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') guarded(() => setContactId(contact.id))
                         }}
@@ -323,11 +332,6 @@ export function OpportunityProfilePage() {
               )}
             </Card>
             </div>
-            {selectedContact && (
-              <aside className={panel_}>
-                <RelationshipEditor ref={panel} api={contactsApi} contact={selectedContact} onClose={() => setContactId(null)} onDeleted={() => setContactId(null)} />
-              </aside>
-            )}
           </div>
         )}
 
@@ -379,6 +383,32 @@ export function OpportunityProfilePage() {
           </div>
         )}
 
+        {tab === 'meetings' && (
+          <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
+            <Card title={`My meetings (${myMeetings.length})`} action={<button type="button" className={addButton} onClick={() => setAddMeeting(true)} data-testid="profile-add-meeting"><Plus className="h-4 w-4" /> Add Meeting</button>}>
+              <p className="border-b border-border bg-canvas px-5 py-2 text-xs text-ink-muted">Only your own saved acquisition meetings for {opportunity.projectName} are shown. Other users do not see them.</p>
+              {myMeetings.length === 0 ? (
+                <Empty>No saved meetings for this opportunity yet. Save one from Meetings, or add a past meeting here.</Empty>
+              ) : (
+                <ul className="divide-y divide-border" data-testid="profile-meetings">
+                  {myMeetings.map((m) => (
+                    <li key={m.id}>
+                      <button type="button" onClick={() => setMeetingId(m.id)} className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30">
+                        <span className="w-24 shrink-0 text-xs text-ink-muted">{new Date(m.start).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-navy-900">{meetingTitle(m)}</span>
+                          <span className="block truncate text-xs text-ink-muted">{m.transcript ? 'Transcript' : 'No transcript'}{m.summary.status === 'ready' ? ' · AI summary' : ''}{m.recordingUrl ? ' · Recording link' : ''}</span>
+                        </span>
+                        {m.transcript && <FileText className="h-4 w-4 shrink-0 text-accent" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </div>
+        )}
+
         {tab === 'activity' && (
           <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
           <Card title="Activity">
@@ -412,13 +442,21 @@ export function OpportunityProfilePage() {
         )}
       </main>
 
+      <SideDrawer open={Boolean(selectedTask)} onRequestClose={() => (panel.current ? panel.current.requestLeave(() => setTaskId(null)) : setTaskId(null))} label="Edit task" testId="profile-task-drawer">
+        {selectedTask && <TaskEditor ref={panel} mode="existing" task={selectedTask} onClose={() => setTaskId(null)} onDeleted={() => setTaskId(null)} />}
+      </SideDrawer>
+      <SideDrawer open={Boolean(selectedContact)} onRequestClose={() => (panel.current ? panel.current.requestLeave(() => setContactId(null)) : setContactId(null))} label="Edit relationship" testId="profile-relationship-drawer">
+        {selectedContact && <RelationshipEditor ref={panel} api={contactsApi} contact={selectedContact} onClose={() => setContactId(null)} onDeleted={() => setContactId(null)} />}
+      </SideDrawer>
+      <MeetingDrawer api={meetingsApi} meeting={myMeetings.find((m) => m.id === meetingId) ?? null} onClose={() => setMeetingId(null)} hideProfileLink />
+      <AddMeetingDrawer open={addMeeting} onClose={() => setAddMeeting(false)} api={meetingsApi} seedOpportunityId={opportunityId} onSaved={(m) => setMeetingId(m.id)} />
       <NewTaskDrawer open={newTask} onClose={() => setNewTask(false)} seed={{ opportunityId }} onCreated={(task) => setTaskId(task.id)} />
       <NewRelationshipDrawer open={newContact} api={contactsApi} seedProjectIds={[opportunityId]} onClose={() => setNewContact(false)} onCreated={(contact) => setContactId(contact.id)} />
     </div>
   )
 }
 
-function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null }: { rows: TaskRecord[]; selectedId: string | null; onOpen: (id: string) => void; empty: string; drivingId?: string | null }) {
+function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null, paused = false }: { rows: TaskRecord[]; selectedId: string | null; onOpen: (id: string) => void; empty: string; drivingId?: string | null; paused?: boolean }) {
   if (!rows.length) return <Empty>{empty}</Empty>
   return (
     <table className="w-full table-fixed text-left text-sm">
@@ -444,13 +482,18 @@ function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null }: { rows
             className={`cursor-pointer border-b border-border/70 ${selectedId === task.id ? 'bg-accent-soft/60' : 'hover:bg-accent-soft/30'}`}
           >
             <td className="px-5 py-3.5">
-              <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold ${PRIORITY_BADGES[task.priority] ?? PRIORITY_BADGES.C}`}>{task.priority}</span>
+              <span className={priorityChipClass(task.priority)}>{task.priority}</span>
             </td>
             <td className="px-3 py-3.5 font-medium">
               <span className="flex items-center gap-1.5">
                 <span className="truncate">{task.action}</span>
-                <WarningTriangle warning={taskWarning(task)} />
-                {drivingId === task.id && (
+                {!paused && <WarningTriangle warning={taskWarning(task)} />}
+                {paused && isUnfinishedTask(task) && (
+                  <span className="shrink-0 rounded bg-[#eef0f3] px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted" title="Parent deal is not Active or Pending" data-testid="paused-badge">
+                    Paused
+                  </span>
+                )}
+                {drivingId === task.id && !paused && (
                   <span className="shrink-0 rounded bg-navy-900 px-1.5 py-0.5 text-[10px] font-semibold text-white" title="Earliest-due open task: this is the deal's Next Action and drives Needs Attention" data-testid="driving-task">
                     Next action
                   </span>
@@ -459,7 +502,7 @@ function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null }: { rows
             </td>
             <td className="truncate px-3 py-3.5 text-ink-muted">{task.owner || '—'}</td>
             <td className="px-3 py-3.5 text-ink-muted">{formatDate(task.dueDate)}</td>
-            <td className="px-5 py-3.5 text-ink-muted">{task.archivedAt ? 'Archived' : task.status}</td>
+            <td className="px-5 py-3.5 text-ink-muted">{task.archivedAt ? 'Archived' : paused && isUnfinishedTask(task) ? `${task.status} · Paused` : task.status}</td>
           </tr>
         ))}
       </tbody>
