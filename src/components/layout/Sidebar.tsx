@@ -6,6 +6,7 @@ import {
   type DragEvent,
 } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import newportLogo from '@/assets/newport-logo-centered.png'
 import {
   LayoutDashboard,
   Briefcase,
@@ -173,20 +174,24 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       style={{ width: sidebarOffset(collapsed, sheets.length, onDashboard) }}
     >
       <div className={`flex h-full shrink-0 flex-col ${collapsed ? 'w-[72px]' : 'w-60'}`}>
-      <div className={`flex items-start gap-3 border-b border-navy-800 ${collapsed ? 'px-3 py-4' : 'px-4 py-5'}`}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/20 text-sm font-bold tracking-tight text-accent-soft">
-          N
-        </div>
-        {!collapsed && (
-          <div className="min-w-0 pt-0.5">
-            <p className="font-brand text-[13px] leading-snug font-bold tracking-wide text-white">
-              NEWPORT
-            </p>
-            <p className="mt-0.5 text-[10px] leading-tight tracking-[0.08em] text-accent-muted uppercase">
-              Specialty Partners
-            </p>
-          </div>
-        )}
+      <div className={`flex items-center justify-center border-b border-navy-800 ${collapsed ? 'px-2 py-4' : 'px-4 py-4'}`}>
+        {/* The real Newport logo; clicking it opens the Dashboard without reloading or resetting data. */}
+        <NavLink
+          to="/"
+          end
+          onClick={(e) => editorGuard?.guardClick(e, '/')}
+          aria-label="Newport Specialty Partners — go to Dashboard"
+          title="Dashboard"
+          data-testid="sidebar-logo"
+          className={`flex items-center justify-center overflow-hidden rounded-lg bg-[#d3dfec] shadow-sm ring-1 ring-white/10 ${collapsed ? 'h-11 w-11' : 'h-[58px] w-full max-w-[206px]'}`}
+        >
+          <img
+            src={newportLogo}
+            alt="Newport Specialty Partners"
+            className={collapsed ? 'h-11 w-[157px] max-w-none object-cover' : 'h-full w-full object-cover'}
+            style={collapsed ? { objectPosition: '0% 50%' } : undefined}
+          />
+        </NavLink>
       </div>
 
       <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3" aria-label="Main">

@@ -669,12 +669,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
       const stamp = nowIso()
+      // Completed = legally closed: the stage always becomes Closing with it.
+      const statusPatch = patch.status === 'Completed' && existing.status !== 'Completed' ? { ...patch, stage: 'Closing' as const } : patch
+      const { closedAt: requestedClosedAt, ...restPatch } = statusPatch
       const nextPatch: OpportunityUpdate = {
-        ...withManualNextActionOverride(patch),
-        ...applyStatusChange(existing, patch.status, stamp),
+        ...withManualNextActionOverride(restPatch),
+        ...applyStatusChange(existing, patch.status, stamp, requestedClosedAt ?? null, {
+          nwp: patch.nwp ?? existing.nwp,
+          pfEbitda: patch.pfEbitda ?? existing.pfEbitda,
+          netRevenue: patch.netRevenue ?? existing.netRevenue,
+        }),
         lastActivityDate: stamp,
       }
-      const mergedBase = { ...existing, ...nextPatch }
+      const mergedBase = { ...existing, ...nextPatch, updatedAt: stamp }
       const merged = decorateOpportunities([mergedBase], taskList)[0]
       // Links are by ID; copied project labels on linked records follow a rename right away.
       const renamed = patch.projectName !== undefined && patch.projectName !== existing.projectName ? patch.projectName : null
@@ -745,12 +752,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
           outstandingItems: draft.outstandingItems ?? [],
           diligenceNotes: draft.diligenceNotes ?? '',
           createdAt: nowIso(),
-          ...initialStatusHistory(draft.status ?? 'Pending', nowIso()),
+          updatedAt: nowIso(),
+          ...initialStatusHistory(draft.status ?? 'Pending', nowIso(), draft.closedAt ?? null),
+          ...(draft.status === 'Completed' ? { stage: 'Closing' as const } : {}),
+        }
+        // A next action typed on the form becomes a real linked task (Next Action reads tasks only).
+        let followUp: TaskRecord | null = null
+        if (draft.nextAction?.trim()) {
+          const leadRow = findCrmUserByName(createdBase.dealLead, users)
+          const stamp = nowIso()
+          followUp = {
+            id: `task_local_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            priority: createdBase.priority,
+            action: draft.nextAction.trim(),
+            opportunityId: id,
+            projectName,
+            owner: leadRow?.name ?? createdBase.dealLead ?? '',
+            ownerId: leadRow?.id ?? null,
+            dueDate: draft.nextActionDate ?? null,
+            initialDueDate: draft.nextActionDate ?? null,
+            dueDateHistory: [],
+            status: 'Open',
+            notes: '',
+            completedAt: null,
+            archivedAt: null,
+            deletedAt: null,
+            createdAt: stamp,
+            updatedAt: stamp,
+          }
+          persistTasks([followUp, ...tasksRef.current])
         }
         const created = decorateOpportunities([createdBase], tasksRef.current)[0]
         persistOpps([...oppsRef.current, created])
         logChange('opportunity', created.id, 'create', Object.keys(draft))
         pushActivity(opportunityCreateActivity(user?.name ?? null, created))
+        if (followUp) pushActivity(taskActivity(user?.name ?? null, followUp, 'created'))
         return created
       }
       const created = await apiCreateOpportunity({
@@ -777,7 +813,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pushActivity(opportunityCreateActivity(user?.name ?? null, decorated))
       return decorated
     },
-    [owner, user],
+    [owner, user, users],
   )
 
   const deleteOpportunity = useCallback(

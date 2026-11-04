@@ -75,6 +75,31 @@ export interface Opportunity {
   completedAt?: string | null
   /** Recorded status changes, oldest first. Only real saved transitions are written here. */
   statusHistory?: StatusChange[]
+  /** Legal closing date (YYYY-MM-DD) confirmed by the user when the deal was set to Completed. */
+  closedAt?: string | null
+  /** When the user confirmed the current Completed status. Completion reports wait 24 hours from this. */
+  completionConfirmedAt?: string | null
+  /** NWP / PF EBITDA at the confirmed legal closing, used by completion reports. */
+  closingSnapshot?: ClosingSnapshot | null
+  /** Every confirmation and reversal of Completed, oldest first. Never rewritten. */
+  completionCorrections?: CompletionCorrection[]
+  /** True when createdAt / closedAt were filled in deterministically for fictional seed data. */
+  seedDates?: boolean
+  /** Last saved change to this record (ISO). */
+  updatedAt?: string
+}
+
+export interface ClosingSnapshot {
+  nwp: number
+  pfEbitda: number
+  netRevenue: number
+}
+
+export interface CompletionCorrection {
+  action: 'confirmed' | 'reversed'
+  at: string
+  closedAt: string | null
+  toStatus: OpportunityStatus
 }
 
 export interface StatusChange {
@@ -174,5 +199,10 @@ export type OpportunityUpdate = Partial<
     | 'lastActivityDate'
     | 'completedAt'
     | 'statusHistory'
+    | 'closedAt'
+    | 'completionConfirmedAt'
+    | 'closingSnapshot'
+    | 'completionCorrections'
+    | 'updatedAt'
   >
 >

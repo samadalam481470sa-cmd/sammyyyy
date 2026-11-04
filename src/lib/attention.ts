@@ -30,24 +30,84 @@ export function dealWarnings(
   now = new Date(),
 ): DealWarning[] {
   if (!isAttentionEligible(opportunity)) return []
+  const out: DealWarning[] = []
   const summary = resolveNextAction(opportunity, tasks, now)
   if (!summary.taskId) {
-    return [
-      {
-        level: 'red',
-        reason: 'No next action assigned',
-        detail: 'No unfinished follow-up task is linked to this deal',
-      },
-    ]
+    out.push({
+      level: 'red',
+      reason: 'No next action assigned',
+      detail: 'No unfinished follow-up task is linked to this deal',
+    })
+  } else {
+    const label = summary.nextAction || 'Task'
+    if (isOverdueDate(summary.nextActionDate, now)) {
+      const days = daysOverdue(summary.nextActionDate, now)
+      out.push({ level: 'red', reason: 'Next action overdue', detail: `${label} was due ${formatDate(summary.nextActionDate)}${days > 0 ? ` (${days} day${days === 1 ? '' : 's'} overdue)` : ''}` })
+    } else if (isWithinNextDays(summary.nextActionDate, 7, now)) {
+      out.push({ level: 'navy', reason: 'Upcoming deadline within 7 days', detail: `${label} is due ${formatDate(summary.nextActionDate)}` })
+    }
   }
-  const label = summary.nextAction || 'Task'
-  if (isOverdueDate(summary.nextActionDate, now)) {
-    return [{ level: 'red', reason: 'Next action overdue', detail: `${label} was due ${formatDate(summary.nextActionDate)}` }]
+  if (!opportunity.dealLead?.trim()) {
+    out.push({ level: 'red', reason: 'No deal owner assigned', detail: 'No deal lead is assigned to this deal' })
   }
-  if (isWithinNextDays(summary.nextActionDate, 7, now)) {
-    return [{ level: 'navy', reason: 'Upcoming deadline within 7 days', detail: `${label} is due ${formatDate(summary.nextActionDate)}` }]
+  return out
+}
+
+/** Whole calendar days a due date is past, in local time (0 when not overdue). */
+export function daysOverdue(due: string | null | undefined, now = new Date()): number {
+  if (!due) return 0
+  const ymd = due.slice(0, 10)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  if (!m) return 0
+  const dueDay = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return Math.max(0, Math.round((today - dueDay) / 86_400_000))
+}
+
+export interface AttentionRow {
+  opportunity: Opportunity
+  warnings: DealWarning[]
+  primary: DealWarning
+  /** 0 overdue, 1 no unfinished task, 2 no deal lead, 3 due within 7 days. */
+  group: number
+  overdueDays: number
+}
+
+/**
+ * One row per Active/Pending deal that needs attention, most urgent first:
+ * most overdue (largest number of days) → no unfinished task → no deal lead → due soon (earliest first).
+ * Ties fall back to Deal ID order, so the list never reshuffles between renders.
+ */
+export function attentionRows(opportunities: Opportunity[], tasks: TaskRecord[], now = new Date()): AttentionRow[] {
+  const rows: (AttentionRow & { dueAt: number })[] = []
+  for (const opportunity of opportunities) {
+    const warnings = dealWarnings(opportunity, tasks, now)
+    if (!warnings.length) continue
+    const summary = resolveNextAction(opportunity, tasks, now)
+    const has = (reason: AttentionReason) => warnings.some((w) => w.reason === reason)
+    const group = has('Next action overdue') ? 0 : has('No next action assigned') ? 1 : has('No deal owner assigned') ? 2 : 3
+    const primary =
+      warnings.find((w) => w.reason === 'Next action overdue') ??
+      warnings.find((w) => w.reason === 'No next action assigned') ??
+      warnings.find((w) => w.reason === 'No deal owner assigned') ??
+      warnings[0]
+    rows.push({
+      opportunity,
+      warnings,
+      primary,
+      group,
+      overdueDays: group === 0 ? daysOverdue(summary.nextActionDate, now) : 0,
+      dueAt: summary.nextActionDate ? new Date(`${summary.nextActionDate.slice(0, 10)}T12:00:00`).getTime() : Number.POSITIVE_INFINITY,
+    })
   }
-  return []
+  return rows
+    .sort((a, b) => {
+      if (a.group !== b.group) return a.group - b.group
+      if (a.group === 0 && a.overdueDays !== b.overdueDays) return b.overdueDays - a.overdueDays
+      if (a.group === 3 && a.dueAt !== b.dueAt) return a.dueAt - b.dueAt
+      return (a.opportunity.projectNumber ?? 0) - (b.opportunity.projectNumber ?? 0) || a.opportunity.projectName.localeCompare(b.opportunity.projectName)
+    })
+    .map(({ dueAt: _dueAt, ...row }) => row)
 }
 
 export function primaryDealWarning(

@@ -31,15 +31,26 @@ export function useFitRows(
       const measured = [...el.querySelectorAll(rowSelector)].map((n) => n.getBoundingClientRect().height).find((h) => h > 0)
       const row = (measured || rowHeight) + gap
       const head = el.querySelector('thead')?.getBoundingClientRect().height ?? headerHeight
-      const fit = Math.floor((height - head + gap) / row)
+      const fit = Math.floor((height - head + gap - 1) / row)
       setRows(Math.max(min, Math.min(max, fit)))
     }
     measure()
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
     observer?.observe(el)
+    // Rows render after the first measurement; measure again once real rows exist.
+    let frame = 0
+    const mutation = typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(() => {
+          cancelAnimationFrame(frame)
+          frame = requestAnimationFrame(measure)
+        })
+      : null
+    mutation?.observe(el, { childList: true, subtree: true })
     window.addEventListener('resize', measure)
     return () => {
       observer?.disconnect()
+      mutation?.disconnect()
+      cancelAnimationFrame(frame)
       window.removeEventListener('resize', measure)
     }
   }, [ref, rowHeight, headerHeight, min, max, rowSelector, gap])

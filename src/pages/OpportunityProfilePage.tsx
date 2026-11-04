@@ -99,7 +99,8 @@ export function OpportunityProfilePage() {
       setParams(nextParams, { replace: true, state: location.state })
     })
 
-  const goBack = () => guarded(() => (from ? navigate(from) : window.history.length > 1 ? navigate(-1) : navigate('/opportunities')))
+  // Back returns to the exact page, filters and open drawer the user came from.
+  const goBack = () => guarded(() => (from ? navigate(from, { state: { restore: true } }) : window.history.length > 1 ? navigate(-1) : navigate('/opportunities')))
 
   const linkedTasks = useMemo(
     () => sortVisibleTasks(tasks.filter((task) => task.opportunityId === opportunityId && !isDeletedTask(task))),

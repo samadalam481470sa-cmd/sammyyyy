@@ -9,7 +9,7 @@ import {
 } from '@/auth/msal'
 import { LAST_EMAIL_KEY, LAST_PROVIDER_KEY, parseLoginEmail } from '@/lib/emailIdentity'
 import { attachLoginShield } from '@/lib/loginGuard'
-import newportLogo from '@/assets/newport-logo.png'
+import newportLogo from '@/assets/newport-logo-centered.png'
 
 function MicrosoftMark({ className }: { className?: string }) {
   return (
@@ -116,7 +116,8 @@ export function LoginPage() {
           <img
             src={newportLogo}
             alt="Newport Specialty Partners"
-            className="h-24 w-full object-cover object-center"
+            className="mx-auto h-28 w-full object-cover object-center"
+            data-testid="login-logo"
           />
         </div>
         <div className="px-6 py-7">

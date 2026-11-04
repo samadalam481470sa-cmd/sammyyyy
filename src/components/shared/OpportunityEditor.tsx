@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { X } from 'lucide-react'
 import type { Opportunity, OpportunityUpdate } from '@/types'
 import {
   useEditorGuard,
@@ -31,6 +30,11 @@ import { dealIdFromOpportunity } from '@/lib/dealId'
 import { savedMessageLabel, saveButtonLabel } from '@/lib/persistenceMode'
 import { useData } from '@/data/DataContext'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { CompletionConfirmDialog } from '@/components/shared/CompletionConfirmDialog'
+import { DrawerHeader } from '@/components/shared/Overlay'
+import { OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
+import { todayDateInput } from '@/lib/calendarDate'
+import { formatDate } from '@/utils/dashboard'
 
 export type { OpportunityEditorHandle }
 
@@ -46,10 +50,10 @@ interface OpportunityEditorProps {
   hideHeader?: boolean
 }
 
+// The old Diligence tab is gone: its two unique fields (outstanding items, diligence notes) moved to Company.
 const DEFAULT_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'entity', label: 'Company' },
-  { id: 'diligence', label: 'Diligence' },
   { id: 'actions', label: 'Next Action' },
 ]
 
@@ -65,7 +69,8 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
-    const { tasks, documents, deleteOpportunity } = useData()
+    const [completionPrompt, setCompletionPrompt] = useState(false)
+    const { tasks, documents, deleteOpportunity, users } = useData()
     const deletingRef = useRef(false)
 
     const dirty = !opportunityDraftsEqual(saved, draft)
@@ -197,40 +202,40 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
 
     const outstandingText = (draft.outstandingItems ?? []).join('\n')
 
+    const onStatusChange = (next: Opportunity['status']) => {
+      if (next === 'Completed' && draft.status !== 'Completed') {
+        setCompletionPrompt(true)
+        return
+      }
+      setDraft((prev) => ({ ...prev, status: next, closedAt: next === 'Completed' ? prev.closedAt : null }))
+      setMessage(null)
+    }
+
+    const leadOptions = [...new Set([...users.map((u) => u.name), draft.dealLead].filter((n) => n && n.trim()))].sort()
+    const closeButton = onClose ? () => requestLeave(onClose) : undefined
+
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className={`flex items-start justify-between gap-3 border-b border-border px-5 py-4 ${hideHeader ? 'hidden' : ''}`}>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
-              {dealIdFromOpportunity(opportunity)}
-            </p>
-            <h2 className="mt-1 font-brand text-xl font-bold text-navy-900">
-              {draft.projectName}
-            </h2>
-            <p className="text-sm text-ink-muted">{draft.entityName}</p>
-          </div>
-          {onClose && (
-            <button
-              type="button"
-              onClick={() => requestLeave(onClose)}
-              className="rounded-lg p-1.5 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-              aria-label="Close opportunity editor"
-            >
-              <X className="h-4 w-4" strokeWidth={1.75} />
-            </button>
-          )}
-        </div>
+        {!hideHeader && (
+          <DrawerHeader
+            eyebrow={dealIdFromOpportunity(opportunity)}
+            title={opportunity.projectName}
+            subtitle={opportunity.entityName}
+            onClose={closeButton}
+            closeLabel="Close opportunity editor"
+          >
+            <OpportunityHeaderDetails opportunity={opportunity} tasks={tasks} />
+          </DrawerHeader>
+        )}
 
-        <div className="flex min-w-0 border-b border-border px-2 pt-2">
+        <div className="flex min-w-0 shrink-0 gap-1 border-b border-border bg-surface px-3 pt-2">
           {tabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`min-w-0 flex-1 rounded-t-lg px-2 py-2 text-center text-xs font-semibold whitespace-nowrap transition-colors ${
-                tab === t.id
-                  ? 'bg-accent-soft text-navy-900'
-                  : 'text-ink-muted hover:bg-canvas hover:text-ink'
+              className={`min-w-0 flex-1 border-b-2 px-2 py-2 text-center text-xs font-semibold whitespace-nowrap transition-colors ${
+                tab === t.id ? 'border-navy-900 text-navy-900' : 'border-transparent text-ink-muted hover:text-ink'
               }`}
             >
               {t.label}
@@ -239,29 +244,29 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         </div>
 
         <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div className="rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
-            <label className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Status (editable on all tabs)
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
+            <label className="block min-w-0">
+              <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
+              <select
+                value={draft.status}
+                data-testid="editor-status"
+                onChange={(e) => onStatusChange(e.target.value as Opportunity['status'])}
+                className="mt-1.5 h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              >
+                {OPPORTUNITY_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </label>
-            <select
-              value={draft.status}
-              onChange={(e) => setField('status', e.target.value as Opportunity['status'])}
-              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
-            >
-              {OPPORTUNITY_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {(tab === 'overview' || tab === 'status') && (
-            <Field label="Acquisition Stage">
+            <label className="block min-w-0">
+              <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Acquisition Stage</span>
               <select
                 value={draft.stage}
+                data-testid="editor-stage"
                 onChange={(e) => setField('stage', e.target.value as Opportunity['stage'])}
-                className="field-input"
+                className="mt-1.5 h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm font-medium outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
               >
                 {ACQUISITION_STAGES.map((s) => (
                   <option key={s} value={s}>
@@ -269,38 +274,72 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                   </option>
                 ))}
               </select>
-            </Field>
-          )}
+            </label>
+            {draft.status === 'Completed' && (
+              <label className="col-span-2 block">
+                <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Legal closing date</span>
+                <input
+                  type="date"
+                  className="field-input"
+                  max={todayDateInput()}
+                  value={draft.closedAt ?? ''}
+                  onChange={(e) => setField('closedAt', e.target.value || null)}
+                />
+              </label>
+            )}
+          </div>
 
-          {(tab === 'overview' || tab === 'entity') && (
+          {tab === 'overview' && (
             <>
               <Field label="Project name">
-                <input
-                  className="field-input"
-                  value={draft.projectName}
-                  onChange={(e) => setField('projectName', e.target.value)}
-                />
+                <input className="field-input" value={draft.projectName} onChange={(e) => setField('projectName', e.target.value)} />
               </Field>
               <Field label="Company Name">
-                <input
-                  className="field-input"
-                  value={draft.entityName}
-                  onChange={(e) => setField('entityName', e.target.value)}
-                />
+                <input className="field-input" value={draft.entityName} onChange={(e) => setField('entityName', e.target.value)} />
               </Field>
               <Field label="Deal lead">
-                <input
-                  className="field-input"
-                  value={draft.dealLead}
-                  onChange={(e) => setField('dealLead', e.target.value)}
-                />
+                <select className="field-input" value={draft.dealLead} onChange={(e) => setField('dealLead', e.target.value)} data-testid="editor-deal-lead">
+                  <option value="">Unassigned</option>
+                  {leadOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
               </Field>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="NWP">
+                  <input type="number" className="field-input" value={draft.nwp} onChange={(e) => setField('nwp', Number(e.target.value))} />
+                </Field>
+                <Field label="Net Revenue">
+                  <input type="number" className="field-input" value={draft.netRevenue} onChange={(e) => setField('netRevenue', Number(e.target.value))} />
+                </Field>
+                <Field label="PF EBITDA">
+                  <input type="number" className="field-input" value={draft.pfEbitda} onChange={(e) => setField('pfEbitda', Number(e.target.value))} />
+                </Field>
+              </div>
+              <dl className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-canvas px-3 py-2 text-xs" data-testid="record-dates">
+                <div>
+                  <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Created</dt>
+                  <dd className="text-ink">{opportunity.createdAt ? formatDate(opportunity.createdAt) : 'Not recorded'}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Updated</dt>
+                  <dd className="text-ink">{formatDate(opportunity.updatedAt ?? opportunity.lastActivityDate ?? null)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Legally closed</dt>
+                  <dd className="text-ink">{opportunity.status === 'Completed' && opportunity.closedAt ? formatDate(opportunity.closedAt) : '—'}</dd>
+                </div>
+                {opportunity.seedDates && <p className="col-span-3 text-[10px] text-ink-subtle">Dates on this fictional sample deal were filled in for the demo.</p>}
+              </dl>
+            </>
+          )}
+
+          {tab === 'entity' && (
+            <>
               <Field label="Opportunity type">
-                <select
-                  className="field-input"
-                  value={draft.type}
-                  onChange={(e) => setField('type', e.target.value as Opportunity['type'])}
-                >
+                <select className="field-input" value={draft.type} onChange={(e) => setField('type', e.target.value as Opportunity['type'])}>
                   {OPPORTUNITY_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -308,79 +347,30 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                   ))}
                 </select>
               </Field>
-              <Field label="Specialty">
-                <input
-                  className="field-input"
-                  value={draft.specialty}
-                  onChange={(e) => setField('specialty', e.target.value)}
-                />
-              </Field>
-              <Field label="Geography">
-                <input
-                  className="field-input"
-                  value={draft.geography}
-                  onChange={(e) => setField('geography', e.target.value)}
-                />
-              </Field>
-              <Field label="Source type">
-                <select
-                  className="field-input"
-                  value={draft.sourceType}
-                  onChange={(e) =>
-                    setField('sourceType', e.target.value as Opportunity['sourceType'])
-                  }
-                >
-                  {SOURCE_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Source name">
-                <input
-                  className="field-input"
-                  value={draft.sourceName}
-                  onChange={(e) => setField('sourceName', e.target.value)}
-                />
-              </Field>
-            </>
-          )}
-
-          {tab === 'overview' && (
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="NWP">
-                <input
-                  type="number"
-                  className="field-input"
-                  value={draft.nwp}
-                  onChange={(e) => setField('nwp', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Net Revenue">
-                <input
-                  type="number"
-                  className="field-input"
-                  value={draft.netRevenue}
-                  onChange={(e) => setField('netRevenue', Number(e.target.value))}
-                />
-              </Field>
-              <Field label="PF EBITDA">
-                <input
-                  type="number"
-                  className="field-input"
-                  value={draft.pfEbitda}
-                  onChange={(e) => setField('pfEbitda', Number(e.target.value))}
-                />
-              </Field>
-            </div>
-          )}
-
-          {tab === 'diligence' && (
-            <>
-              <Field label="Outstanding items (one per line)">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Specialty">
+                  <input className="field-input" value={draft.specialty} onChange={(e) => setField('specialty', e.target.value)} />
+                </Field>
+                <Field label="Geography">
+                  <input className="field-input" value={draft.geography} onChange={(e) => setField('geography', e.target.value)} />
+                </Field>
+                <Field label="Source type">
+                  <select className="field-input" value={draft.sourceType} onChange={(e) => setField('sourceType', e.target.value as Opportunity['sourceType'])}>
+                    {SOURCE_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Source name">
+                  <input className="field-input" value={draft.sourceName} onChange={(e) => setField('sourceName', e.target.value)} />
+                </Field>
+              </div>
+              {/* Formerly the separate Diligence tab: these two fields are unique, so they live here now. */}
+              <Field label="Outstanding diligence items (one per line)">
                 <textarea
-                  className="field-input min-h-28"
+                  className="field-input min-h-24"
                   value={outstandingText}
                   onChange={(e) =>
                     setField(
@@ -395,82 +385,73 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                 />
               </Field>
               <Field label="Diligence notes">
-                <textarea
-                  className="field-input min-h-28"
-                  value={draft.diligenceNotes ?? ''}
-                  onChange={(e) => setField('diligenceNotes', e.target.value)}
-                  placeholder="Where are we in due diligence?"
-                />
+                <textarea className="field-input min-h-24" value={draft.diligenceNotes ?? ''} onChange={(e) => setField('diligenceNotes', e.target.value)} placeholder="Where are we in due diligence?" />
               </Field>
             </>
           )}
 
-          {(tab === 'actions' || tab === 'overview') && (
+          {tab === 'actions' && (
             <>
-              {opportunity.nextActionTaskId && tab === 'overview' && (
-                <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink-muted">
-                  Next Action is linked to an unfinished task. Saving Next Action, date, or priority
-                  also updates that task so the value is not overwritten.
-                </p>
-              )}
+              <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink-muted">
+                The Next Action is the earliest-due unfinished task linked to this deal. Editing it here also updates that task; with no open task, saving a next action creates one.
+              </p>
               <Field label="Next action">
-                <input
-                  className="field-input"
-                  value={draft.nextAction ?? ''}
-                  onChange={(e) => setField('nextAction', e.target.value || null)}
-                />
+                <input className="field-input" value={draft.nextAction ?? ''} onChange={(e) => setField('nextAction', e.target.value || null)} />
               </Field>
-              <Field label="Next action date">
-                <input
-                  type="date"
-                  className="field-input"
-                  value={draft.nextActionDate ?? ''}
-                  onChange={(e) => setField('nextActionDate', e.target.value || null)}
-                />
-              </Field>
-              <Field label="Priority">
-                <select
-                  className="field-input"
-                  value={draft.priority}
-                  onChange={(e) => setField('priority', e.target.value as Opportunity['priority'])}
-                >
-                  <option value="A">A — Must move this week</option>
-                  <option value="B">B — Important but can wait</option>
-                  <option value="C">C — Monitor only</option>
-                </select>
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Due date">
+                  <input type="date" className="field-input" value={draft.nextActionDate ?? ''} onChange={(e) => setField('nextActionDate', e.target.value || null)} />
+                </Field>
+                <Field label="Priority">
+                  <select className="field-input" value={draft.priority} onChange={(e) => setField('priority', e.target.value as Opportunity['priority'])}>
+                    <option value="A">A — Must move this week</option>
+                    <option value="B">B — Important but can wait</option>
+                    <option value="C">C — Monitor only</option>
+                  </select>
+                </Field>
+              </div>
             </>
           )}
         </div>
 
-        <div className="shrink-0 border-t border-border bg-canvas px-5 py-3">
-          {error && pendingLeave == null && (
-            <p className="mb-2 text-xs text-attention">{error}</p>
-          )}
+        <div className="shrink-0 border-t border-border bg-surface px-5 py-3">
+          {error && pendingLeave == null && <p className="mb-2 text-xs text-attention">{error}</p>}
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
-          <button
-            type="button"
-            disabled={saving || deleting || !dirty}
-            data-testid="save-opportunity"
-            onClick={() => void persist()}
-            className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
-              dirty && !saving
-                ? 'bg-navy-900 text-white hover:bg-navy-800'
-                : 'border border-border bg-white text-ink-muted'
-            }`}
-          >
-            {saveButtonLabel(saving)}
-          </button>
-          <button
-            type="button"
-            disabled={saving || deleting}
-            onClick={() => setConfirmDelete(true)}
-            className="mt-2 h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] disabled:opacity-60"
-          >
-            Delete Opportunity
-          </button>
-          {footerExtra && <div className="mt-2">{footerExtra}</div>}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={saving || deleting || !dirty}
+              data-testid="save-opportunity"
+              onClick={() => void persist()}
+              className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${
+                dirty && !saving ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'
+              }`}
+            >
+              {saveButtonLabel(saving)}
+            </button>
+            <button
+              type="button"
+              disabled={saving || deleting}
+              onClick={() => setConfirmDelete(true)}
+              className="h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] disabled:opacity-60"
+            >
+              Delete Opportunity
+            </button>
+            {footerExtra && <div className="col-span-2">{footerExtra}</div>}
+          </div>
         </div>
+
+        <CompletionConfirmDialog
+          open={completionPrompt}
+          projectName={draft.projectName || opportunity.projectName}
+          initialDate={opportunity.closedAt ?? null}
+          onCancel={() => setCompletionPrompt(false)}
+          onConfirm={(closedAt) => {
+            setCompletionPrompt(false)
+            setDraft((prev) => ({ ...prev, status: 'Completed', stage: 'Closing', closedAt }))
+            setMessage(null)
+          }}
+        />
 
         <UnsavedChangesDialog
           open={pendingLeave != null}

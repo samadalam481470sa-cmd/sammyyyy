@@ -19,6 +19,7 @@ const EDIT_KEYS = [
   'priority',
   'outstandingItems',
   'diligenceNotes',
+  'closedAt',
 ] as const satisfies ReadonlyArray<keyof OpportunityUpdate>
 
 export interface OpportunityDraft {
@@ -40,6 +41,8 @@ export interface OpportunityDraft {
   priority: Opportunity['priority']
   outstandingItems: string[]
   diligenceNotes: string
+  /** Legal closing date; only meaningful while Completed. */
+  closedAt: string | null
 }
 
 export function snapshotOpportunityDraft(record: Opportunity): OpportunityDraft {
@@ -62,6 +65,7 @@ export function snapshotOpportunityDraft(record: Opportunity): OpportunityDraft 
     priority: record.priority,
     outstandingItems: [...(record.outstandingItems ?? [])],
     diligenceNotes: record.diligenceNotes ?? '',
+    closedAt: record.closedAt ?? null,
   }
 }
 
@@ -74,6 +78,7 @@ function normalize(draft: OpportunityDraft): string {
     nextAction: draft.nextAction || null,
     nextActionDate: draft.nextActionDate || null,
     diligenceNotes: draft.diligenceNotes ?? '',
+    closedAt: draft.closedAt ?? null,
     outstandingItems: (draft.outstandingItems ?? []).map((l) => l.trim()).filter(Boolean),
   })
 }

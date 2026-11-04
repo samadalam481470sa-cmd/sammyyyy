@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { CenteredModal, ModalHeader } from '@/components/shared/Overlay'
 import type { Opportunity } from '@/types'
 import {
   ACQUISITION_STAGES,
@@ -35,6 +35,7 @@ interface CreateDraft {
   nextActionDate: string
   priority: Opportunity['priority']
   diligenceNotes: string
+  closedAt: string
 }
 
 const EMPTY: CreateDraft = {
@@ -53,6 +54,7 @@ const EMPTY: CreateDraft = {
   nextActionDate: '',
   priority: 'B',
   diligenceNotes: '',
+  closedAt: '',
 }
 
 function isDirty(draft: CreateDraft): boolean {
@@ -105,6 +107,10 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
       setError('Project name and entity are required')
       return false
     }
+    if (draft.status === 'Completed' && !/^\d{4}-\d{2}-\d{2}$/.test(draft.closedAt)) {
+      setError('Completed means legally closed. Enter the legal closing date.')
+      return false
+    }
     savingRef.current = true
     setSaving(true)
     setError(null)
@@ -125,6 +131,7 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
         nextActionDate: draft.nextActionDate || null,
         priority: draft.priority,
         diligenceNotes: draft.diligenceNotes.trim(),
+        closedAt: draft.status === 'Completed' ? draft.closedAt : null,
       })
       setMessage(savedMessageLabel())
       onCreated?.(created)
@@ -148,40 +155,10 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex justify-end">
-      <button
-        type="button"
-        className="absolute inset-0 bg-navy-950/40"
-        aria-label="Close new opportunity form"
-        onClick={requestClose}
-      />
-      <aside
-        className="relative flex h-full w-full max-w-md flex-col bg-surface shadow-(--shadow-drawer)"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-opportunity-title"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-          <div>
-            <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
-              {dealPreview}
-            </p>
-            <h2 id="new-opportunity-title" className="mt-1 font-brand text-xl font-bold text-navy-900">
-              New Opportunity
-            </h2>
-            <p className="text-sm text-ink-muted">Unsaved draft — nothing is created until you save.</p>
-          </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="rounded-lg p-1.5 text-ink-muted hover:bg-canvas hover:text-ink"
-            aria-label="Close new opportunity form"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+    <CenteredModal open={open} onRequestClose={requestClose} label="New Opportunity" width="max-w-2xl" testId="new-opportunity-modal">
+        <ModalHeader eyebrow={dealPreview} title="New Opportunity" subtitle="Unsaved draft — nothing is created until you save." onClose={requestClose} closeLabel="Close new opportunity form" />
 
-        <div className="custom-scroll flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <div className="custom-scroll grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto px-6 py-4 sm:grid-cols-2">
           <Field label="Deal ID">
             <input className="field-input" value={dealPreview} readOnly />
           </Field>
@@ -203,13 +180,23 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
             <select
               className="field-input"
               value={draft.status}
-              onChange={(e) => setField('status', e.target.value as Opportunity['status'])}
+              onChange={(e) => {
+                const status = e.target.value as Opportunity['status']
+                setDraft((prev) => ({ ...prev, status, stage: status === 'Completed' ? 'Closing' : prev.stage }))
+                setError(null)
+              }}
             >
               {OPPORTUNITY_STATUSES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
           </Field>
+          {draft.status === 'Completed' && (
+            <Field label="Legal closing date" required>
+              <input type="date" className="field-input" max={new Date().toISOString().slice(0, 10)} value={draft.closedAt} onChange={(e) => setField('closedAt', e.target.value)} />
+              <span className="mt-1 block text-[11px] text-ink-muted">Completed means legally closed. The stage is set to Closing.</span>
+            </Field>
+          )}
           <Field label="Acquisition Stage">
             <select
               className="field-input"
@@ -221,7 +208,7 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
               ))}
             </select>
           </Field>
-          <Field label="Deal owner">
+          <Field label="Deal Lead">
             <SearchSelect
               value={draft.dealLead || null}
               options={ownerOptions}
@@ -259,7 +246,7 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
               onChange={(e) => setField('sourceName', e.target.value)}
             />
           </Field>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:col-span-2">
             <Field label="NWP">
               <input
                 type="number"
@@ -311,7 +298,7 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
               <option value="C">C — Monitor only</option>
             </select>
           </Field>
-          <Field label="Notes">
+          <Field label="Notes" wide>
             <textarea
               className="field-input min-h-24"
               value={draft.diligenceNotes}
@@ -381,22 +368,23 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
             box-shadow: 0 0 0 2px rgb(61 126 184 / 0.2);
           }
         `}</style>
-      </aside>
-    </div>
+    </CenteredModal>
   )
 }
 
 function Field({
   label,
   required,
+  wide,
   children,
 }: {
   label: string
   required?: boolean
+  wide?: boolean
   children: ReactNode
 }) {
   return (
-    <label className="block">
+    <label className={`block ${wide ? 'sm:col-span-2' : ''}`}>
       <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
         {label}
         {required ? ' *' : ''}
