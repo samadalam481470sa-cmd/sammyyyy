@@ -20,8 +20,9 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const { unread } = useUnreadMail(user?.email ?? '')
-  const { tasks } = useData()
-  const taskAlerts = useMemo(() => dueTasks(tasks), [tasks])
+  const { tasks, opportunities } = useData()
+  // Same eligibility as Tasks & Follow-Ups: tasks of inactive deals are paused, not alerted.
+  const taskAlerts = useMemo(() => dueTasks(tasks, new Date(), opportunities), [tasks, opportunities])
   const unreadCount = unread.length
   const alertCount = unreadCount + taskAlerts.length
 

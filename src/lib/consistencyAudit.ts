@@ -47,7 +47,7 @@ export function runConsistencyAudit(
     asOf: now.toISOString(),
     perStatus,
     totalOpportunities: opportunities.length,
-    overdueUnfinishedTasks: overdueTaskList(tasks, now).length,
+    overdueUnfinishedTasks: overdueTaskList(tasks, now, opportunities).length,
     uniqueAtRiskOpportunities: uniqueAttentionCount(opportunities, tasks, now),
     missingTaskOpportunities: warnings.filter((w) => w?.reason === 'No next action assigned').length,
     navyDueSoonOpportunities: warnings.filter((w) => w?.level === 'navy').length,

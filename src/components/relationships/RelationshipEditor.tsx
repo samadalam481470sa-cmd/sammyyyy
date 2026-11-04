@@ -1,5 +1,4 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
 import { CONTACT_STATUSES, type ContactRecord } from '@/data/mockModules'
 import { useData } from '@/data/DataContext'
 import type { ResourceApi } from '@/hooks/useResource'
@@ -12,6 +11,14 @@ import { useEditorGuard, type OpportunityEditorHandle } from '@/components/share
 import { MultiSearchSelect } from '@/components/shared/MultiSearchSelect'
 import { SearchSelect } from '@/components/shared/SearchSelect'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
+import { DrawerHeader, InitialsAvatar, ModalHeader } from '@/components/shared/Overlay'
+
+/** Soft status chips: pale green Active, neutral gray Inactive, muted pale red Do Not Contact. */
+export const RELATIONSHIP_STATUS_CHIP: Record<string, string> = {
+  Active: 'bg-[#e6f4ec] text-[#1f6b4a]',
+  Inactive: 'bg-[#eef0f3] text-[#5a6577]',
+  'Do Not Contact': 'bg-[#fbe9e7] text-[#a8321f]',
+}
 
 export function contactProjectIds(contact: Pick<ContactRecord, 'opportunityId' | 'opportunityIds'>): string[] {
   const ids = [...(contact.opportunityIds ?? [])]
@@ -249,16 +256,24 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="relationship-editor">
-      <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">{creating ? 'Unsaved draft' : 'Relationship'}</p>
-          <h2 className="mt-1 truncate font-brand text-xl font-bold text-navy-900">{creating ? 'New Relationship' : draft.name.trim() || 'Relationship'}</h2>
-          {creating && <p className="text-sm text-ink-muted">Nothing is created until you save.</p>}
-        </div>
-        <button type="button" aria-label="Close relationship editor" onClick={() => requestLeave(onClose)} className="rounded-lg p-1.5 text-ink-muted hover:bg-canvas">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      {creating ? (
+        <ModalHeader eyebrow="Unsaved draft" title="New Relationship" subtitle="Nothing is created until you save." onClose={() => requestLeave(onClose)} closeLabel="Close relationship editor" />
+      ) : (
+        <DrawerHeader
+          eyebrow="Relationship"
+          title={draft.name.trim() || 'Relationship'}
+          subtitle={[draft.title, draft.company].filter(Boolean).join(' · ') || undefined}
+          onClose={() => requestLeave(onClose)}
+          closeLabel="Close relationship editor"
+        >
+          <div className="flex items-center gap-2">
+            <InitialsAvatar name={draft.name} tone="light" size="md" />
+            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${RELATIONSHIP_STATUS_CHIP[draft.status] ?? RELATIONSHIP_STATUS_CHIP.Inactive}`} data-testid="relationship-header-status">
+              {draft.status}
+            </span>
+          </div>
+        </DrawerHeader>
+      )}
 
       <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         <label className={label}>
@@ -280,6 +295,18 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
           Title
           <input value={draft.title} onChange={(e) => set('title', e.target.value)} className={input} />
         </label>
+        <div>
+          <span className={label}>Linked Projects</span>
+          <MultiSearchSelect
+            testId="relationship-projects"
+            values={draft.projectIds}
+            options={projectOptions}
+            onChange={(ids) => set('projectIds', ids)}
+            placeholder="Search projects"
+            emptyText="No matching projects"
+          />
+          <p className="mt-1 text-[11px] text-ink-muted">Company and projects are separate: an advisor can work for a different firm than the target.</p>
+        </div>
         <label className={label}>
           Email
           <input type="email" value={draft.email} onChange={(e) => set('email', e.target.value)} className={input} />
@@ -315,18 +342,6 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
             </button>
           ))}
         </div>
-        <div>
-          <span className={label}>Projects</span>
-          <MultiSearchSelect
-            testId="relationship-projects"
-            values={draft.projectIds}
-            options={projectOptions}
-            onChange={(ids) => set('projectIds', ids)}
-            placeholder="Search projects"
-            emptyText="No matching projects"
-          />
-          <p className="mt-1 text-[11px] text-ink-muted">Company and projects are separate: an advisor can work for a different firm than the target.</p>
-        </div>
         <label className={label}>
           Status
           <select value={draft.status} onChange={(e) => set('status', e.target.value)} className={input}>
@@ -336,7 +351,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
           </select>
         </label>
         <label className={label}>
-          Last contact
+          Last Contact
           <input type="date" value={draft.lastContactDate} onChange={(e) => set('lastContactDate', e.target.value)} className={input} />
         </label>
         <label className={label}>
@@ -345,7 +360,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
         </label>
       </div>
 
-      <div className="shrink-0 space-y-2 border-t border-border bg-canvas px-5 py-3">
+      <div className="shrink-0 space-y-2 border-t border-border bg-surface px-5 py-3">
         {error && <p className="text-xs text-attention">{error}</p>}
         {message && !dirty && <p className="text-xs text-success">{message}</p>}
         {dirty && !valid && <p className="text-xs text-ink-muted">Add a name to save this relationship.</p>}

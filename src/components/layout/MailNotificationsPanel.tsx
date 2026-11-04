@@ -51,8 +51,8 @@ export function useUnreadMail(email: string): UnreadMailState {
  * Bell task alerts: the same unfinished OVERDUE task list the Tasks page shows under Overdue,
  * so the two counts always match. These are task counts, not deal counts.
  */
-export function dueTasks(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
-  return overdueTaskList(tasks, now)
+export function dueTasks(tasks: TaskRecord[], now = new Date(), opportunities?: ReadonlyArray<{ id: string; status: string }>): TaskRecord[] {
+  return overdueTaskList(tasks, now, opportunities)
 }
 
 interface MailNotificationsPanelProps {

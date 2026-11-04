@@ -1,6 +1,6 @@
 import type { TaskRecord } from '@/data/mockModules'
 import { dueDateSortValue, isOverdueDate } from '@/lib/calendarDate'
-import { isActiveListTask, isUnfinishedTask } from '@/lib/taskLifecycle'
+import { isActiveListTask, isUnfinishedTask, isWorkingTask } from '@/lib/taskLifecycle'
 
 function priorityIndex(value: string | null | undefined): number {
   if (value === 'A') return 0
@@ -39,9 +39,12 @@ export function sortVisibleTasks(tasks: TaskRecord[], now = new Date()): TaskRec
   return [...tasks].sort((a, b) => compareVisibleTasks(a, b, now))
 }
 
-export function rankWeekPriorityTasks(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
+/** Shared working-task eligibility: pass the opportunities so paused tasks (inactive deals) drop out. */
+type Parents = ReadonlyArray<{ id: string; status: string }> | undefined
+
+export function rankWeekPriorityTasks(tasks: TaskRecord[], now = new Date(), opportunities?: Parents): TaskRecord[] {
   return sortVisibleTasks(
-    tasks.filter((task) => isActiveListTask(task, now) && isUnfinishedTask(task, now)),
+    tasks.filter((task) => isActiveListTask(task, now) && (opportunities ? isWorkingTask(task, opportunities, now) : isUnfinishedTask(task, now))),
     now,
   )
 }
@@ -58,9 +61,9 @@ export function isOnTrackTask(task: TaskRecord, now = new Date()): boolean {
  * The one overdue-task selector. The Tasks page Overdue pill, the bell, the dashboard and the
  * audit all read this list, so their counts always match. It counts TASKS, not deals.
  */
-export function overdueTaskList(tasks: TaskRecord[], now = new Date()): TaskRecord[] {
+export function overdueTaskList(tasks: TaskRecord[], now = new Date(), opportunities?: Parents): TaskRecord[] {
   return sortVisibleTasks(
-    tasks.filter((task) => isActiveListTask(task, now) && isOverdueUnfinishedTask(task, now)),
+    tasks.filter((task) => isActiveListTask(task, now) && isOverdueUnfinishedTask(task, now) && (!opportunities || isWorkingTask(task, opportunities, now))),
     now,
   )
 }

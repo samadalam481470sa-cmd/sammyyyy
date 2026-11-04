@@ -15,6 +15,7 @@ import { DocumentsPage } from '@/pages/DocumentsPage'
 import { ReportsPage } from '@/pages/ReportsPage'
 import { MeetingsPage } from '@/pages/MeetingsPage'
 import { MeetingHistoryPage } from '@/pages/MeetingHistoryPage'
+import { TaskHistoryPage } from '@/pages/TaskHistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { OfflineNotice } from '@/components/shared/OfflineNotice'
 
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="projects" element={<Navigate to="/opportunities" replace />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />
+              <Route path="tasks/history" element={<TaskHistoryPage />} />
               <Route path="sources" element={<Navigate to="/relationships" replace />} />
               <Route path="carriers" element={<Navigate to="/relationships" replace />} />
               <Route path="email" element={<EmailPage />} />
