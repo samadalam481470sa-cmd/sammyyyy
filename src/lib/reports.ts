@@ -20,7 +20,7 @@ import { safeMoney } from '@/utils/dashboard'
 import { completionEvents } from '@/lib/statusHistory'
 import { parseDateValue, startOfLocalDay } from '@/lib/calendarDate'
 
-export type PeriodKind = 'all' | 'month' | 'year' | 'range'
+export type PeriodKind = 'all' | 'month' | 'year' | 'range' | 'last30'
 
 export interface PeriodFilter {
   kind: PeriodKind
@@ -46,7 +46,11 @@ function localDate(ymd: string): Date | null {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null
 }
 
-export function resolvePeriod(filter: PeriodFilter): Period {
+export function resolvePeriod(filter: PeriodFilter, now = new Date()): Period {
+  if (filter.kind === 'last30') {
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29)
+    return { from, to: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1), label: 'Last 30 days', isAllTime: false }
+  }
   if (filter.kind === 'month' && filter.month && /^\d{4}-\d{2}$/.test(filter.month)) {
     const [y, m] = filter.month.split('-').map(Number)
     const from = new Date(y, m - 1, 1)

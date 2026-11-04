@@ -13,6 +13,8 @@ export interface ProposedAction {
   id: string
   action: string
   ownerHint?: string
+  /** Timing exactly as the transcript states it (a suggestion, not an agreed date). */
+  dueHint?: string
   /** Set after a task is saved from this proposal. */
   createdTaskId?: string | null
 }
@@ -24,6 +26,8 @@ export interface MeetingSummary {
   generatedAt?: string
   /** Name of the configured service that produced it, e.g. "OpenAI gpt-4o-mini (admin-configured)". */
   provider?: string
+  /** Prose overview scaled to the transcript length. */
+  overview?: string
   discussion: string[]
   decisions: string[]
   openQuestions: string[]

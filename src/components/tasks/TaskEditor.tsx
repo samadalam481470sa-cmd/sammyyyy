@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
 import type { TaskRecord } from '@/data/mockModules'
 import { TASK_STATUSES } from '@/data/mockModules'
 import { useData } from '@/data/DataContext'
@@ -9,6 +8,9 @@ import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { useEditorGuard, type OpportunityEditorHandle } from '@/components/shared/EditorGuardContext'
 import { registerPendingCommit } from '@/lib/userVault'
+import { DrawerHeader, ModalHeader } from '@/components/shared/Overlay'
+import { taskWarning } from '@/lib/taskWarning'
+import { isPausedTask } from '@/lib/taskLifecycle'
 import { forwardRef, useCallback, useImperativeHandle, useRef, type ReactNode } from 'react'
 
 export type TaskDraft = {
@@ -54,10 +56,12 @@ interface TaskEditorProps {
   onDeleted?: () => void
   /** Shown at the very bottom, below Delete Task (for example the profile link). */
   footerExtra?: ReactNode
+  /** Timing stated in a meeting transcript, shown as a suggestion beside the due date. */
+  dueHint?: string
 }
 
 export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
-  function TaskEditor({ mode, task, draftSeed, onClose, onSaved, onDeleted, footerExtra }, ref) {
+  function TaskEditor({ mode, task, draftSeed, onClose, onSaved, onDeleted, footerExtra, dueHint }, ref) {
     const { opportunities, users, saveTask, createTask, deleteTask } = useData()
     const guard = useEditorGuard()
     const [draft, setDraft] = useState<TaskDraft>(
@@ -83,7 +87,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
     }, [task?.id, mode])
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
-    const valid = draft.action.trim().length > 0
+    const valid = draft.action.trim().length > 0 && (mode !== 'draft' || Boolean(draft.dueDate))
     const canSave = dirty && valid && !saving
 
     const requestLeave = useCallback(
@@ -178,130 +182,85 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
       onClose()
     }
 
+    const liveTask = task ? { ...task, dueDate: draft.dueDate || null, status: draft.status } : null
+    const warning = mode === 'existing' && liveTask ? taskWarning(liveTask) : null
+    const paused = mode === 'existing' && task ? isPausedTask(task, opportunities) : false
+    const field = 'mt-1.5 h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20'
+
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold tracking-[0.1em] text-accent uppercase">
-              {mode === 'draft' ? 'Unsaved draft' : 'Task'}
-            </p>
-            <h2 className="mt-1 font-brand text-xl font-bold text-navy-900">
-              {mode === 'draft' ? 'New Task' : draft.action.trim() || 'Task'}
-            </h2>
-            <p className="text-sm text-ink-muted">
-              {[linked?.projectName, linked?.entityName].filter(Boolean).join(' · ') || 'No project linked'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => requestLeave(onClose)}
-            className="rounded-lg p-1.5 text-ink-muted hover:bg-canvas"
-            aria-label="Close task editor"
+        {mode === 'draft' ? (
+          <ModalHeader
+            eyebrow="Unsaved draft"
+            title="New Task"
+            subtitle={[linked?.projectName, linked?.entityName].filter(Boolean).join(' · ') || 'Link the task to a project'}
+            onClose={() => requestLeave(onClose)}
+            closeLabel="Close task editor"
+          />
+        ) : (
+          <DrawerHeader
+            eyebrow={linked ? `${dealIdFromOpportunity(linked)} · Task` : 'Task'}
+            title={draft.action.trim() || 'Task'}
+            subtitle={[linked?.projectName, linked?.entityName].filter(Boolean).join(' · ') || 'No project linked'}
+            onClose={() => requestLeave(onClose)}
+            closeLabel="Close task editor"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+            {(warning || paused) && (
+              <div className={`rounded-lg px-3 py-2 text-xs font-semibold ${paused ? 'bg-white/10 text-white' : warning?.level === 'red' ? 'bg-[#fde8e6] text-[var(--color-danger)]' : 'bg-accent-soft text-navy-900'}`} data-testid="task-drawer-warning">
+                {paused ? `Paused — the parent deal is ${linked?.status}. It stays open here and returns to Tasks if the deal becomes Active or Pending.` : warning?.detail}
+              </div>
+            )}
+          </DrawerHeader>
+        )}
 
         <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Status
-            </span>
-            <select
-              className="mt-1.5 h-10 w-full rounded-lg border border-border px-3 text-sm"
-              value={draft.status}
-              onChange={(e) => setDraft((p) => ({ ...p, status: e.target.value }))}
-            >
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
+            <select className={field} value={draft.status} onChange={(e) => setDraft((p) => ({ ...p, status: e.target.value }))}>
               {TASK_STATUSES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
           </label>
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Action
-            </span>
-            <input
-              className="mt-1.5 h-10 w-full rounded-lg border border-border px-3 text-sm"
-              value={draft.action}
-              onChange={(e) => setDraft((p) => ({ ...p, action: e.target.value }))}
-            />
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Action *</span>
+            <input className={field} value={draft.action} onChange={(e) => setDraft((p) => ({ ...p, action: e.target.value }))} data-testid="task-action" />
           </label>
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Priority
-            </span>
-            <select
-              className="mt-1.5 h-10 w-full rounded-lg border border-border px-3 text-sm"
-              value={draft.priority}
-              onChange={(e) => setDraft((p) => ({ ...p, priority: e.target.value }))}
-            >
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Project</span>
+            <SearchSelect value={draft.opportunityId} options={projectOptions} onChange={(id) => setDraft((p) => ({ ...p, opportunityId: id }))} placeholder="Search projects" emptyText="No matching projects" />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Company</span>
+            <input className={`${field} bg-canvas text-ink-muted`} value={linked?.entityName ?? 'Derived from the linked project'} readOnly />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Due Date{mode === 'draft' ? ' *' : ''}</span>
+            <input type="date" className={field} value={draft.dueDate} onChange={(e) => setDraft((p) => ({ ...p, dueDate: e.target.value }))} data-testid="task-due" />
+            {dueHint && <span className="mt-1 block text-[11px] text-ink-muted">Suggestion from the transcript: “{dueHint}”. Not an agreed date — set the due date you want.</span>}
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Priority</span>
+            <select className={field} value={draft.priority} onChange={(e) => setDraft((p) => ({ ...p, priority: e.target.value }))}>
               <option value="A">A — Must move this week</option>
               <option value="B">B — Important but can wait</option>
               <option value="C">C — Monitor only</option>
             </select>
           </label>
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Project
-            </span>
-            <SearchSelect
-              value={draft.opportunityId}
-              options={projectOptions}
-              onChange={(id) => setDraft((p) => ({ ...p, opportunityId: id }))}
-              placeholder="Search opportunities"
-              emptyText="No matching opportunities"
-            />
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Owner</span>
+            <SearchSelect value={draft.ownerId} options={ownerOptions} onChange={(id) => setDraft((p) => ({ ...p, ownerId: id }))} placeholder="Select an authorized user" emptyText="No matching users" />
           </label>
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Company
-            </span>
-            <input
-              className="mt-1.5 h-10 w-full rounded-lg border border-border bg-canvas px-3 text-sm text-ink-muted"
-              value={linked?.entityName ?? 'Derived from the linked project'}
-              readOnly
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Owner
-            </span>
-            <SearchSelect
-              value={draft.ownerId}
-              options={ownerOptions}
-              onChange={(id) => setDraft((p) => ({ ...p, ownerId: id }))}
-              placeholder="Select an authorized user"
-              emptyText="No matching users"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Due date
-            </span>
-            <input
-              type="date"
-              className="mt-1.5 h-10 w-full rounded-lg border border-border px-3 text-sm"
-              value={draft.dueDate}
-              onChange={(e) => setDraft((p) => ({ ...p, dueDate: e.target.value }))}
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">
-              Notes
-            </span>
-            <textarea
-              className="mt-1.5 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm"
-              value={draft.notes}
-              onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))}
-            />
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Notes</span>
+            <textarea className="mt-1.5 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20" value={draft.notes} onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))} />
           </label>
         </div>
 
-        <div className="shrink-0 space-y-2 border-t border-border bg-canvas px-5 py-3">
+        <div className="shrink-0 space-y-2 border-t border-border bg-surface px-5 py-3">
           {error && <p className="text-xs text-attention">{error}</p>}
           {message && <p className="text-xs text-success">{message}</p>}
-          {dirty && !valid && <p className="text-xs text-ink-muted">Add an action to save this task.</p>}
+          {dirty && !valid && <p className="text-xs text-ink-muted">{mode === 'draft' ? 'Add an action and a due date to save this task.' : 'Add an action to save this task.'}</p>}
           <button
             type="button"
             data-testid="task-save"

@@ -207,11 +207,13 @@ export async function deleteWorkspaceFile(docId: string): Promise<void> {
 
 export interface MeetingSummaryResponse {
   summary: {
+    /** Present from servers with the Nov 2026 summary prompt; older servers omit it. */
+    overview?: string
     discussion: string[]
     decisions: string[]
     openQuestions: string[]
     nextSteps: string[]
-    proposedActions: { action: string; owner?: string | null }[]
+    proposedActions: { action: string; owner?: string | null; due?: string | null }[]
   }
   provider: string
   truncated: boolean

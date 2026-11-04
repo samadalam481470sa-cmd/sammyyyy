@@ -25,7 +25,7 @@ const NO_SERVER =
 const NOT_CONFIGURED =
   'No AI summary service is approved on the Newport server yet. An administrator must enable it before transcripts can be summarized.'
 
-/** Team CRM meeting history, plus transcript and summary actions. */
+/** The signed-in user's private CRM meeting history, plus transcript and summary actions. */
 export function useCrmMeetings() {
   const { user } = useAuth()
   const owner = calendarOwnerKey(user)
@@ -91,6 +91,7 @@ export function useCrmMeetings() {
           status: 'ready',
           generatedAt: new Date().toISOString(),
           provider: result.provider,
+          overview: result.summary.overview?.trim() || undefined,
           discussion: result.summary.discussion,
           decisions: result.summary.decisions,
           openQuestions: result.summary.openQuestions,
@@ -99,6 +100,7 @@ export function useCrmMeetings() {
             id: `pa_${meeting.id}_${index}`,
             action: row.action,
             ownerHint: row.owner ?? undefined,
+            dueHint: row.due ?? undefined,
             createdTaskId: null,
           })),
           ...(result.truncated ? { error: 'The transcript was very long; only the first part was summarized.' } : {}),

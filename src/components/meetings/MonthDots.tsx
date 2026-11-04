@@ -21,7 +21,9 @@ export function MonthDots({
   selectedDay,
   onSelectDay,
   onMove,
+  compact = false,
 }: {
+  compact?: boolean
   anchor: Date
   events: OutlookEvent[]
   selectedDay: string | null
@@ -33,8 +35,8 @@ export function MonthDots({
   const today = dayKey(new Date())
   return (
     <div className="flex h-full flex-col" data-testid="meetings-month">
-      <div className="flex items-center justify-between pb-2">
-        <h3 className="font-brand text-lg font-bold text-navy-900">{anchor.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3>
+      <div className={`flex items-center justify-between ${compact ? 'px-1 pb-1' : 'pb-2'}`}>
+        <h3 className={`font-brand font-bold text-navy-900 ${compact ? 'text-sm' : 'text-lg'}`}>{anchor.toLocaleDateString([], { month: 'long', year: 'numeric' })}</h3>
         <div className="flex">
           <button type="button" onClick={() => onMove(-1)} aria-label="Previous month" className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-canvas">
             <ChevronLeft className="h-4 w-4" />
@@ -44,7 +46,7 @@ export function MonthDots({
           </button>
         </div>
       </div>
-      <div className="grid flex-1 grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] gap-0.5 text-center">
+      <div className={`grid grid-cols-7 gap-0.5 text-center ${compact ? 'grid-rows-[auto_repeat(6,32px)]' : 'flex-1 grid-rows-[auto_repeat(6,minmax(0,1fr))]'}`}>
         {WEEKDAYS.map((d, i) => (
           <span key={i} className="pb-1 text-[11px] font-semibold text-ink-subtle">
             {d}
@@ -62,7 +64,7 @@ export function MonthDots({
               onClick={() => onSelectDay(key)}
               aria-pressed={selectedDay === key}
               aria-label={`${date.toDateString()}: ${count} meeting${count === 1 ? '' : 's'}`}
-              className={`flex min-h-10 flex-col items-center justify-start rounded-lg pt-1 text-sm ${selectedDay === key ? 'bg-accent-soft' : 'hover:bg-canvas'} ${inMonth ? 'text-ink' : 'text-ink-subtle'}`}
+              className={`flex ${compact ? 'h-8' : 'min-h-10'} flex-col items-center justify-start rounded-lg pt-0.5 text-sm ${selectedDay === key ? 'bg-accent-soft ring-1 ring-accent-muted' : 'hover:bg-canvas'} ${inMonth ? 'text-ink' : 'text-ink-subtle'}`}
             >
               <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${key === today ? 'bg-navy-900 text-white' : ''}`}>{date.getDate()}</span>
               <span className="mt-0.5 flex items-center gap-0.5" aria-hidden="true">

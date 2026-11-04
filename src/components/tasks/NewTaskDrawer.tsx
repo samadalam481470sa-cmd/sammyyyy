@@ -10,10 +10,12 @@ interface NewTaskDrawerProps {
   onCreated?: (task: TaskRecord) => void
   /** Optional starting values, e.g. the opportunity when opened from a profile. */
   seed?: Partial<TaskDraft>
+  /** Timing stated in a meeting transcript, shown as a suggestion. */
+  dueHint?: string
 }
 
-/** The New Task form used on Tasks, the Dashboard, and opportunity profiles, as a dimmed creation drawer. */
-export function NewTaskDrawer({ open, onClose, onCreated, seed }: NewTaskDrawerProps) {
+/** The New Task form used on Tasks, the Dashboard, meetings and opportunity profiles, as a centered creation modal. */
+export function NewTaskDrawer({ open, onClose, onCreated, seed, dueHint }: NewTaskDrawerProps) {
   const editor = useRef<OpportunityEditorHandle>(null)
   const [key, setKey] = useState(0)
   const [lastOpen, setLastOpen] = useState(open)
@@ -29,6 +31,7 @@ export function NewTaskDrawer({ open, onClose, onCreated, seed }: NewTaskDrawerP
         ref={editor}
         mode="draft"
         draftSeed={draftSeed}
+        dueHint={dueHint}
         onClose={onClose}
         onSaved={(created) => {
           onCreated?.(created)

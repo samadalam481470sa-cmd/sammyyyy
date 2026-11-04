@@ -77,8 +77,6 @@ import {
 import { withLiveAttention } from '@/lib/attention'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
 import { applyDataFixes } from '@/lib/dataFixes'
-import { CRM_MEETINGS_CHANGED, loadCrmMeetings, saveCrmMeetings } from '@/lib/crmMeetings'
-import type { CrmMeeting } from '@/types/crmMeeting'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
@@ -258,21 +256,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const sharedTimer = useRef<number | null>(null)
   const pushingRef = useRef(false)
 
-  const workspaceSnapshot = (): Record<WorkspaceCollection, { id: string }[]> => ({
+  // Meeting history is user-private (Nov 2026): it is never part of the shared snapshot, and
+  // server rows in the legacy 'meetings' collection are neither pulled into this browser nor deleted.
+  const workspaceSnapshot = (): Partial<Record<WorkspaceCollection, { id: string }[]>> => ({
     opportunities: oppsRef.current,
     tasks: tasksRef.current,
     documents: docsRef.current,
     contacts: loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts),
     activity: activityRef.current,
     documentTypes: storedCustomTypes().map((name) => ({ id: name.toLowerCase(), name })),
-    // Meeting history is shared with every approved workspace user (Newport decision, Oct 30, 2026).
-    meetings: loadCrmMeetings(owner),
   })
 
   const snapshotKeys = () => {
     const map = new Map<string, string>()
     for (const [collection, rows] of Object.entries(workspaceSnapshot())) {
-      for (const row of rows) if (row?.id) map.set(`${collection}/${row.id}`, JSON.stringify(row))
+      for (const row of rows ?? []) if (row?.id) map.set(`${collection}/${row.id}`, JSON.stringify(row))
     }
     return map
   }
@@ -290,7 +288,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: JSON.parse(json) })
       }
       for (const key of syncedRef.current.keys()) {
-        if (current.has(key)) continue
+        if (current.has(key) || key.startsWith('meetings/')) continue
         const [collection, ...rest] = key.split('/')
         changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: null })
       }
@@ -313,9 +311,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const touched = new Set<string>()
     const collections = {} as Record<WorkspaceCollection, Map<string, unknown>>
     for (const name of Object.keys(base) as WorkspaceCollection[]) {
-      collections[name] = new Map(full ? [] : base[name].map((row) => [row.id, row]))
+      collections[name] = new Map(full ? [] : (base[name] ?? []).map((row) => [row.id, row]))
     }
     for (const record of records) {
+      if (record.collection === 'meetings') continue
       const target = collections[record.collection]
       if (!target) continue
       touched.add(`${record.collection}/${record.id}`)
@@ -341,7 +340,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     )
     applyingRemote.current = true
     try {
-      saveCrmMeetings(owner, list<CrmMeeting>('meetings'))
       writeDatabaseRef.current(database, false)
     } finally {
       applyingRemote.current = false
@@ -552,7 +550,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (detail?.resource === 'contacts' && detail.source !== -1) pushCloud()
     }
     const onTypes = () => pushCloud()
-    const onMeetings = () => pushCloud()
     const onState = () => {
       if (!isWorkspaceShared()) return
       if (!sharedRef.current) void refresh()
@@ -561,14 +558,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', poll)
     window.addEventListener(RESOURCE_CHANGED, onLocalChange)
     window.addEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
-    window.addEventListener(CRM_MEETINGS_CHANGED, onMeetings)
     window.addEventListener(WORKSPACE_STATE_EVENT, onState)
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('focus', poll)
       window.removeEventListener(RESOURCE_CHANGED, onLocalChange)
       window.removeEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
-      window.removeEventListener(CRM_MEETINGS_CHANGED, onMeetings)
       window.removeEventListener(WORKSPACE_STATE_EVENT, onState)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

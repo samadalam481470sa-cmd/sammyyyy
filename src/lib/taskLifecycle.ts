@@ -81,3 +81,51 @@ export function applyTaskStatusTransition(
     updatedAt: stamp,
   }
 }
+
+/** Deal statuses whose unfinished tasks are worked on. Other statuses pause their tasks. */
+export const WORKING_DEAL_STATUSES = new Set(['Active', 'Pending'])
+
+type ParentLookup = ReadonlyArray<{ id: string; status: string }>
+
+function parentOf(task: TaskRecord, opportunities: ParentLookup) {
+  return task.opportunityId ? (opportunities.find((o) => o.id === task.opportunityId) ?? null) : null
+}
+
+/**
+ * Unfinished task whose parent deal is not Active/Pending (Inactive, Closed, Declined, Withdrew,
+ * Completed). It is never completed or deleted automatically: it stays on the opportunity profile
+ * marked Paused and returns to the working lists when the deal is Active or Pending again.
+ */
+export function isPausedTask(task: TaskRecord, opportunities: ParentLookup, now = new Date()): boolean {
+  if (!isUnfinishedTask(task, now)) return false
+  const parent = parentOf(task, opportunities)
+  return Boolean(parent && !WORKING_DEAL_STATUSES.has(parent.status))
+}
+
+/**
+ * The one eligibility rule shared by Tasks & Follow-Ups, Dashboard priorities and the bell:
+ * unfinished, and linked to an Active/Pending deal. A standalone task (no linked deal, for
+ * example after its deal was deleted) stays in the working list so it is never silently lost.
+ */
+export function isWorkingTask(task: TaskRecord, opportunities: ParentLookup, now = new Date()): boolean {
+  if (!isUnfinishedTask(task, now)) return false
+  if (!task.opportunityId) return true
+  const parent = parentOf(task, opportunities)
+  if (!parent) return true
+  return WORKING_DEAL_STATUSES.has(parent.status)
+}
+
+export type TaskHistoryKind = 'Completed' | 'Cancelled/Deleted' | 'Archived'
+
+/** Task History rows: completed, archived and deleted tasks. Unfinished paused tasks are not history. */
+export function taskHistoryKind(task: TaskRecord): TaskHistoryKind | null {
+  if (task.deletedAt) return 'Cancelled/Deleted'
+  if (task.status === 'Done') return 'Completed'
+  if (task.archivedAt) return 'Archived'
+  return null
+}
+
+/** When the task entered history (deleted, archived or completed time). */
+export function taskHistoryDate(task: TaskRecord): string | null {
+  return task.deletedAt ?? task.completedAt ?? task.archivedAt ?? task.updatedAt ?? null
+}

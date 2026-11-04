@@ -1,14 +1,16 @@
 /**
- * CRM meeting history. Kept on this device and, when the shared Newport workspace is connected,
- * shared with every approved user (Newport decision, Oct 30, 2026). Transcripts are stored in the
- * browser file store and on the Newport server, never in the public site's static files.
+ * CRM meeting history is PRIVATE to the signed-in user (sponsor decision, Nov 2026).
+ * Records and transcript files are kept in this browser under the user's own account key.
+ * They are not sent to the shared workspace and not visible to other users. This is browser-level
+ * separation only, not server-side isolation; cross-device sync is a later sprint.
+ * Transcript TEXT is sent to the approved AI service only to create a summary, never stored there.
  */
 import { loadDemoCollection, saveDemoCollection } from '@/lib/demoStore'
 import { deleteDocumentBlob, getDocumentBlob, putDocumentBlob } from '@/lib/documentFileStore'
 import type { CrmMeeting } from '@/types/crmMeeting'
 import type { OutlookEvent } from '@/lib/graphCalendar'
 import { emptySummary } from '@/types/crmMeeting'
-import { deleteWorkspaceFile, downloadWorkspaceFile, isWorkspaceShared, uploadWorkspaceFile } from '@/lib/workspaceSync'
+import { deleteWorkspaceFile, isWorkspaceShared } from '@/lib/workspaceSync'
 
 export const CRM_MEETINGS_CHANGED = 'newport-crm-meetings-changed'
 
@@ -37,6 +39,7 @@ export async function removeCrmMeeting(owner: string, id: string): Promise<void>
   saveCrmMeetings(owner, loadCrmMeetings(owner).filter((m) => m.id !== id))
   await deleteDocumentBlob(owner, transcriptTextKey(id)).catch(() => undefined)
   await deleteDocumentBlob(owner, transcriptSourceKey(id)).catch(() => undefined)
+  // Older builds also copied transcripts to the shared server; remove those copies too.
   if (isWorkspaceShared()) {
     await deleteWorkspaceFile(transcriptTextKey(id)).catch(() => undefined)
     await deleteWorkspaceFile(transcriptSourceKey(id)).catch(() => undefined)
@@ -77,23 +80,15 @@ export function meetingFromEvent(event: OutlookEvent): CrmMeeting {
 const transcriptTextKey = (id: string) => `meeting-transcript-text-${id}`
 const transcriptSourceKey = (id: string) => `meeting-transcript-source-${id}`
 
-/** Saved on this device, and on the Newport server for the team when the shared workspace is on. */
+/** Saved in this browser's file store under the user's own key. Never uploaded to the shared workspace. */
 export async function storeTranscript(owner: string, meetingId: string, source: File, text: string): Promise<void> {
   const textFile = new File([text], `${meetingId}.txt`, { type: 'text/plain' })
   await putDocumentBlob(owner, transcriptSourceKey(meetingId), source)
   await putDocumentBlob(owner, transcriptTextKey(meetingId), textFile)
-  if (isWorkspaceShared()) {
-    await uploadWorkspaceFile(transcriptSourceKey(meetingId), source, source.name)
-    await uploadWorkspaceFile(transcriptTextKey(meetingId), textFile, textFile.name)
-  }
 }
 
 async function readShared(owner: string, key: string): Promise<Blob | null> {
-  const local = await getDocumentBlob(owner, key).catch(() => null)
-  if (local || !isWorkspaceShared()) return local
-  const remote = await downloadWorkspaceFile(key)
-  if (remote) await putDocumentBlob(owner, key, remote).catch(() => undefined)
-  return remote
+  return getDocumentBlob(owner, key).catch(() => null)
 }
 
 export async function readTranscriptText(owner: string, meetingId: string): Promise<string | null> {

@@ -25,25 +25,37 @@ export function meetingSummaryProvider(): string | null {
 
 const listOf = z.array(z.string().trim().min(1).max(600)).max(25)
 export const summarySchema = z.object({
+  overview: z.string().trim().max(2400).optional().default(''),
   discussion: listOf,
   decisions: listOf,
   openQuestions: listOf,
   nextSteps: listOf,
   proposedActions: z
-    .array(z.object({ action: z.string().trim().min(3).max(300), owner: z.string().trim().max(120).optional().nullable() }))
+    .array(
+      z.object({
+        action: z.string().trim().min(3).max(300),
+        owner: z.string().trim().max(120).optional().nullable(),
+        due: z.string().trim().max(120).optional().nullable(),
+      }),
+    )
     .max(15),
 })
 
 export type ParsedSummary = z.infer<typeof summarySchema>
 
 const SYSTEM = [
-  'You summarize a business meeting transcript for an acquisitions CRM.',
+  'You summarize a business meeting transcript for an acquisitions CRM used by an insurance M&A team.',
   'Use ONLY the transcript text you are given. Do not use the meeting title, calendar data, outside knowledge or assumptions.',
-  'Never invent names, numbers, dates, decisions or dialogue. If something is not in the transcript, leave it out.',
-  'Return JSON with keys: discussion (key points discussed), decisions (decisions actually stated),',
-  'openQuestions (questions left unresolved), nextSteps (next steps stated), proposedActions (array of {action, owner})',
-  'where each action is a concrete follow-up stated or clearly agreed in the transcript and owner is the person named for it, or null.',
-  'Each list may be empty. Keep every item short and factual.',
+  'Never invent names, participants, numbers, dates, owners, decisions or dialogue. If something is not in the transcript, leave it out.',
+  'Return JSON with keys:',
+  'overview (a concise prose overview of the meeting; scale it to the transcript: about 100-200 words for a typical meeting, shorter for a short transcript; keep important financial figures, deal terms and context exactly as stated),',
+  'discussion (distinct key points discussed, no repeats of the overview wording),',
+  'decisions (key decisions actually stated or agreed),',
+  'openQuestions (questions left unresolved; empty when there are none),',
+  'nextSteps (next steps stated),',
+  'proposedActions (array of {action, owner, due}) where each action is a concrete, actionable follow-up stated or clearly agreed in the transcript;',
+  'owner is the person the transcript names for it, otherwise null; due is the timing exactly as the transcript states it (for example "by Friday" or "October 15"), otherwise null.',
+  'Do not repeat the same point across lists. Do not pad lists; each may be empty. Keep every list item short and factual.',
 ].join(' ')
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -55,6 +67,7 @@ const stringList = { type: 'ARRAY', items: { type: 'STRING' } }
 export const GEMINI_SUMMARY_SCHEMA: Record<string, unknown> = {
   type: 'OBJECT',
   properties: {
+    overview: { type: 'STRING' },
     discussion: stringList,
     decisions: stringList,
     openQuestions: stringList,
@@ -63,12 +76,12 @@ export const GEMINI_SUMMARY_SCHEMA: Record<string, unknown> = {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
-        properties: { action: { type: 'STRING' }, owner: { type: 'STRING', nullable: true } },
+        properties: { action: { type: 'STRING' }, owner: { type: 'STRING', nullable: true }, due: { type: 'STRING', nullable: true } },
         required: ['action'],
       },
     },
   },
-  required: ['discussion', 'decisions', 'openQuestions', 'nextSteps', 'proposedActions'],
+  required: ['overview', 'discussion', 'decisions', 'openQuestions', 'nextSteps', 'proposedActions'],
 }
 
 /** Keeps a well-formed answer within the stored limits instead of rejecting it for being long. */
@@ -84,11 +97,25 @@ export function normalizeSummary(raw: unknown): unknown {
       .map((x) => x.trim().slice(0, 600))
       .slice(0, 25)
   const actions = (Array.isArray(r.proposedActions) ? r.proposedActions : [])
-    .filter((a): a is { action: unknown; owner?: unknown } => Boolean(a) && typeof a === 'object' && typeof (a as { action?: unknown }).action === 'string')
-    .map((a) => ({ action: String(a.action).trim().slice(0, 300), owner: typeof a.owner === 'string' && a.owner.trim() ? a.owner.trim().slice(0, 120) : null }))
+    .filter((a): a is { action: unknown; owner?: unknown; due?: unknown } => Boolean(a) && typeof a === 'object' && typeof (a as { action?: unknown }).action === 'string')
+    .map((a) => ({
+      action: String(a.action).trim().slice(0, 300),
+      owner: typeof a.owner === 'string' && a.owner.trim() ? a.owner.trim().slice(0, 120) : null,
+      due: typeof a.due === 'string' && a.due.trim() ? a.due.trim().slice(0, 120) : null,
+    }))
     .filter((a) => a.action.length >= 3)
     .slice(0, 15)
-  return { discussion: list(r.discussion), decisions: list(r.decisions), openQuestions: list(r.openQuestions), nextSteps: list(r.nextSteps), proposedActions: actions }
+  // Drop exact repeats inside a list (models sometimes echo a point twice).
+  const unique = (items: string[]) => items.filter((item, i) => items.findIndex((x) => x.toLowerCase() === item.toLowerCase()) === i)
+  const overview = typeof r.overview === 'string' ? r.overview.trim().slice(0, 2400) : ''
+  return {
+    overview,
+    discussion: unique(list(r.discussion)),
+    decisions: unique(list(r.decisions)),
+    openQuestions: unique(list(r.openQuestions)),
+    nextSteps: unique(list(r.nextSteps)),
+    proposedActions: actions.filter((a, i) => actions.findIndex((x) => x.action.toLowerCase() === a.action.toLowerCase()) === i),
+  }
 }
 
 export async function summarizeTranscript(transcript: string, fetchImpl: FetchLike = httpsFetch): Promise<{ summary: ParsedSummary; provider: string; truncated: boolean }> {
