@@ -13,6 +13,7 @@ import {
   resolvePeriod,
   scopeDeals,
 } from './reports'
+import { legalClosingDate } from './statusHistory'
 
 const NOW = new Date(2026, 9, 30, 9, 0, 0)
 const seeds = bundledSeedSnapshot()
@@ -41,14 +42,18 @@ describe('reports', () => {
     expect(pipelineByStage(s.pipeline).reduce((a, r) => a + r.count, 0)).toBe(s.pipeline.length)
   })
 
-  it('period filters use recorded dates and report undated records', () => {
+  it('period filters use recorded dates; seed deals carry filled-in demo dates', () => {
     const july = resolvePeriod({ kind: 'month', month: '2026-07' })
-    const s = scopeDeals(opps, july)
-    expect(s.completed.map((o) => o.projectName)).toEqual(['Project BA'])
-    expect(s.undatedCreated).toBe(42)
-    expect(s.undatedCompleted).toBeGreaterThan(0)
+    const s = scopeDeals(opps, july, NOW)
+    expect(s.completed.map((o) => o.projectName)).toContain('Project BA')
+    // Every fictional seed deal now has a creation date, marked as seed data.
+    expect(s.undatedCreated).toBe(0)
+    expect(opps.filter((o) => o.seedDates).length).toBeGreaterThan(30)
     const range = resolvePeriod({ kind: 'range', from: '2026-10-01', to: '2026-10-31' })
-    expect(scopeDeals(opps, range).completed.map((o) => o.projectName)).toEqual(['Project BC'])
+    for (const o of scopeDeals(opps, range, NOW).completed) {
+      const closed = legalClosingDate(o)!
+      expect(closed >= '2026-10-01' && closed <= '2026-10-31').toBe(true)
+    }
     expect(resolvePeriod({ kind: 'year', year: '2026' }).label).toBe('2026')
   })
 
@@ -85,7 +90,7 @@ describe('reports', () => {
     expect(trends.undatedCompleted).toBe(opps.filter((o) => o.status === 'Completed' && !o.completedAt).length)
   })
 
-  it('a recorded reversal lowers cumulative completed values on the reversal date', () => {
+  it('a reversed completion leaves completion reports entirely (no double counting)', () => {
     const base = opps.find((o) => o.projectName === 'Project BA')!
     const reversed: Opportunity = {
       ...base,
@@ -93,11 +98,43 @@ describe('reports', () => {
       statusHistory: [...(base.statusHistory ?? []), { from: 'Completed', to: 'Active', at: '2026-09-10T15:00:00Z' }],
     }
     const trends = buildTrends([reversed], ALL, NOW)
-    const aug = trends.points.find((p) => p.month === '2026-08')!
-    const sep = trends.points.find((p) => p.month === '2026-09')!
-    expect(aug.cumulativeNwp).toBe(base.nwp)
-    expect(sep.cumulativeNwp).toBe(0)
-    expect(sep.completed).toBe(-1)
-    expect(trends.reversals).toBe(1)
+    expect(trends.points.every((p) => p.cumulativeNwp === 0 && p.completed === 0)).toBe(true)
+    expect(scopeDeals([reversed], ALL, NOW).completed).toHaveLength(0)
+  })
+
+  it('a new completion is provisional for 24 hours, then counts on its legal closing date', () => {
+    const base = opps.find((o) => o.status === 'Active')!
+    const confirmedAt = '2026-10-30T14:00:00.000Z'
+    const done: Opportunity = {
+      ...base,
+      status: 'Completed',
+      stage: 'Closing',
+      closedAt: '2026-10-28',
+      completionConfirmedAt: confirmedAt,
+      closingSnapshot: { nwp: 5_000_000, pfEbitda: 500_000, netRevenue: 1_000_000 },
+    }
+    const hourLater = new Date(Date.parse(confirmedAt) + 60 * 60 * 1000)
+    const dayLater = new Date(Date.parse(confirmedAt) + 24 * 60 * 60 * 1000 + 1)
+    const early = scopeDeals([done], ALL, hourLater)
+    expect(early.completed).toHaveLength(0)
+    expect(early.provisional).toHaveLength(1)
+    expect(buildTrends([done], ALL, hourLater).provisional).toBe(1)
+    const later = scopeDeals([done], ALL, dayLater)
+    expect(later.completed).toHaveLength(1)
+    expect(reportKpis(later).completed).toEqual({ deals: 1, nwp: 5_000_000, pfEbitda: 500_000 })
+    const oct = resolvePeriod({ kind: 'month', month: '2026-10' })
+    expect(scopeDeals([done], oct, dayLater).completed).toHaveLength(1)
+    const sep = resolvePeriod({ kind: 'month', month: '2026-09' })
+    expect(scopeDeals([done], sep, dayLater).completed).toHaveLength(0)
+    const t = buildTrends([done], ALL, dayLater)
+    expect(t.points.find((p) => p.month === '2026-10')?.completed).toBe(1)
+  })
+
+  it('cumulative trends carry the opening balance into a period', () => {
+    const t = buildTrends(opps, resolvePeriod({ kind: 'year', year: '2026' }), NOW)
+    const before = scopeDeals(opps, resolvePeriod({ kind: 'range', from: '2000-01-01', to: '2025-12-31' }), NOW)
+    const opening = reportKpis(before).completed.nwp
+    const jan = t.points.find((p) => p.month === '2026-01')!
+    expect(jan.cumulativeNwp).toBeGreaterThanOrEqual(opening)
   })
 })
