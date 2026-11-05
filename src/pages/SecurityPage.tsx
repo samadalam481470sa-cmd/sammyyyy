@@ -7,6 +7,8 @@ import { loadDemoChangeHistory } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { PageShell, PageTitleBar } from '@/components/shared/PageChrome'
 import { useFitRows } from '@/hooks/useFitRows'
+import { DefensePanel } from '@/components/security/DefensePanel'
+import { useWorkspaceRole } from '@/lib/workspaceSync'
 
 export function SecurityPage() {
   const { user } = useAuth()
@@ -17,6 +19,9 @@ export function SecurityPage() {
   // The history region has a fixed height; rows that fit decide the page size, so the page never scrolls.
   const pageSize = useFitRows(listRef, { rowHeight: 41, headerHeight: 0, min: 4, rowSelector: 'li' })
   const view = paginate(changes, page, pageSize)
+  const role = useWorkspaceRole()
+  const canSeeDefense = role === 'admin'
+  const [tab, setTab] = useState<'history' | 'defense'>('history')
 
   return (
     <PageShell testId="security-page">
@@ -43,18 +48,27 @@ export function SecurityPage() {
             <li>Another email cannot open this vault. Tampered session proofs are rejected.</li>
             <li>Sign out clears the session only — opportunities, tasks, and documents stay.</li>
             <li>Repeated failed sign-ins are throttled. CSP blocks unexpected scripts.</li>
-            <li>These protections are browser-level. They are not a substitute for server-side security.</li>
+            <li>The Newport server blocks repeated failed sign-ins and attack probes, limits request floods, and stores blocks so a restart does not lift them.</li>
+            <li>No system stops every attack. Turn on multi-factor sign-in for every Microsoft account.</li>
           </ul>
         </section>
 
+        {tab === 'defense' ? (
+          <DefensePanel onBack={() => setTab('history')} />
+        ) : (
         <section className="flex min-h-[360px] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card) lg:min-h-0" data-testid="security-history">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-5 py-3.5">
             <div className="flex items-center gap-2">
               <History className="h-5 w-5 text-accent" />
               <h2 className="font-brand text-lg font-bold text-navy-900">Change history</h2>
             </div>
-            <span className="inline-flex items-center gap-1 text-[11px] text-ink-muted">
+            <span className="inline-flex items-center gap-2 text-[11px] text-ink-muted">
               <Lock className="h-3.5 w-3.5" /> Protected record: archiving Recent Activity never removes entries here
+              {canSeeDefense && (
+                <button type="button" onClick={() => setTab('defense')} data-testid="open-defense" className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-navy-900 hover:bg-canvas">
+                  Attack defense
+                </button>
+              )}
             </span>
           </div>
           <ul ref={listRef} className="min-h-0 flex-1 divide-y divide-border overflow-hidden px-5">
@@ -71,6 +85,7 @@ export function SecurityPage() {
           </ul>
           <Pagination {...view} onPage={setPage} noun="changes" testId="security-history-pagination" />
         </section>
+        )}
       </div>
     </PageShell>
   )

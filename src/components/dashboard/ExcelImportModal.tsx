@@ -82,6 +82,11 @@ export function ExcelImportModal({
   }
 
   const ingestFile = async (file: File) => {
+    // The spreadsheet library has known flaws with hostile files. A size limit reduces the exposure.
+    if (file.size > 10 * 1024 * 1024) {
+      setError('That file is larger than 10 MB. Split it into smaller files.')
+      return
+    }
     setError(null)
     try {
       const buf = await file.arrayBuffer()

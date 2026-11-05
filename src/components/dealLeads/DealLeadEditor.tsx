@@ -130,7 +130,7 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
       const linkAccount = mode === 'self' && user?.id ? { authAccountId: user.id } : {}
       let result: DealLead
       if (lead) {
-        result = await api.save(lead.id, canEditProfile ? { ...fields, ...linkAccount } : { updatedAt: stamp })
+        result = canEditProfile ? await api.save(lead.id, { ...fields, ...linkAccount }) : lead
       } else {
         result = await api.create({ ...fields, authAccountId: mode === 'self' ? (user?.id ?? null) : null, createdAt: stamp })
       }

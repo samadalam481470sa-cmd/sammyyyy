@@ -14,7 +14,9 @@ export const exportRouter = Router()
 exportRouter.use(requireAuth)
 
 function csvEscape(value: unknown): string {
-  const s = value === null || value === undefined ? '' : String(value)
+  const text = value === null || value === undefined ? '' : String(value)
+  // A text cell starting with = + - @ runs as a formula in Excel. Real numbers stay numbers.
+  const s = typeof value === 'string' && /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }

@@ -169,7 +169,7 @@ export interface LeadPermissions {
   canChangeStatus: boolean
 }
 
-/** These checks shape the screen only. They are not security: see docs/SPRINT_NOV_NEXT_FIXES.md. */
+/** These checks shape the screen. The server enforces the same rules: see dealLeadWriteAllowed in server/middleware/defense.ts. */
 export function leadPermissions(lead: DealLead | null, user: Pick<AuthUser, 'id'> | null | undefined, admin: boolean): LeadPermissions {
   const isOwn = Boolean(lead && user?.id && lead.authAccountId === user.id)
   return { admin, isOwn, canEditProfile: admin || isOwn, canChangeStatus: admin }

@@ -1,7 +1,8 @@
 import express, { Router } from 'express'
 import { z } from 'zod'
 import { db, createSessionToken, hashToken } from '../db/index.ts'
-import { authRateLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, writeAudit } from '../middleware/security.ts'
+import { aiRateLimit, authRateLimit, fileWriteLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, workspaceWriteLimit, writeAudit } from '../middleware/security.ts'
+import { STRIKES, addStrikes, dealLeadWriteAllowed, logDefenseEvent, uploadProblem } from '../middleware/defense.ts'
 import { accessPolicy, isAllowed, verifyMicrosoftIdToken } from '../services/microsoftToken.ts'
 import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from '../services/meetingSummary.ts'
 import { geminiModel, geminiReachability, geminiSelfTest } from '../services/gemini.ts'
@@ -16,6 +17,9 @@ export const microsoftAuthRouter = Router()
 
 export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'dealLeads', 'activity', 'documentTypes', 'meetings'] as const
 const SESSION_HOURS = 12
+const MAX_SESSIONS_PER_USER = 10
+/** Keeps a stolen account or a runaway client from filling the server's disk. */
+const FILE_STORE_LIMIT = 5 * 1024 * 1024 * 1024
 
 function initials(name: string): string {
   const parts = name.replace(/[^\p{L}\s]/gu, ' ').split(/\s+/).filter(Boolean)
@@ -55,8 +59,12 @@ microsoftAuthRouter.post('/microsoft', authRateLimit, lockoutGuard, async (req, 
   const sessionId = `sess_ms_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600_000).toISOString()
   db.prepare(
-    `INSERT INTO sessions (id, user_id, token_hash, auth_method, expires_at, ip_address, user_agent) VALUES (?, ?, ?, 'microsoft', ?, ?, ?)`,
-  ).run(sessionId, user.id, hashToken(token), expiresAt, req.ip ?? null, req.get('user-agent') ?? null)
+    `INSERT INTO sessions (id, user_id, token_hash, auth_method, expires_at, ip_address, user_agent, auth_subject) VALUES (?, ?, ?, 'microsoft', ?, ?, ?, ?)`,
+  ).run(sessionId, user.id, hashToken(token), expiresAt, req.ip ?? null, (req.get('user-agent') ?? '').slice(0, 300) || null, identity.objectId || null)
+  // The oldest sessions end first, so old or stolen tokens do not pile up forever.
+  db.prepare(
+    `DELETE FROM sessions WHERE user_id = ? AND id NOT IN (SELECT id FROM sessions WHERE user_id = ? ORDER BY datetime(created_at) DESC, rowid DESC LIMIT ?)`,
+  ).run(user.id, user.id, MAX_SESSIONS_PER_USER)
   writeAudit(user.id, user.name, 'auth.microsoft_signin', 'session', sessionId, `Microsoft sign-in (tenant ${identity.tenantId})`, req)
   res.json({ token, expiresAt, user: { ...user, authMethod: 'microsoft' } })
 })
@@ -102,7 +110,7 @@ workspaceRouter.get('/', requireAuth, (req, res) => {
   })
 })
 
-workspaceRouter.post('/changes', requireAuth, (req, res) => {
+workspaceRouter.post('/changes', requireAuth, workspaceWriteLimit, (req, res) => {
   if (req.auth?.role === 'viewer') return res.status(403).json({ error: 'Your account can view records but not change them.' })
   const parsed = changeSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Invalid changes.' })
@@ -112,8 +120,24 @@ workspaceRouter.post('/changes', requireAuth, (req, res) => {
     `INSERT INTO workspace_records (collection, id, data, deleted, updated_at, updated_by) VALUES (@collection, @id, @data, @deleted, @updatedAt, @actor)
      ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, deleted = excluded.deleted, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
   )
+  const readExisting = db.prepare(`SELECT data, deleted FROM workspace_records WHERE collection = ? AND id = ?`)
+  const rejected: string[] = []
   const apply = db.transaction(() => {
     for (const change of parsed.data.changes) {
+      if (change.collection === 'dealLeads') {
+        const row = readExisting.get(change.collection, change.id) as { data: string; deleted: number } | undefined
+        const allowed = dealLeadWriteAllowed({
+          isAdmin: req.auth?.role === 'admin',
+          subject: req.auth?.subject ?? null,
+          userName: req.auth?.userName ?? '',
+          incoming: change.data,
+          existing: row && !row.deleted ? (JSON.parse(row.data) as Record<string, unknown>) : null,
+        })
+        if (!allowed) {
+          rejected.push(change.id)
+          continue
+        }
+      }
       const data = change.data == null ? '{}' : JSON.stringify({ ...change.data, id: change.id })
       if (data.length > 400_000) throw new Error('Record too large')
       upsert.run({ collection: change.collection, id: change.id, data, deleted: change.data == null ? 1 : 0, updatedAt: now, actor })
@@ -125,23 +149,43 @@ workspaceRouter.post('/changes', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'A record is too large to save.' })
   }
   writeAudit(req.auth?.userId ?? null, actor, 'workspace.changes', 'workspace', null, `${parsed.data.changes.length} record change(s)`, req)
-  res.json({ ok: true, serverTime: now })
+  if (rejected.length) {
+    logDefenseEvent('denied_record_write', req, `Deal lead records: ${rejected.join(', ')}`)
+    writeAudit(req.auth?.userId ?? null, actor, 'workspace.denied', 'dealLeads', null, `Refused ${rejected.length} deal lead change(s) this account may not make`, req)
+  }
+  res.json({ ok: true, serverTime: now, rejected })
 })
 
 const FILE_LIMIT = 25 * 1024 * 1024
 const fileId = z.string().regex(/^[A-Za-z0-9._:-]{1,200}$/)
 
 /** Uploaded document files, shared with every approved user (not just the uploader's browser). */
-workspaceRouter.put('/files/:docId', requireAuth, express.raw({ type: () => true, limit: FILE_LIMIT }), (req, res) => {
+workspaceRouter.put('/files/:docId', requireAuth, fileWriteLimit, express.raw({ type: () => true, limit: FILE_LIMIT }), (req, res) => {
   if (req.auth?.role === 'viewer') return res.status(403).json({ error: 'Your account can view records but not change them.' })
   const id = fileId.safeParse(req.params.docId)
   if (!id.success || !Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Invalid file.' })
-  const name = String(req.get('x-file-name') ?? 'file').replace(/[\\/\r\n"]/g, '_').slice(0, 200)
+  const rawName = String(req.get('x-file-name') ?? 'file')
+  let decodedName = rawName
+  try {
+    decodedName = decodeURIComponent(rawName)
+  } catch {
+    // A malformed name is kept as sent, and made safe below.
+  }
+  const name = decodedName.replace(/[\\/\r\n"\0]/g, '_').slice(0, 200) || 'file'
+  const problem = uploadProblem(name, req.body)
+  if (problem) {
+    logDefenseEvent('bad_upload', req, name)
+    addStrikes(req, STRIKES.badUpload, 'bad_upload')
+    writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'workspace.file_refused', 'document', id.data, problem, req)
+    return res.status(415).json({ error: problem })
+  }
+  const stored = (db.prepare(`SELECT COALESCE(SUM(size), 0) AS total FROM workspace_files WHERE doc_id != ?`).get(id.data) as { total: number }).total
+  if (stored + req.body.length > FILE_STORE_LIMIT) return res.status(507).json({ error: 'The file store is full. Ask an administrator to remove old files.' })
   const type = String(req.get('content-type') ?? 'application/octet-stream').slice(0, 120)
   db.prepare(
     `INSERT INTO workspace_files (doc_id, name, content_type, size, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(doc_id) DO UPDATE SET name = excluded.name, content_type = excluded.content_type, size = excluded.size, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-  ).run(id.data, decodeURIComponent(name), type, req.body.length, req.body, new Date().toISOString(), req.auth?.userName ?? 'Newport user')
+  ).run(id.data, name, type, req.body.length, req.body, new Date().toISOString(), req.auth?.userName ?? 'Newport user')
   writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'workspace.file_upload', 'document', id.data, `${req.body.length} bytes`, req)
   res.json({ ok: true, size: req.body.length })
 })
@@ -162,6 +206,7 @@ workspaceRouter.delete('/files/:docId', requireAuth, (req, res) => {
   const id = fileId.safeParse(req.params.docId)
   if (!id.success) return res.status(400).json({ error: 'Invalid file id.' })
   db.prepare(`DELETE FROM workspace_files WHERE doc_id = ?`).run(id.data)
+  writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'workspace.file_delete', 'document', id.data, 'File removed', req)
   res.json({ ok: true })
 })
 
@@ -173,18 +218,18 @@ workspaceRouter.get('/ai/status', requireAuth, (_req, res) => {
 })
 
 // Admin check: can this server reach Google's API host at all? No key or CRM data is sent.
-workspaceRouter.get('/ai/reachability', requireAuth, async (_req, res) => {
+workspaceRouter.get('/ai/reachability', requireAuth, aiRateLimit, async (_req, res) => {
   res.json({ model: geminiModel(), reach: await geminiReachability() })
 })
 
 // A short connection check an approved user can run from the Meetings page. Returns no secrets.
-workspaceRouter.get('/ai/selftest', requireAuth, async (_req, res) => {
+workspaceRouter.get('/ai/selftest', requireAuth, aiRateLimit, async (_req, res) => {
   res.json(await geminiSelfTest())
 })
 
 const summarySchema = z.object({ transcript: z.string().min(1).max(400_000) })
 
-workspaceRouter.post('/ai/meeting-summary', requireAuth, async (req, res) => {
+workspaceRouter.post('/ai/meeting-summary', requireAuth, aiRateLimit, async (req, res) => {
   const parsed = summarySchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Send the transcript text.' })
   try {

@@ -52,7 +52,7 @@ Until the Azure deploy finishes, saves wait and retry. The app shows "Not saved 
 
 - Admin means the role the server returned at sign-in (from `ADMIN_EMAILS`), or the manager session. No admin is invented.
 - Regular users can add or edit only their own profile. They see other profiles read-only.
-- These are screen rules, not security. The server checks that a person is approved, but it does not check who may edit which roster record. A determined approved user could change a roster record through the API. Server-side role checks belong to the future backend work.
+- The server also enforces this for roster records in the shared workspace. See `docs/SECURITY_DEFENSES.md`.
 - If `ADMIN_EMAILS` has no one in it on Azure, nobody sees New Deal Lead, and each person can still add themselves.
 
 ## Manual QA checklist

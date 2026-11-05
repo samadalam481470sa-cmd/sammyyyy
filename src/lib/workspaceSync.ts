@@ -190,6 +190,33 @@ async function request(path: string, init: RequestInit = {}, retried = false): P
   throw new Error(body.error || `The Newport server returned ${res.status}.`)
 }
 
+export interface DefenseStatus {
+  activeBlocks: { ip: string; reason: string; level: number; blockedUntil: string }[]
+  last24h: { type: string; count: number }[]
+  events: { id: number; type: string; ip: string | null; path: string | null; detail: string | null; createdAt: string }[]
+  posture: { approvedListSet: boolean; administrators: number; demoSignInOff: boolean }
+}
+
+async function securityRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  const base = await workspaceApiBase()
+  const session = readSession()
+  if (!base || !session) throw new Error('The shared workspace is not connected.')
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${session.token}`)
+  const res = await fetch(`${base}/api/security${path}`, { ...init, headers })
+  if (res.ok) return res
+  const body = (await res.json().catch(() => ({}))) as { error?: string }
+  throw new Error(body.error || `The Newport server returned ${res.status}.`)
+}
+
+export async function fetchDefenseStatus(): Promise<DefenseStatus> {
+  return (await securityRequest('/defense')).json() as Promise<DefenseStatus>
+}
+
+export async function liftDefenseBlock(ip: string): Promise<void> {
+  await securityRequest(`/defense/blocks/${encodeURIComponent(ip)}`, { method: 'DELETE' })
+}
+
 export async function pullWorkspace(since?: string | null): Promise<WorkspacePull> {
   const res = await request(since ? `?since=${encodeURIComponent(since)}` : '')
   return (await res.json()) as WorkspacePull

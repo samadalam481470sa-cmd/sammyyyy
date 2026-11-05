@@ -1,3 +1,5 @@
+import { defenseStatus, liftBlock } from '../middleware/defense.ts'
+import { accessPolicy } from '../services/microsoftToken.ts'
 import { Router } from 'express'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
@@ -9,9 +11,31 @@ import {
   writeAudit,
 } from '../middleware/security.ts'
 
+const isPolicySet = (p: ReturnType<typeof accessPolicy>) => Boolean(p.emails.length || p.domains.length || p.tenants.length || p.admins.length)
+
 export const securityRouter = Router()
 
 securityRouter.use(requireAuth)
+
+/** Attack log and active blocks. Administrators only. */
+securityRouter.get('/defense', requireRole('admin'), (_req, res) => {
+  const policy = accessPolicy()
+  res.json({
+    ...defenseStatus(),
+    posture: {
+      approvedListSet: isPolicySet(policy),
+      administrators: policy.admins.length,
+      demoSignInOff: process.env.ALLOW_DEMO_SIGNIN !== '1',
+    },
+  })
+})
+
+securityRouter.delete('/defense/blocks/:ip', requireRole('admin'), (req, res) => {
+  const lifted = liftBlock(req.params.ip, req)
+  if (!lifted) return res.status(404).json({ error: 'That address is not blocked.' })
+  writeAudit(req.auth!.userId, req.auth!.userName, 'security.block_lifted', 'ip_address', req.params.ip, 'Block lifted by an administrator', req)
+  res.json({ ok: true })
+})
 
 /** Returns the five API key slots — never returns key hashes or secrets. */
 securityRouter.get('/api-keys', requireRole('admin', 'partner'), (_req, res) => {

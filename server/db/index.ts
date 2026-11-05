@@ -53,6 +53,14 @@ db.pragma('busy_timeout = 4000')
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
+;(function addSessionSubject() {
+  const cols = db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[]
+  if (cols.some((c) => c.name === 'auth_subject')) return
+  db.exec(`ALTER TABLE sessions ADD COLUMN auth_subject TEXT`)
+  // Older Microsoft sessions have no account id. Browsers reconnect by themselves when these end.
+  db.exec(`DELETE FROM sessions WHERE auth_method = 'microsoft'`)
+})()
+
 ;(() => {
   const cols = db.prepare(`PRAGMA table_info(meetings)`).all() as { name: string }[]
   if (!cols.some((c) => c.name === 'owner_key')) return

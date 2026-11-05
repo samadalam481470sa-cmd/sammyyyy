@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { ownerKeyFromAuth } from '../../src/lib/ownerKey.ts'
 import { db, hashToken } from '../db/index.ts'
+import { STRIKES, addStrikes, forgiveAuthFailures, isBlocked, logDefenseEvent } from './defense.ts'
 
 export { ownerKeyFromAuth }
 
@@ -15,6 +16,8 @@ export interface AuthContext {
   apiKeySlot?: number
   isManager?: boolean
   sessionId: string
+  /** Microsoft account id from the verified sign-in, when the session came from one. */
+  subject?: string | null
 }
 
 declare global {
@@ -25,70 +28,46 @@ declare global {
   }
 }
 
+function sessionOrIp(req: Request, suffix: string): string {
+  return `${req.auth?.sessionId || ipKeyGenerator(req.ip || '0.0.0.0')}:${suffix}`
+}
+
+function limitHandler(type: 'rate_limit' | 'flood', points: number, message: string) {
+  return (req: Request, res: Response) => {
+    logDefenseEvent(type, req, req.path)
+    addStrikes(req, points, type)
+    res.status(429).json({ error: message })
+  }
+}
+
+// Only failures count, so a whole office signing in at once is never throttled.
 export const authRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many authentication attempts. Try again later.' },
+  handler: limitHandler('rate_limit', STRIKES.rateLimit, 'Too many authentication attempts. Try again later.'),
 })
 
 // ---------------------------------------------------------------------------
-// Brute-force lockout: 5 failed credential attempts per IP → 30-minute lock.
-// Kept in memory (resets on restart); rate limiting still applies regardless.
+// Brute force: 5 failed credential attempts from an address start a block of 30 minutes, then
+// 2 hours, then 24 hours. Blocks live in the database, so a restart does not lift them.
 // ---------------------------------------------------------------------------
-const MAX_FAILED_ATTEMPTS = 5
-const FAILURE_WINDOW_MS = 15 * 60 * 1000
-const LOCKOUT_MS = 30 * 60 * 1000
-
-interface FailureRecord {
-  count: number
-  firstFailureAt: number
-  lockedUntil: number | null
-}
-
-const failuresByIp = new Map<string, FailureRecord>()
-
-setInterval(() => {
-  const now = Date.now()
-  for (const [ip, rec] of failuresByIp) {
-    const lockExpired = rec.lockedUntil !== null && rec.lockedUntil < now
-    const windowExpired = rec.lockedUntil === null && now - rec.firstFailureAt > FAILURE_WINDOW_MS
-    if (lockExpired || windowExpired) failuresByIp.delete(ip)
-  }
-}, 60 * 1000).unref()
-
 export function isLockedOut(ip: string | undefined): boolean {
-  if (!ip) return false
-  const rec = failuresByIp.get(ip)
-  return !!rec?.lockedUntil && rec.lockedUntil > Date.now()
+  return isBlocked(ip)
 }
 
 export function recordAuthFailure(ip: string | undefined, req?: Request): void {
-  if (!ip) return
-  const now = Date.now()
-  const rec = failuresByIp.get(ip)
-  if (!rec || now - rec.firstFailureAt > FAILURE_WINDOW_MS) {
-    failuresByIp.set(ip, { count: 1, firstFailureAt: now, lockedUntil: null })
-    return
-  }
-  rec.count += 1
-  if (rec.count >= MAX_FAILED_ATTEMPTS && !rec.lockedUntil) {
-    rec.lockedUntil = now + LOCKOUT_MS
-    writeAudit(
-      null,
-      'system',
-      'auth.lockout',
-      'ip_address',
-      ip,
-      `IP locked for 30 minutes after ${rec.count} failed attempts`,
-      req,
-    )
+  if (!ip || !req) return
+  logDefenseEvent('auth_failure', req)
+  if (addStrikes(req, STRIKES.authFailure, 'repeated failed sign-ins', 'auth')) {
+    writeAudit(null, 'system', 'auth.lockout', 'ip_address', ip, 'Address blocked after repeated failed sign-ins', req)
   }
 }
 
 export function clearAuthFailures(ip: string | undefined): void {
-  if (ip) failuresByIp.delete(ip)
+  forgiveAuthFailures(ip)
 }
 
 export function lockoutGuard(req: Request, res: Response, next: NextFunction) {
@@ -100,6 +79,48 @@ export function lockoutGuard(req: Request, res: Response, next: NextFunction) {
   return next()
 }
 
+/**
+ * Counts by address and cannot be avoided. apiRateLimit below is keyed on the token as sent, before
+ * it is verified, so without this limit a fresh made-up token on each request would never be limited.
+ */
+export const ipFloodLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 900,
+  keyGenerator: (req) => `flood:${ipKeyGenerator(req.ip ?? '')}`,
+  skip: (req) => req.path === '/api/health',
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: limitHandler('flood', STRIKES.flood, 'Too many requests from this address.'),
+})
+
+export const workspaceWriteLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => sessionOrIp(req, 'workspace-write'),
+  handler: limitHandler('rate_limit', 0, 'Too many saves. They will retry in a moment.'),
+})
+
+export const fileWriteLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => sessionOrIp(req, 'file-write'),
+  handler: limitHandler('rate_limit', 0, 'Too many file uploads. Try again in a minute.'),
+})
+
+/** AI calls cost money or quota, so an abused account cannot run them without limit. */
+export const aiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => sessionOrIp(req, 'ai'),
+  handler: limitHandler('rate_limit', 0, 'Too many AI requests. Try again in a minute.'),
+})
+
 export const apiRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
@@ -110,7 +131,7 @@ export const apiRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Rate limit exceeded.' },
+  handler: limitHandler('rate_limit', STRIKES.rateLimit, 'Rate limit exceeded.'),
 })
 
 export const meetingsWriteLimit = rateLimit({
@@ -151,7 +172,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (token.startsWith('nwp_sess_')) {
     const session = db
       .prepare(
-        `SELECT s.id AS session_id, s.auth_method, s.api_key_id, s.expires_at,
+        `SELECT s.id AS session_id, s.auth_method, s.api_key_id, s.expires_at, s.auth_subject,
                 u.id AS user_id, u.name AS user_name, u.role
          FROM sessions s
          JOIN users u ON u.id = s.user_id
@@ -162,6 +183,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
           session_id: string
           auth_method: AuthContext['authMethod']
           api_key_id: string | null
+          auth_subject: string | null
           expires_at: string
           user_id: string
           user_name: string
@@ -170,6 +192,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       | undefined
 
     if (!session) {
+      // One point each: a browser with an old token stops at once, while guessing adds up to a block.
+      logDefenseEvent('invalid_session', req)
+      addStrikes(req, STRIKES.invalidSession, 'repeated invalid session tokens')
       return res.status(401).json({ error: 'Invalid or expired session' })
     }
     if (new Date(session.expires_at).getTime() < Date.now()) {
@@ -215,6 +240,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       apiKeySlot,
       isManager,
       sessionId: session.session_id,
+      subject: session.auth_subject,
     }
     return next()
   }
