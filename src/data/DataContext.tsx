@@ -75,6 +75,8 @@ import {
   withManualNextActionOverride,
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
+import { mergeMissingById } from '@/data/sprintSeed'
+import { DEAL_LEADS_RESOURCE, DEFAULT_DEAL_LEADS, migrateOpportunityLeads, resolveLeadIdByName, type DealLead } from '@/lib/dealLeads'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
 import { applyDataFixes, applyTaskDataFixes } from '@/lib/dataFixes'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
@@ -84,6 +86,7 @@ import {
   opportunityCreateActivity,
   opportunityDeleteActivity,
   opportunityUpdateActivity,
+  makeActivity,
   taskActivity,
 } from '@/lib/activityLog'
 
@@ -109,6 +112,10 @@ interface DataContextValue {
   deleteDocument: (id: string) => Promise<void>
   downloadDatabase: () => void
   importDatabase: (file: File) => Promise<string | null>
+  /** After a lead is renamed: deals with that primary lead show the new name. */
+  syncLeadName: (leadId: string, name: string) => void
+  /** A saved change to the roster, for Recent Activity. */
+  logLeadActivity: (message: string, lead: Pick<DealLead, 'name'>) => void
 }
 
 const DataContext = createContext<DataContextValue | null>(null)
@@ -143,6 +150,10 @@ function decorateOpportunities(list: Opportunity[], tasks: TaskRecord[]): Opport
   return withLiveAttention(withManual, tasks)
 }
 
+function loadRoster(owner: string): DealLead[] {
+  return mergeMissingById(loadOwnedCollection<DealLead>(DEAL_LEADS_RESOURCE, owner, DEFAULT_DEAL_LEADS), DEFAULT_DEAL_LEADS)
+}
+
 function snapshotLocalCrm(owner: string, users: CrmUser[]) {
   const loaded = {
     opportunities: loadOwnedCollection<Opportunity>('opportunities', owner, mockOpportunities),
@@ -151,14 +162,14 @@ function snapshotLocalCrm(owner: string, users: CrmUser[]) {
     documents: loadOwnedCollection<DocumentRecord>('documents', owner, mockDocuments),
     activity: loadOwnedCollection<ActivityItem>('activity', owner, []),
   }
-  return presentDatabase(persistMigratedDatabase(owner, loaded), users)
+  return presentDatabase(persistMigratedDatabase(owner, loaded), users, loadRoster(owner))
 }
 
-function presentDatabase(database: PortableDatabase, users: CrmUser[]) {
+function presentDatabase(database: PortableDatabase, users: CrmUser[], roster: readonly DealLead[]) {
   const rawTasks = applyTaskArchiveRules(applyTaskDataFixes(database.tasks).map((row) => migrateTaskRecord(row, users)))
   return {
     tasks: rawTasks.tasks,
-    opportunities: decorateOpportunities(applyDataFixes(database.opportunities), rawTasks.tasks),
+    opportunities: decorateOpportunities(applyDataFixes(database.opportunities).map((row) => migrateOpportunityLeads(row, roster)), rawTasks.tasks),
     documents: database.documents,
     activity: database.activity,
   }
@@ -263,6 +274,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     tasks: tasksRef.current,
     documents: docsRef.current,
     contacts: loadOwnedCollection<ContactRecord>('contacts', owner, mockContacts),
+    dealLeads: loadRoster(owner),
     activity: activityRef.current,
     documentTypes: storedCustomTypes().map((name) => ({ id: name.toLowerCase(), name })),
   })
@@ -327,6 +339,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     saveOwnedCollection('contacts', owner, contacts)
     const detail: ResourceChangedDetail = { resource: 'contacts', owner, source: -1, items: contacts }
     window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+    // The roster is shared the same way. The two starting leads stay present until the server has them.
+    const dealLeads = mergeMissingById(list<DealLead>('dealLeads'), DEFAULT_DEAL_LEADS)
+    saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, dealLeads)
+    const leadDetail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: dealLeads }
+    window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail: leadDetail }))
     saveCustomTypes(list<{ name: string }>('documentTypes').map((row) => row.name).filter(Boolean))
     const database = buildPortableDatabase(
       {
@@ -506,7 +523,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       saveOwnedCollection('contacts', owner, database.contacts)
       writeStoredSchemaVersion(owner, SCHEMA_VERSION)
-      const presented = presentDatabase(database, users)
+      if (database.dealLeads) {
+        saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, database.dealLeads)
+        const detail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: database.dealLeads }
+        window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+      }
+      const presented = presentDatabase(database, users, loadRoster(owner))
       persistTasks(presented.tasks)
       persistOpps(presented.opportunities)
       persistDocs(presented.documents)
@@ -547,7 +569,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     const onLocalChange = (event: Event) => {
       const detail = (event as CustomEvent<ResourceChangedDetail>).detail
-      if (detail?.resource === 'contacts' && detail.source !== -1) pushCloud()
+      if ((detail?.resource === 'contacts' || detail?.resource === DEAL_LEADS_RESOURCE) && detail.source !== -1) pushCloud()
     }
     const onTypes = () => pushCloud()
     const onState = () => {
@@ -665,7 +687,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       const stamp = nowIso()
       // Completed = legally closed: the stage always becomes Closing with it.
-      const statusPatch = patch.status === 'Completed' && existing.status !== 'Completed' ? { ...patch, stage: 'Closing' as const } : patch
+      const statusPatch0 = patch.status === 'Completed' && existing.status !== 'Completed' ? { ...patch, stage: 'Closing' as const } : patch
+      // A name written without an id (for example an Excel autofill) resolves against the roster, never invents a lead.
+      const statusPatch = statusPatch0.dealLead !== undefined && statusPatch0.primaryLeadId === undefined
+        ? { ...statusPatch0, primaryLeadId: resolveLeadIdByName(statusPatch0.dealLead, loadRoster(owner)) }
+        : statusPatch0
       const { closedAt: requestedClosedAt, ...restPatch } = statusPatch
       const nextPatch: OpportunityUpdate = {
         ...withManualNextActionOverride(restPatch),
@@ -727,6 +753,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           status: draft.status ?? 'Pending',
           stage: draft.stage ?? 'Target Identified',
           dealLead: draft.dealLead ?? '',
+          primaryLeadId: draft.primaryLeadId ?? resolveLeadIdByName(draft.dealLead, loadRoster(owner)),
+          additionalLeadIds: draft.additionalLeadIds ?? [],
           sourceType: draft.sourceType ?? 'Other',
           sourceName: draft.sourceName ?? '',
           specialty: draft.specialty ?? '',
@@ -1060,6 +1088,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [owner, user],
   )
 
+  const syncLeadName = useCallback((leadId: string, name: string) => {
+    if (!oppsRef.current.some((row) => row.primaryLeadId === leadId && row.dealLead !== name)) return
+    persistOpps(oppsRef.current.map((row) => (row.primaryLeadId === leadId ? { ...row, dealLead: name } : row)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+
+  const logLeadActivity = useCallback((message: string, lead: Pick<DealLead, 'name'>) => {
+    logChange('dealLeads', lead.name, 'update', ['dealLead'])
+    pushActivity(makeActivity({ actor: user?.name ?? null, message, projectName: 'Deal Leads', type: 'update' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, user])
+
   const downloadDatabase = useCallback(() => {
     const contacts = loadOwnedCollection<ContactRecord>('contacts', owner, [])
     downloadPortableDatabase(
@@ -1070,6 +1110,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           documents: docsRef.current,
           activity: activityRef.current,
           contacts,
+          dealLeads: loadRoster(owner),
         },
         new Date().toISOString(),
       ),
@@ -1092,7 +1133,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (fetchedSeedRef.current) {
       result = { ok: true, database: mergeSeedRecordsForOwner(result.database, fetchedSeedRef.current, owner) }
     }
-    writeDatabaseRef.current(result.database, true)
+    writeDatabaseRef.current({ ...result.database, dealLeads: parsed.database.dealLeads }, true)
     return null
   }, [owner])
 
@@ -1119,6 +1160,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteDocument,
       downloadDatabase,
       importDatabase,
+      syncLeadName,
+      logLeadActivity,
     }),
     [
       opportunities,
@@ -1142,6 +1185,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteDocument,
       downloadDatabase,
       importDatabase,
+      syncLeadName,
+      logLeadActivity,
     ],
   )
 

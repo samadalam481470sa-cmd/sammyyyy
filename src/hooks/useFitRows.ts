@@ -7,8 +7,10 @@ import { useEffect, useState, type RefObject } from 'react'
  */
 export function useFitRows(
   ref: RefObject<HTMLElement | null>,
-  { rowHeight, headerHeight = 41, min = 5, max = 50, fallback = 12, rowSelector = 'tbody tr, [data-card-row]', gap = 0 }: {
+  { rowHeight, headerHeight = 41, min = 5, max = 50, fallback = 12, rowSelector = 'tbody tr, [data-card-row]', gap = 0, stretchedRows = false }: {
     rowHeight: number
+    /** Rows are stretched to fill the height, so their measured height must not drive the count. */
+    stretchedRows?: boolean
     headerHeight?: number
     /** Element whose height is one row (tables use the first body row). */
     rowSelector?: string
@@ -28,7 +30,7 @@ export function useFitRows(
       if (!height) return
       // Prefer the real rendered sizes; fall back to the given estimates before rows exist.
       // First row that is actually shown (phone cards and desktop table rows share the selector).
-      const measured = [...el.querySelectorAll(rowSelector)].map((n) => n.getBoundingClientRect().height).find((h) => h > 0)
+      const measured = stretchedRows ? 0 : [...el.querySelectorAll(rowSelector)].map((n) => n.getBoundingClientRect().height).find((h) => h > 0)
       const row = (measured || rowHeight) + gap
       const head = el.querySelector('thead')?.getBoundingClientRect().height ?? headerHeight
       const fit = Math.floor((height - head + gap - 1) / row)
@@ -53,7 +55,7 @@ export function useFitRows(
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', measure)
     }
-  }, [ref, rowHeight, headerHeight, min, max, rowSelector, gap])
+  }, [ref, rowHeight, headerHeight, min, max, rowSelector, gap, stretchedRows])
   return rows
 }
 

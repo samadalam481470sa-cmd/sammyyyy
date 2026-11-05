@@ -19,6 +19,7 @@ import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { seedV2Contacts, seedV2Opportunities, seedV2Tasks } from '@/data/sprintSeedV2'
 import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
 import { applyDataFixes, applyTaskDataFixes, fixOpportunity } from '@/lib/dataFixes'
+import type { DealLead } from '@/lib/dealLeads'
 
 /** 1 = device records with no portable marker. 2 = current portable document. */
 export const SCHEMA_VERSION = 2
@@ -39,6 +40,8 @@ export interface PortableCollections {
   contacts: ContactRecord[]
   documents: DocumentRecord[]
   activity: ActivityItem[]
+  /** Deal Lead roster. Optional: backups made before the roster existed do not have it. */
+  dealLeads?: DealLead[]
 }
 
 export interface PortableDatabase extends PortableCollections {
@@ -200,6 +203,7 @@ export function buildPortableDatabase(collections: PortableCollections, exported
     contacts: collections.contacts,
     documents: collections.documents,
     activity: collections.activity,
+    ...(collections.dealLeads ? { dealLeads: collections.dealLeads } : {}),
   }
 }
 
@@ -261,6 +265,7 @@ export function parsePortableDatabase(raw: string): PortableImportResult {
       contacts,
       documents,
       activity,
+      ...(readRows<DealLead>(value.dealLeads) ? { dealLeads: readRows<DealLead>(value.dealLeads)! } : {}),
     },
   }
 }

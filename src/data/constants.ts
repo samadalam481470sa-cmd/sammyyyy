@@ -75,6 +75,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/', enabled: true },
   { id: 'opportunities', label: 'Opportunities', path: '/opportunities', enabled: true },
+  { id: 'deal-leads', label: 'Deal Leads', path: '/deal-leads', enabled: true },
   { id: 'relationships', label: 'Relationships', path: '/relationships', enabled: true },
   { id: 'tasks', label: 'Tasks & Follow-Ups', path: '/tasks', enabled: true },
   { id: 'documents', label: 'Documents', path: '/documents', enabled: true },

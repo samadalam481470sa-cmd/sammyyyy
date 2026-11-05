@@ -26,14 +26,17 @@ import { downloadDatabaseFile } from '@/lib/api'
 import { opportunitiesCsv, opportunitiesJson, saveFile } from '@/lib/reportExport'
 import { todayDateInput } from '@/lib/calendarDate'
 import { COMPLETION_REPORT_DELAY_MS, completionConfirmedTime } from '@/lib/statusHistory'
+import { useDealLeads } from '@/hooks/useDealLeads'
 import {
   buildTrends,
+  completionSteps,
   countByLead,
   dealsByStatus,
   exportScope,
   financialGroups,
   leadFinancials,
   missedDeadlinesByOwner,
+  monthlyStepSeries,
   pipelineByStage,
   reportKpis,
   resolvePeriod,
@@ -89,6 +92,32 @@ function CountTooltip({ active, payload, label }: { active?: boolean; payload?: 
   )
 }
 
+/** Compact donut hover: "Active · 10 deals · 23.3%", computed from the live rows. */
+function StatusTooltip({ active, payload, total }: { active?: boolean; payload?: { name?: string; value: number }[]; total: number }) {
+  if (!active || !payload?.length) return null
+  const row = payload[0]
+  const pct = total ? ((row.value / total) * 100).toFixed(1) : '0.0'
+  return (
+    <div className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-ink shadow-(--shadow-elevated)" data-testid="status-tooltip">
+      {row.name} · {row.value} deal{row.value === 1 ? '' : 's'} · {pct}%
+    </div>
+  )
+}
+
+/** Hover text for a stepped line: its own date label and value from the point itself. */
+function StepTooltip({ active, payload, format, name }: { active?: boolean; payload?: { value: number; payload: { label: string } }[]; format: (v: number) => string; name: string }) {
+  if (!active || !payload?.length) return null
+  const row = payload[0]
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-(--shadow-elevated)">
+      <p className="font-semibold text-ink">{row.payload.label}</p>
+      <p className="mt-0.5 text-ink-muted">
+        {name}: <span className="font-semibold text-ink">{format(row.value)}</span>
+      </p>
+    </div>
+  )
+}
+
 function ChartCard({ title, scope, children, empty, table }: { title: string; scope: string; children: ReactNode; empty?: string | null; table: { head: string[]; rows: (string | number)[][] } }) {
   return (
     <figure className="flex min-h-0 min-w-0 flex-col rounded-xl border border-border bg-surface p-4 shadow-(--shadow-card)" aria-label={title}>
@@ -117,7 +146,7 @@ function ChartCard({ title, scope, children, empty, table }: { title: string; sc
 }
 
 /** Two large charts per view with arrows and page dots, inside each report tab. */
-function ChartPager({ pages, page, onPage, testId }: { pages: ReactNode[][]; page: number; onPage: (n: number) => void; testId: string }) {
+function ChartPager({ pages, page, onPage, testId, titles }: { pages: ReactNode[][]; page: number; onPage: (n: number) => void; testId: string; titles?: string[] }) {
   const current = pages[Math.min(page, pages.length - 1)] ?? []
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid={testId}>
@@ -132,7 +161,7 @@ function ChartPager({ pages, page, onPage, testId }: { pages: ReactNode[][]; pag
           ))}
         </div>
         <span className="text-xs text-ink-muted">
-          View {page + 1} of {pages.length}
+          {titles?.[page] ? <strong className="font-semibold text-navy-900">{titles[page]} · </strong> : null}View {page + 1} of {pages.length}
         </span>
         <button type="button" onClick={() => onPage(Math.min(pages.length - 1, page + 1))} disabled={page >= pages.length - 1} aria-label="Next charts" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-ink hover:bg-canvas disabled:opacity-40" data-testid="report-next">
           <ChevronRight className="h-4 w-4" />
@@ -163,7 +192,10 @@ export function ReportsPage() {
   const period = useMemo(() => resolvePeriod(filter, now), [filter, now])
   const scoped = useMemo(() => scopeDeals(opportunities, period, now), [opportunities, period, now])
   const kpis = useMemo(() => reportKpis(scoped), [scoped])
-  const leads = useMemo(() => users.map((u) => u.name), [users])
+  const { leads: roster } = useDealLeads()
+  // Lead charts read the roster, not every sign-in. Each deal counts once, under its primary lead.
+  const leads = useMemo(() => roster.filter((l) => l.status === 'Active').map((l) => l.name), [roster])
+  const taskOwners = useMemo(() => users.map((u) => u.name), [users])
   const asOf = now.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   const statusRows = useMemo(() => dealsByStatus(scoped.allStatuses).filter((r) => r.count > 0), [scoped])
@@ -185,8 +217,9 @@ export function ReportsPage() {
   }, [scoped, leads])
   const groups = useMemo(() => financialGroups(kpis), [kpis])
   const leadMoney = useMemo(() => leadFinancials(scoped, leads), [scoped, leads])
-  const missed = useMemo(() => missedDeadlinesByOwner(tasks, period, leads, now), [tasks, period, leads, now])
+  const missed = useMemo(() => missedDeadlinesByOwner(tasks, period, taskOwners, now), [tasks, period, taskOwners, now])
   const trends = useMemo(() => buildTrends(opportunities, period, now), [opportunities, period, now])
+  const steps = useMemo(() => completionSteps(opportunities, period, now), [opportunities, period, now])
 
   const createdScope = period.isAllTime ? 'all deals' : `deals created in ${period.label}`
   const completedScope = period.isAllTime ? 'all final completions' : `legally closed in ${period.label}`
@@ -228,23 +261,33 @@ export function ReportsPage() {
   const pipelineCharts = [
     [
       <ChartCard key="status" title="Deals by Status" scope={`All statuses · ${createdScope}`} table={{ head: ['Status', 'Deals'], rows: statusRows.map((r) => [r.status, r.count]) }} empty={statusTotal === 0 ? 'No deals created in this period.' : null}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={statusRows} dataKey="count" nameKey="status" cx="40%" innerRadius="55%" outerRadius="85%" paddingAngle={1.5} isAnimationActive={false}>
-              {statusRows.map((r) => (
-                <Cell key={r.status} fill={STATUS_CHART_COLORS[r.status] ?? SLATE} />
-              ))}
-            </Pie>
-            <text x="40%" y="47%" textAnchor="middle" dominantBaseline="middle" className="fill-navy-900" style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--font-brand)' }}>
-              {statusTotal}
-            </text>
-            <text x="40%" y="55%" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 11, fill: '#5a6577' }}>
-              deals
-            </text>
-            <Tooltip content={<CountTooltip />} />
-            <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" wrapperStyle={{ fontSize: 12 }} formatter={(value: string) => `${value} (${statusRows.find((r) => r.status === value)?.count ?? 0})`} />
-          </PieChart>
-        </ResponsiveContainer>
+        <div className="flex h-full min-h-0 items-center gap-4">
+          <div className="relative h-full min-w-0 flex-1" data-testid="status-donut">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                <Pie data={statusRows} dataKey="count" nameKey="status" cx="50%" cy="50%" innerRadius="62%" outerRadius="92%" paddingAngle={1.5} stroke="none" isAnimationActive={false}>
+                  {statusRows.map((r) => (
+                    <Cell key={r.status} fill={STATUS_CHART_COLORS[r.status] ?? SLATE} />
+                  ))}
+                </Pie>
+                <Tooltip content={<StatusTooltip total={statusTotal} />} wrapperStyle={{ zIndex: 5 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-testid="status-donut-center">
+              <span className="font-brand text-3xl leading-none font-bold text-navy-900" data-testid="status-donut-count">{statusTotal}</span>
+              <span className="mt-1 text-[11px] text-ink-muted">deal{statusTotal === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+          <ul className="shrink-0 space-y-1.5 text-xs" data-testid="status-legend">
+            {statusRows.map((r) => (
+              <li key={r.status} className="flex items-center gap-2 text-ink" tabIndex={0} title={`${r.status} · ${r.count} deal${r.count === 1 ? '' : 's'} · ${statusTotal ? ((r.count / statusTotal) * 100).toFixed(1) : '0.0'}%`}>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS_CHART_COLORS[r.status] ?? SLATE }} />
+                <span>{r.status}</span>
+                <span className="font-semibold tabular-nums">{r.count}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </ChartCard>,
       <ChartCard key="stage" title="Active + Pending Deals by Acquisition Stage" scope={`Active + Pending only · ${createdScope}`} table={{ head: ['Stage', 'Deals'], rows: stageRows.map((r) => [r.stage, r.count]) }} empty={scoped.pipeline.length === 0 ? 'No Active or Pending deals created in this period.' : null}>
         <ResponsiveContainer width="100%" height="100%">
@@ -371,45 +414,49 @@ export function ReportsPage() {
     ],
   ]
 
+  // Dated steps: flat between closings, rising on the legal closing date. Each metric has its own scale.
   const cumulative = (key: 'cumulativeNwp' | 'cumulativePfEbitda', name: string, color: string) => (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={trends.points} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+      <LineChart data={steps} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-        <XAxis dataKey="label" tick={AXIS} axisLine={false} tickLine={false} />
+        <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tick={AXIS} axisLine={false} tickLine={false} minTickGap={48} tickFormatter={(t: number) => new Date(t).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })} />
         <YAxis tickFormatter={moneyAxis} tick={AXIS} axisLine={false} tickLine={false} width={58} />
-        <Tooltip content={<MoneyTooltip />} />
+        <Tooltip content={<StepTooltip name={name} format={(v) => formatCurrency(v, false)} />} />
         <Line isAnimationActive={false} type="stepAfter" dataKey={key} name={name} stroke={color} strokeWidth={2.25} dot={false} />
       </LineChart>
     </ResponsiveContainer>
   )
+  // Monthly counts: flat across each month, vertical at the month boundary. Not a running total, so they can fall to zero.
+  const monthly = (key: 'created' | 'completed', name: string, color: string) => {
+    const data = monthlyStepSeries(trends.points, key)
+    const count = trends.points.length
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+          <XAxis dataKey="x" type="number" domain={[0, count]} ticks={trends.points.map((_, i) => i + 0.5)} interval="preserveStartEnd" minTickGap={24} tick={AXIS} axisLine={false} tickLine={false} tickFormatter={(x: number) => trends.points[Math.floor(x)]?.label ?? ''} />
+          <YAxis allowDecimals={false} domain={[0, (max: number) => Math.max(1, max)]} tick={AXIS} axisLine={false} tickLine={false} />
+          <Tooltip content={<StepTooltip name={name} format={(v) => String(v)} />} />
+          <Line isAnimationActive={false} type="linear" dataKey="value" name={name} stroke={color} strokeWidth={2.25} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    )
+  }
   const trendCharts = [
     [
-      <ChartCard
-        key="cvc"
-        title="New Opportunities Created vs Acquisitions Completed"
-        scope="Per month. Created = creation date (any status now). Completed = final completions on the legal closing date."
-        table={{ head: ['Month', 'Created', 'Completed'], rows: trends.points.map((p) => [p.label, p.created, p.completed]) }}
-        empty={trends.points.length === 0 ? 'No dated records in this period.' : null}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={trends.points} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={2}>
-            <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-            <XAxis dataKey="label" tick={AXIS} axisLine={false} tickLine={false} />
-            <YAxis allowDecimals={false} tick={AXIS} axisLine={false} tickLine={false} />
-            <Tooltip content={<CountTooltip />} cursor={{ fill: '#e8f1f8' }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="created" name="New opportunities created" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
-            <Bar dataKey="completed" name="Acquisitions completed" fill={TEAL} radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>,
-      <ChartCard key="cnwp" title="Cumulative Completed NWP" scope="Running total of NWP at legal closing, carrying forward everything closed before the period." table={{ head: ['Month', 'Cumulative NWP'], rows: trends.points.map((p) => [p.label, formatCurrency(p.cumulativeNwp, false)]) }} empty={trends.points.length === 0 ? 'No dated completions in this period.' : null}>
+      <ChartCard key="cnwp" title="Cumulative Completed NWP" scope="Steps up on each legal closing date, from the balance closed before the period." table={{ head: ['Date', 'Cumulative NWP'], rows: steps.map((p) => [p.label, formatCurrency(p.cumulativeNwp, false)]) }} empty={steps.length === 0 ? 'No dated completions in this period.' : null}>
         {cumulative('cumulativeNwp', 'Completed NWP', NAVY)}
+      </ChartCard>,
+      <ChartCard key="cpfe" title="Cumulative Completed PF EBITDA" scope="Steps up on each legal closing date, on its own scale (separate from NWP)." table={{ head: ['Date', 'Cumulative PF EBITDA'], rows: steps.map((p) => [p.label, formatCurrency(p.cumulativePfEbitda, false)]) }} empty={steps.length === 0 ? 'No dated completions in this period.' : null}>
+        {cumulative('cumulativePfEbitda', 'Completed PF EBITDA', TEAL)}
       </ChartCard>,
     ],
     [
-      <ChartCard key="cpfe" title="Cumulative Completed PF EBITDA" scope="Running total of PF EBITDA at legal closing, on its own scale (separate from NWP)." table={{ head: ['Month', 'Cumulative PF EBITDA'], rows: trends.points.map((p) => [p.label, formatCurrency(p.cumulativePfEbitda, false)]) }} empty={trends.points.length === 0 ? 'No dated completions in this period.' : null}>
-        {cumulative('cumulativePfEbitda', 'Completed PF EBITDA', TEAL)}
+      <ChartCard key="created" title="New Opportunities Created" scope="Count per calendar month by the recorded creation date. Not cumulative." table={{ head: ['Month', 'Created'], rows: trends.points.map((p) => [p.label, p.created]) }} empty={trends.points.length === 0 ? 'No dated records in this period.' : null}>
+        {monthly('created', 'New opportunities created', BLUE)}
+      </ChartCard>,
+      <ChartCard key="completed" title="Acquisitions Completed" scope="Count per calendar month by the legal closing date (final completions). Not cumulative." table={{ head: ['Month', 'Completed'], rows: trends.points.map((p) => [p.label, p.completed]) }} empty={trends.points.length === 0 ? 'No dated records in this period.' : null}>
+        {monthly('completed', 'Acquisitions completed', TEAL)}
       </ChartCard>,
     ],
   ]
@@ -485,7 +532,7 @@ export function ReportsPage() {
           </span>
         </p>
 
-        <ChartPager key={tab} pages={pages} page={subpage} onPage={setSubpage} testId={`report-${tab}`} />
+        <ChartPager key={tab} pages={pages} page={subpage} onPage={setSubpage} testId={`report-${tab}`} titles={tab === 'trends' ? ['Completed Acquisition Financials', 'Monthly Acquisition Activity'] : undefined} />
       </div>
     </PageShell>
   )

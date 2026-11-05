@@ -4,7 +4,8 @@ import { isOverdueDate, isWithinNextDays } from '@/lib/calendarDate'
 import { formatDate } from '@/utils/dashboard'
 import { resolveNextAction } from '@/lib/nextAction'
 
-export type WarningLevel = 'red' | 'navy'
+/** Red = a genuinely overdue deadline. Amber = missing lead or next action. Navy (blue) = due within 7 days. */
+export type WarningLevel = 'red' | 'amber' | 'navy'
 
 export interface DealWarning {
   level: WarningLevel
@@ -21,7 +22,7 @@ export function isAttentionEligible(opportunity: Pick<Opportunity, 'status'>): b
 
 /**
  * One warning per deal at most, from linked unfinished tasks only:
- * red when the canonical task is overdue, red when there is no unfinished linked task,
+ * red when the canonical task is overdue, amber when there is no unfinished linked task,
  * navy when the canonical task is due today or within the next 7 calendar days.
  */
 export function dealWarnings(
@@ -34,7 +35,7 @@ export function dealWarnings(
   const summary = resolveNextAction(opportunity, tasks, now)
   if (!summary.taskId) {
     out.push({
-      level: 'red',
+      level: 'amber',
       reason: 'No next action assigned',
       detail: 'No unfinished follow-up task is linked to this deal',
     })
@@ -47,7 +48,7 @@ export function dealWarnings(
     }
   }
   if (!opportunity.dealLead?.trim()) {
-    out.push({ level: 'red', reason: 'No deal owner assigned', detail: 'No deal lead is assigned to this deal' })
+    out.push({ level: 'amber', reason: 'No deal owner assigned', detail: 'No deal lead is assigned to this deal' })
   }
   return out
 }
@@ -115,7 +116,7 @@ export function primaryDealWarning(
   now = new Date(),
 ): DealWarning | null {
   const warnings = dealWarnings(opportunity, tasks, now)
-  return warnings.find((row) => row.level === 'red') ?? warnings[0] ?? null
+  return warnings.find((row) => row.level === 'red') ?? warnings.find((row) => row.level === 'amber') ?? warnings[0] ?? null
 }
 
 export function withLiveAttention(

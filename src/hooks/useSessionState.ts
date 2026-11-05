@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigationType } from 'react-router-dom'
 
 const PREFIX = 'newport_view_state:'
 
@@ -21,11 +21,27 @@ function write(key: string, value: unknown) {
 }
 
 /**
- * useState that survives leaving the page and coming back in this browser tab
- * (filters, search, page number). Cleared when the tab closes.
+ * Navigation-state policy for lists, filters, searches and open drawers:
+ * - A FRESH arrival (sidebar, a link, the logo) starts from defaults. What was stored is cleared.
+ * - A RETURN (the Back button of a child view, which sets `state.restore`, or the browser's own
+ *   Back and Forward) brings back exactly what was there.
+ * Saved records, drafts and integrations are not view state and are never touched by this.
  */
+export function useRestoringFromProfile(): boolean {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const [restoring] = useState(() => Boolean((location.state as { restore?: boolean } | null)?.restore) || navigationType === 'POP')
+  return restoring
+}
+
+/** useState kept for this browser tab, restored only on a return (see the policy above). */
 export function useSessionState<T>(key: string, initial: T): [T, (next: T | ((prev: T) => T)) => void] {
-  const [value, setValue] = useState<T>(() => read(key, initial))
+  const restoring = useRestoringFromProfile()
+  const [value, setValue] = useState<T>(() => {
+    if (restoring) return read(key, initial)
+    write(key, initial)
+    return initial
+  })
   const keyRef = useRef(key)
   keyRef.current = key
   const set = useCallback((next: T | ((prev: T) => T)) => {
@@ -38,34 +54,12 @@ export function useSessionState<T>(key: string, initial: T): [T, (next: T | ((pr
   return [value, set]
 }
 
-/** True when this page was reached with the Back button of a Full Opportunity Profile. */
-export function useRestoringFromProfile(): boolean {
-  const location = useLocation()
-  const [restoring] = useState(() => Boolean((location.state as { restore?: boolean } | null)?.restore))
-  return restoring
-}
-
 /**
- * The record whose drawer is open. It is remembered so that Back from the Full Opportunity
- * Profile reopens the same drawer; any other arrival starts with no drawer open.
+ * The record whose drawer is open. Back from the Full Opportunity Profile reopens the same drawer;
+ * any fresh arrival starts with no drawer open.
  */
 export function useRestorableSelection(key: string): [string | null, (id: string | null) => void] {
-  const restoring = useRestoringFromProfile()
-  const [stored, setStored] = useSessionState<string | null>(`${key}:selected`, null)
-  const [value, setValue] = useState<string | null>(() => (restoring ? stored : null))
-  useEffect(() => {
-    if (!restoring && stored) setStored(null)
-    // run once on arrival
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  const set = useCallback(
-    (id: string | null) => {
-      setValue(id)
-      setStored(id)
-    },
-    [setStored],
-  )
-  return [value, set]
+  return useSessionState<string | null>(`${key}:selected`, null)
 }
 
 /** Scroll position of a scroll container, restored on Back from the profile. */

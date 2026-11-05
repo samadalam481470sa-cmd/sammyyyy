@@ -48,7 +48,12 @@ export interface Opportunity {
   type: OpportunityType
   status: OpportunityStatus
   stage: AcquisitionStage
+  /** Display name of the primary lead (or a legacy name not on the roster). Read by older screens and reports. */
   dealLead: string
+  /** Roster id of the primary lead; null when unassigned or still a legacy name. */
+  primaryLeadId?: string | null
+  /** Roster ids of additional leads. Never includes the primary. */
+  additionalLeadIds?: string[]
   sourceType: SourceType
   sourceName: string
   specialty: string
@@ -178,6 +183,8 @@ export type OpportunityUpdate = Partial<
     | 'status'
     | 'stage'
     | 'dealLead'
+    | 'primaryLeadId'
+    | 'additionalLeadIds'
     | 'sourceType'
     | 'sourceName'
     | 'specialty'

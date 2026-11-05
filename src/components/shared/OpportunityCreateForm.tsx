@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CenteredModal, ModalHeader } from '@/components/shared/Overlay'
 import type { Opportunity } from '@/types'
 import {
@@ -8,9 +8,9 @@ import {
   SOURCE_TYPES,
 } from '@/data/constants'
 import { useData } from '@/data/DataContext'
+import { LeadTeamFields } from '@/components/opportunities/LeadTeamFields'
 import { formatDealId, nextProjectNumber } from '@/lib/dealId'
 import { savedMessageLabel, saveButtonLabel } from '@/lib/persistenceMode'
-import { SearchSelect } from '@/components/shared/SearchSelect'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 
 interface OpportunityCreateFormProps {
@@ -25,6 +25,8 @@ interface CreateDraft {
   status: Opportunity['status']
   stage: Opportunity['stage']
   dealLead: string
+  primaryLeadId: string | null
+  additionalLeadIds: string[]
   type: Opportunity['type']
   sourceType: Opportunity['sourceType']
   sourceName: string
@@ -44,6 +46,8 @@ const EMPTY: CreateDraft = {
   status: 'Pending',
   stage: 'Target Identified',
   dealLead: '',
+  primaryLeadId: null,
+  additionalLeadIds: [],
   type: 'Platform Acquisition',
   sourceType: 'Other',
   sourceName: '',
@@ -67,7 +71,7 @@ function toNumber(value: string): number {
 }
 
 export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityCreateFormProps) {
-  const { opportunities, createOpportunity, users } = useData()
+  const { opportunities, createOpportunity } = useData()
   const [draft, setDraft] = useState<CreateDraft>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,11 +90,6 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
     savingRef.current = false
     setSaving(false)
   }, [open])
-
-  const ownerOptions = useMemo(
-    () => users.map((row) => ({ id: row.name, label: row.name })),
-    [users],
-  )
 
   const requestClose = () => {
     if (savingRef.current) return
@@ -121,6 +120,8 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
         status: draft.status,
         stage: draft.stage,
         dealLead: draft.dealLead,
+        primaryLeadId: draft.primaryLeadId,
+        additionalLeadIds: draft.additionalLeadIds,
         type: draft.type,
         sourceType: draft.sourceType,
         sourceName: draft.sourceName.trim(),
@@ -208,15 +209,12 @@ export function OpportunityCreateForm({ open, onClose, onCreated }: OpportunityC
               ))}
             </select>
           </Field>
-          <Field label="Deal Lead">
-            <SearchSelect
-              value={draft.dealLead || null}
-              options={ownerOptions}
-              onChange={(id) => setField('dealLead', id ?? '')}
-              placeholder="Select an authorized user"
-              emptyText="No matching users"
+          <div className="sm:col-span-2">
+            <LeadTeamFields
+              value={{ dealLead: draft.dealLead, primaryLeadId: draft.primaryLeadId, additionalLeadIds: draft.additionalLeadIds }}
+              onChange={(team) => setDraft((prev) => ({ ...prev, dealLead: team.dealLead, primaryLeadId: team.primaryLeadId ?? null, additionalLeadIds: team.additionalLeadIds ?? [] }))}
             />
-          </Field>
+          </div>
           <Field label="Acquisition type">
             <select
               className="field-input"

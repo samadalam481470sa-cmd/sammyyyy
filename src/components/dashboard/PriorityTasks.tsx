@@ -12,7 +12,7 @@ interface PriorityTasksProps {
   onViewAll?: () => void
 }
 
-/** Up to six working tasks (same eligibility as Tasks & Follow-Ups), most urgent first. */
+/** The top working tasks: same eligibility and the same order as Tasks & Follow-Ups. Rows share the card's height. */
 export function PriorityTasks({ tasks, onProjectClick, onViewAll }: PriorityTasksProps) {
   return (
     <section className="flex h-full flex-col rounded-xl border border-border bg-surface shadow-(--shadow-card)" data-testid="week-priorities">
@@ -27,15 +27,15 @@ export function PriorityTasks({ tasks, onProjectClick, onViewAll }: PriorityTask
           </button>
         )}
       </div>
-      <ul className="divide-y divide-border/70">
+      <ul className="flex flex-1 flex-col divide-y divide-border/70">
         {tasks.length === 0 && <li className="px-5 py-8 text-sm text-ink-muted">No open tasks on Active or Pending deals.</li>}
         {tasks.map((task) => {
           const overdue = isOverdueDate(task.dueDate)
           const days = overdue ? daysOverdue(task.dueDate) : 0
           return (
-            <li key={task.id}>
-              <button type="button" disabled={!task.opportunityId} onClick={() => task.opportunityId && onProjectClick?.(task.opportunityId)} className="flex w-full items-start gap-3 px-5 py-3 text-left enabled:hover:bg-accent-soft/30">
-                <span className={`mt-0.5 ${priorityChipClass(task.priority)}`}>{task.priority}</span>
+            <li key={task.id} className="flex-1">
+              <button type="button" disabled={!task.opportunityId} onClick={() => task.opportunityId && onProjectClick?.(task.opportunityId)} className="flex h-full w-full items-center gap-3 px-5 py-2.5 text-left enabled:hover:bg-accent-soft/30">
+                <span className={priorityChipClass(task.priority)}>{task.priority}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-ink" title={task.action}>{task.action}</span>
                   <span className="mt-0.5 block truncate text-xs text-ink-muted">

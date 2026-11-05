@@ -8,6 +8,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { OpportunitiesPage } from '@/pages/OpportunitiesPage'
 import { SecurityPage } from '@/pages/SecurityPage'
 import { RelationshipsPage } from '@/pages/RelationshipsPage'
+import { DealLeadsPage } from '@/pages/DealLeadsPage'
 import { TasksPage } from '@/pages/TasksPage'
 import { EmailPage } from '@/pages/EmailPage'
 import { OpportunityProfilePage } from '@/pages/OpportunityProfilePage'
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="opportunities" element={<OpportunitiesPage />} />
               <Route path="opportunities/:opportunityId" element={<OpportunityProfilePage />} />
               <Route path="projects" element={<Navigate to="/opportunities" replace />} />
+              <Route path="deal-leads" element={<DealLeadsPage />} />
               <Route path="relationships" element={<RelationshipsPage />} />
               <Route path="tasks" element={<TasksPage />} />
               <Route path="tasks/history" element={<TaskHistoryPage />} />

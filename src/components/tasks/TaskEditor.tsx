@@ -87,8 +87,14 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
     }, [task?.id, mode])
 
     const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
-    const valid = draft.action.trim().length > 0 && (mode !== 'draft' || Boolean(draft.dueDate))
-    const canSave = dirty && valid && !saving
+    const [showErrors, setShowErrors] = useState(false)
+    const problems = {
+      action: draft.action.trim() ? null : 'Enter the action.',
+      project: mode === 'draft' && !opportunities.some((o) => o.id === draft.opportunityId) ? 'Choose the linked project. Every new task belongs to a project.' : null,
+      due: mode === 'draft' && !draft.dueDate ? 'Choose a due date.' : null,
+    }
+    const valid = !problems.action && !problems.project && !problems.due
+    const canSave = dirty && !saving
 
     const requestLeave = useCallback(
       (next: () => void) => {
@@ -125,8 +131,9 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
 
     const persist = async (): Promise<boolean> => {
       if (savingRef.current) return false
-      if (!draft.action.trim()) {
-        setError('Action is required')
+      if (!valid) {
+        setShowErrors(true)
+        setError(null)
         return false
       }
       savingRef.current = true
@@ -207,7 +214,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           >
             {(warning || paused) && (
               <div className={`rounded-lg px-3 py-2 text-xs font-semibold ${paused ? 'bg-white/10 text-white' : warning?.level === 'red' ? 'bg-[#fde8e6] text-[var(--color-danger)]' : 'bg-accent-soft text-navy-900'}`} data-testid="task-drawer-warning">
-                {paused ? `Paused — the parent deal is ${linked?.status}. It stays open here and returns to Tasks if the deal becomes Active or Pending.` : warning?.detail}
+                {paused ? `Paused — the parent deal is ${linked?.status}. It stays open here and returns to Tasks if the deal becomes Active, Pending or Completed.` : warning?.detail}
               </div>
             )}
           </DrawerHeader>
@@ -225,10 +232,12 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Action *</span>
             <input className={field} value={draft.action} onChange={(e) => setDraft((p) => ({ ...p, action: e.target.value }))} data-testid="task-action" />
+            {showErrors && problems.action && <span className="mt-1 block text-xs font-medium tracking-normal text-attention normal-case" data-testid="task-action-error">{problems.action}</span>}
           </label>
           <label className="block">
-            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Project</span>
+            <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">{mode === 'draft' ? 'Linked Project *' : 'Project'}</span>
             <SearchSelect value={draft.opportunityId} options={projectOptions} onChange={(id) => setDraft((p) => ({ ...p, opportunityId: id }))} placeholder="Search projects" emptyText="No matching projects" />
+            {showErrors && problems.project && <span className="mt-1 block text-xs font-medium tracking-normal text-attention normal-case" data-testid="task-project-error">{problems.project}</span>}
           </label>
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Company</span>
@@ -237,6 +246,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Due Date{mode === 'draft' ? ' *' : ''}</span>
             <input type="date" className={field} value={draft.dueDate} onChange={(e) => setDraft((p) => ({ ...p, dueDate: e.target.value }))} data-testid="task-due" />
+            {showErrors && problems.due && <span className="mt-1 block text-xs font-medium tracking-normal text-attention normal-case" data-testid="task-due-error">{problems.due}</span>}
             {dueHint && <span className="mt-1 block text-[11px] text-ink-muted">Suggestion from the transcript: “{dueHint}”. Not an agreed date — set the due date you want.</span>}
           </label>
           <label className="block">
@@ -260,7 +270,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
         <div className="shrink-0 space-y-2 border-t border-border bg-surface px-5 py-3">
           {error && <p className="text-xs text-attention">{error}</p>}
           {message && <p className="text-xs text-success">{message}</p>}
-          {dirty && !valid && <p className="text-xs text-ink-muted">{mode === 'draft' ? 'Add an action and a due date to save this task.' : 'Add an action to save this task.'}</p>}
+          {dirty && !valid && !showErrors && <p className="text-xs text-ink-muted">{mode === 'draft' ? 'Action, Linked Project and Due Date are required.' : 'Add an action to save this task.'}</p>}
           <button
             type="button"
             data-testid="task-save"

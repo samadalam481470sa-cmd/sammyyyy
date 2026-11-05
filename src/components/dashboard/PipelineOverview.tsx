@@ -33,7 +33,7 @@ export function PipelineOverview({
         <p className="text-xs text-ink-subtle">{totalDeals} {totalDeals === 1 ? 'deal' : 'deals'} in view</p>
       </div>
 
-      <div className="custom-scroll -mx-1 overflow-x-auto px-1 pb-1">
+      <div className="custom-scroll relative -mx-1 overflow-x-auto px-1 pb-1">
         <div className="flex min-w-[900px] gap-2">
           {stages.map((item, index) => {
             const isSelected = selectedStage === item.stage

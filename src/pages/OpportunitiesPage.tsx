@@ -17,6 +17,7 @@ import { primaryDealWarning } from '@/lib/attention'
 import { resolveNextAction } from '@/lib/nextAction'
 import { paginate } from '@/lib/paginate'
 import { useFitRows } from '@/hooks/useFitRows'
+import { useDealLeads } from '@/hooks/useDealLeads'
 import { useRestorableSelection, useSessionState } from '@/hooks/useSessionState'
 import { Pagination } from '@/components/shared/Pagination'
 import { FilterChips, type ActiveFilterChip } from '@/components/shared/FilterChips'
@@ -27,7 +28,7 @@ type StatusChip = 'All' | OpportunityStatus
 const KEY = 'opportunities'
 
 export function OpportunitiesPage() {
-  const { opportunities, tasks, users, loading, saveOpportunity } = useData()
+  const { opportunities, tasks, loading, saveOpportunity } = useData()
   const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useRestorableSelection(KEY)
   const [search, setSearch] = useSessionState(`${KEY}:search`, '')
@@ -39,7 +40,8 @@ export function OpportunitiesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const tableRef = useRef<HTMLDivElement>(null)
-  const pageSize = useFitRows(tableRef, { rowHeight: 45, min: 4 })
+  const pageSize = useFitRows(tableRef, { rowHeight: 44, min: 4, stretchedRows: true })
+  const { leads } = useDealLeads()
 
   useEffect(() => {
     const attention = params.get('attention') === '1'
@@ -56,13 +58,14 @@ export function OpportunitiesPage() {
   }, [params.get('attention'), params.get('select')])
 
   const dealOwners = useMemo(() => {
+    // The roster, plus any older name still on a deal. Sign-ins are not listed here.
     const names = new Set<string>()
-    users.forEach((u) => names.add(u.name))
+    leads.filter((l) => l.status === 'Active').forEach((l) => names.add(l.name))
     opportunities.forEach((o) => {
       if (o.dealLead?.trim()) names.add(o.dealLead)
     })
     return [...names].sort()
-  }, [users, opportunities])
+  }, [leads, opportunities])
 
   const rows = useMemo(
     () =>
@@ -192,13 +195,13 @@ export function OpportunitiesPage() {
               </li>
             ))}
           </ul>
-          <table className="hidden w-full min-w-[1040px] table-fixed text-left text-sm sm:table" data-testid="opportunities-table">
+          <table className={`hidden w-full min-w-[1070px] table-fixed text-left text-sm sm:table ${view.rows.length >= pageSize ? 'h-full' : ''}`} data-testid="opportunities-table">
             <colgroup>
               <col className="w-[120px]" />
               <col className="w-[10%]" />
               <col className="w-[9%]" />
               <col className="w-[96px]" />
-              <col className="w-[148px]" />
+              <col className="w-[176px]" />
               <col className="w-[150px]" />
               <col className="w-[66px]" />
               <col className="w-[86px]" />
@@ -245,12 +248,12 @@ export function OpportunitiesPage() {
                       <span className={badgeClass(statusBadge(opp.status))}>{opp.status}</span>
                     </td>
                     <td className="px-2 py-2.5">
-                      <span className={`${badgeClass(stageBadge(opp.stage))} max-w-full truncate`} title={opp.stage}>{opp.stage}</span>
+                      <span className={`${badgeClass(stageBadge(opp.stage))} whitespace-nowrap`} data-testid="opportunity-stage-pill">{opp.stage}</span>
                     </td>
                     <td className="px-2 py-2.5">
                       <span className="flex min-w-0 items-center gap-1.5" title={lead || 'Unassigned'}>
                         <InitialsAvatar name={lead} size="xs" />
-                        <span className={`truncate ${lead ? 'text-ink' : 'font-semibold text-[var(--color-danger)]'}`}>{lead || 'Unassigned'}</span>
+                        <span className={`truncate ${lead ? 'text-ink' : 'text-ink-muted'}`}>{lead || 'Unassigned'}</span>
                       </span>
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums">{formatCurrency(opp.nwp)}</td>

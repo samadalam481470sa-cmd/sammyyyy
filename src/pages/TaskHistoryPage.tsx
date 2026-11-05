@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
 import { HISTORY_KIND_STYLE, useTaskHistoryRows } from '@/components/tasks/TaskHistoryList'
 import { ContentCard, PageShell, PageToolbar, RecordCount, SearchBox } from '@/components/shared/PageChrome'
@@ -12,7 +12,7 @@ import { useFitRows } from '@/hooks/useFitRows'
 import { useSessionState } from '@/hooks/useSessionState'
 import { paginate } from '@/lib/paginate'
 import { priorityChipClass } from '@/lib/priorityStyles'
-import { resolvePeriod, type PeriodFilter } from '@/lib/reports'
+import { isLast30, LAST_30_DAYS, resolvePeriod, type PeriodFilter } from '@/lib/reports'
 import { formatDate } from '@/utils/dashboard'
 
 const KEY = 'task-history'
@@ -22,7 +22,7 @@ export function TaskHistoryPage() {
   const navigate = useNavigate()
   const { opportunities, users, tasks } = useData()
   const [search, setSearch] = useSessionState(`${KEY}:search`, '')
-  const [period, setPeriod] = useSessionState<PeriodFilter>(`${KEY}:period`, { kind: 'last30' })
+  const [period, setPeriod] = useSessionState<PeriodFilter>(`${KEY}:period`, LAST_30_DAYS)
   const [project, setProject] = useSessionState(`${KEY}:project`, '')
   const [owner, setOwner] = useSessionState(`${KEY}:owner`, '')
   const [pageState, setPageState] = useSessionState(`${KEY}:page`, { key: '', page: 1 })
@@ -51,11 +51,21 @@ export function TaskHistoryPage() {
     ...(owner ? [{ key: 'owner', label: `Owner: ${owner}`, onRemove: () => setOwner('') }] : []),
   ]
 
+  // One source of truth: Clear All and Clear filter both return to the defaults.
+  const clearAll = () => {
+    setPeriod(LAST_30_DAYS)
+    setProject('')
+    setOwner('')
+    setSearch('')
+    setPageState({ key: '', page: 1 })
+  }
+  const atDefaults = isLast30(period) && !project && !owner && !search
+
   return (
     <PageShell testId="task-history-page">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-4 pb-3 lg:px-8">
         <div>
-          <button type="button" onClick={() => navigate('/tasks?history=1')} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="task-history-back">
+          <button type="button" onClick={() => navigate('/tasks', { state: { restore: true } })} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="task-history-back">
             <ArrowLeft className="h-3.5 w-3.5" /> Tasks & Follow-Ups
           </button>
           <h1 className="font-brand text-2xl leading-tight font-bold text-navy-900">Task History</h1>
@@ -73,11 +83,14 @@ export function TaskHistoryPage() {
             <div className="w-44">
               <SearchSelect value={owner || null} options={ownerOptions} onChange={(v) => setOwner(v ?? '')} placeholder="All owners" />
             </div>
+            <button type="button" onClick={clearAll} disabled={atDefaults} className="inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-ink-muted hover:text-ink disabled:opacity-40" data-testid="task-history-page-clear-filter">
+              <X className="h-3.5 w-3.5" /> Clear filter
+            </button>
           </>
         }
         right={
           <>
-            <FilterChips chips={chips} onClearAll={() => { setProject(''); setOwner('') }} />
+            <FilterChips chips={chips} onClearAll={clearAll} />
             <RecordCount count={rows.length} noun={['task', 'tasks']} />
             <span className="text-xs text-ink-muted">{resolved.label}</span>
           </>

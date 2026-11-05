@@ -1,0 +1,262 @@
+NEWPORT SPECIALTY PARTNERS CRM — NEXT FIXES & POLISH SPRINT
+CURSOR IMPLEMENTATION PROMPT
+Prepared: November 4, 2026
+
+ROLE AND OBJECTIVE
+You are working in the EXISTING Newport Specialty Partners acquisition CRM codebase. Implement the changes in this document as targeted, production-minded fixes and UI polish, not a rebuild. Inspect the repository and actual current component/state structure first, trace each relevant data flow, implement end-to-end, and run/build/test before finishing. Retain all functionality already working. Do NOT replace existing screens with mocks or static examples. Preserve the current test acquisition records, document uploads, meeting data, Outlook/Microsoft authentication, real Outlook email and calendar integrations, working Gemini AI meeting summaries, navigation, and the ability to access View Full Opportunity Profile. Avoid unrelated refactoring.
+
+IMPORTANT SCOPE BOUNDARY: Shared multi-device persistence via a secure shared backend/database is a DIFFERENT future workstream and must NOT block this sprint. Do not invent a backend or imply it exists. Preserve the current storage mechanisms and APIs as-is; do not erase user data or break the working application to simulate shared storage. Do not spend time attempting to solve production-grade permissions, multi-browser synchronization, or database migrations. The current user-facing design/data changes and working integrations are the immediate priority.
+
+UI DESIGN BASELINE
+- Match the current Newport brand and the revised CRM UI: deep navy sidebar/drawer headers, subtle blue accents, cool light-gray page background, white rounded cards/tables, restrained status and warning colors. Retain the existing typographic style.
+- Keep primary pages viewport-height/non-scrolling on desktop when feasible. Use scroll only within intended content panes, drawers, history lists, and meeting summary/transcript areas. Avoid clipped controls and inaccessible content; allow responsive vertical scrolling on narrow/mobile viewports where necessary.
+- EXISTING record editors, detail/history drawers, and View All panels use a full-height RIGHT-side drawer with background dim/blur and close (X). Creation actions use a CENTERED modal with dim/blur backdrop. Preserve confirmation and unsaved-changes protection and current save/delete behavior.
+- Maintain real, linked record updates consistently across Dashboard, Opportunities, Tasks, Documents, Relationships, Reports, and Opportunity Profiles using the existing shared client-side store. Do not introduce hard-coded chart figures.
+- Current status vocabularies, acquisition stages, priority A/B/C, task statuses, document types and existing page structures remain intact except the specifically requested fixes below.
+- Do not reintroduce the removed Diligence tab. Preserve any unique diligence fields in the appropriate existing Overview/Company/Next Action areas; the Opportunity Profile already has Overview, Tasks, Relationships, Documents, Meetings, and Activity as main tabs.
+
+1. DASHBOARD — NEEDS ATTENTION COLOR RESTRAINT
+The latest Needs Attention list is too red. Keep its existing functional ranking and contents, but restore a gentle WARM PALE-YELLOW/AMBER heading treatment reminiscent of the previous version. In the Needs Attention rows:
+- All left-hand issue icons should be subtle amber/yellow rather than red.
+- ONLY genuine overdue deadline text (e.g. "26 days overdue") should be clearly RED. An overdue issue may retain other restrained styling but do not paint the whole card aggressively red.
+- "No next action assigned", "No deal lead assigned", stalled, missing information, and all non-overdue issue labels should be AMBER/YELLOW, not red.
+- Keep accessible contrast and avoid turning the full dashboard into a collection of red notices. Current Needs Attention logic (most overdue first, then missing action, missing lead, other issues) stays as already implemented.
+
+2. DASHBOARD + TASKS — ONE CONSISTENT TASK SORT ORDER
+Task list rows in Tasks & Follow-Ups AND Dashboard's This Week's Priorities must come from the SAME sort/comparator and eligibility rules. Sort by WARNING CATEGORY FIRST, then A/B/C within each warning category, then nearest/earliest due date, with stable tie breakers:
+  Tier 1: genuinely overdue, unfinished tasks (RED warning), prioritized A then B then C, with older due dates first within the priority.
+  Tier 2: unfinished tasks due within the next 7 days (BLUE warning), prioritized A then B then C, with sooner due dates first within priority.
+  Tier 3: all other eligible unfinished tasks (no warning), prioritized A then B then C, with sooner due dates first within priority.
+This means a priority B task due tomorrow must come BEFORE a priority A task due in a month; a priority C overdue task comes before all blue warnings. Never sort all A tasks globally above warning tiers. Keep overdue calculation timezone/date aware and treat 'due today' as upcoming/current rather than 1 day overdue. Do not show irrelevant tasks from inactive/closed/declined/withdrew deals in live task lists; keep their records accessible in related profiles/histories and restore eligibility if the opportunity becomes Active/Pending/Completed. Maintain existing Task status changes and filtering.
+
+3. DASHBOARD — FILL THIS WEEK'S PRIORITIES CARD
+Remove excessive unused blank space at bottom of This Week's Priorities. Display as many of the highest-ranked eligible tasks as reasonably fit, generally 6 or 7 where the card affords space. If extra rows cannot fit, slightly increase row height/distribution of visible tasks to use the available area cleanly without overflow. Match the visually full Needs Attention card beside it. Do not invent tasks or truncate important text unnecessarily.
+
+4. OPPORTUNITY PROFILE — HEADER RESTORATION AND ALIGNMENT
+The most recent full Opportunity Profile gained editable Status/Acquisition Stage in the header but lost attractive visual hierarchy. Preserve functionality and reorganize as follows:
+- Main title/identity left: Deal ID, Project Name plus existing warning indicator, Company/Entity on its own line, then a separate row of colored STATUS badge, colored ACQUISITION STAGE badge, and "Deal lead: [Name]" below it (like the previous attractive profile). Do not crowd the deal lead onto the company-name line.
+- Retain created/updated/legally-closed timestamps as currently implemented; these should remain visible and should not overwrite real recorded dates.
+- On the right, retain editable Status and Acquisition Stage dropdowns AND Needs Attention callout (when relevant). Make placement consistent for EVERY deal: the dropdown pair stays at a fixed location/alignment regardless of project name length or whether a Needs Attention callout exists. The user's Project D screenshot is the reference for an attractive centered/aligned dropdown pair; do not let one record jump vertically depending on alerts. Use a stable grid/flex layout and align controls; reserve appropriate slot/spacing if no callout exists. Responsive layout should stack as needed without clipping.
+- Move the horizontal main navigation tab strip (Overview, Tasks, Relationships, Documents, Meetings, Activity) DOWN slightly to restore the air/spacing and color hierarchy present before the latest sprint. Keep all tabs fully usable.
+- Status/Stage badges refresh when edited and saved. Existing Completed confirmation/24-hour historical reporting behavior must remain intact; do not change it in this UI sprint.
+
+5. OPPORTUNITY PROFILE — CONTEXTUAL DESTINATION FROM 'VIEW FULL OPPORTUNITY PROFILE'
+Preserve the existing navigation and RETURN/BACK behavior (restore originating drawer, selection, scroll, and relevant filters when going back). On opening Full Opportunity Profile:
+- From Dashboard read-only opportunity drawer => default main tab OVERVIEW.
+- From Opportunities record editor => default main tab OVERVIEW.
+- From Tasks & Follow-Ups task editor => default main tab TASKS (select/focus originating task if practical without breaking behavior).
+- From Documents editor => default main tab DOCUMENTS (select originating document type if known).
+- From Meeting History meeting editor => default main tab MEETINGS (select originating meeting if available).
+- From other context-specific workflows, use analogous destination if sensible while maintaining backwards compatibility.
+Do not always reset the profile to Overview regardless of source.
+
+6. DOCUMENTS PAGE — OPEN THE EXACT DOCUMENT TYPE CLICKED
+Documents page cards have type icons/slots NDA, LOI, CIM, IOI, DA, FA. When a user clicks the icon/slot for a given type, open the standard full-height right-side document editor with the backdrop AND select that EXACT type, not always NDA. This applies when the slot HAS an uploaded file AND when it is EMPTY. Clicking the general project/card surface may continue with a sensible existing default, but clicking a specific icon must never silently navigate to another document type. Do not modify the six standard type definitions. Preserve support for additional custom documents.
+
+7. OPPORTUNITY PROFILE — DOCUMENTS SHOULD WORK LIKE OTHER PROFILE TABS
+Current Documents main tab embeds a permanent editor in the right third of the content. Replace that default layout with a FULL-WIDTH white document list/card showing all six standard slots (and custom documents as appropriate). No inline permanent editor should occupy the right third when simply viewing Documents.
+- Click ANY document slot/list row, whether populated OR empty, and open the same full-height, dim-background right-side document editor used on the Documents page.
+- Automatically select the requested document type (NDA/LOI/CIM/IOI/DA/FA), including empty slots so upload is possible. Empty slots are not disabled and must not default to NDA.
+- Preserve existing upload, open, replace, remove, document status/confidentiality, custom types, save, delete, and in-profile linking; do not create duplicate document records or lose files. Keep the six choices arranged cleanly in one row in the larger drawer where width permits.
+- In both entry points, maintain View Full Opportunity Profile action where it already exists (but avoid redundant navigation when already within the profile).
+
+8. TASK CREATION — REQUIRED LINKED PROJECT
+In EVERY New Task entry point (Tasks page, Dashboard Quick Actions, Opportunity Profile, AI meeting proposed follow-up -> Create Task, and any other equivalent creation handler), Action/Task Name, Linked Project/Opportunity, and Due Date are required. Show a visible asterisk on Linked Project, validate before Save/Create, provide understandable inline error, and prevent saving when missing. When launched from an opportunity or a meeting tied to an opportunity, preselect that opportunity as appropriate, but still require a valid linked record. Reuse the same task form validation instead of duplicating inconsistent rules.
+
+9. RELATIONSHIP CREATION — REQUIRED NAME AND LINKED PROJECT
+In EVERY New Relationship entry point (Dashboard Quick Actions, Relationships page, Opportunity Profile, etc.), Name and at least one Linked Project are REQUIRED and visibly starred. Prevent create/save and show inline guidance until both are provided. Other fields such as company, role, email, phone, category, last-contact date, and notes remain optional. Keep existing multi-project linking functionality and synchronization. Do NOT make Company a substitute for Linked Project.
+
+10. TASK 'DONE' AND TASK HISTORY — FIX REGRESSION
+Currently selecting Done instantly moves the task to history; this is a regression. Restore intended behavior:
+- Switching status to DONE leaves task visible on the main Tasks & Follow-Ups list with a subtle GREEN Done status and an adjacent 'X' archive control. Do not immediately archive on Done.
+- Clicking that X opens confirmation: "Move this completed task to Task History?" with Cancel and Confirm. Only on Confirm is it archived immediately.
+- If it remains Done and unarchived, automatically archive after seven days from completion, respecting established behavior. Do not auto-hide it the instant Done is selected.
+- Ensure Done tasks are not mistakenly sorted as overdue active tasks or counted as current Needs Attention, though they can remain visible in the list until archived. Preserve Task History retrieval and distinct permanent deletion flow (if already implemented).
+- Keep historical completion and original due-date data used by missed-deadlines reporting.
+
+11. OPPORTUNITIES AND TASKS — FIT TABLE BODY TO AVAILABLE HEIGHT
+Both listing pages currently leave an obvious unused white band above the pagination footer after the last displayed row. On desktop, fill the table BODY area between column headings and footer with the visible rows, distributing slight extra height vertically when needed. Do not create dummy blank rows. Make 14/15 current rows fill available height as much as practical; ensure no footer overlap, unreadable density, or forced main-page scrolling. Adapt when filters return 0, 1, or few records: in that case keep an intentional empty-state/normal row size rather than stretching one row to fill the entire screen. Preserve bottom pagination, counts, and responsiveness.
+
+12. TASKS — WARNINGS MUST BE ALIGNED IN ONE VERTICAL COLUMN
+The red/blue warning triangle icons currently shift horizontally because date strings vary in length. Keep the Due Date column and Status dropdowns, but add a fixed-width, right-aligned warning-icon position immediately to the LEFT of the Status control or at a consistently fixed end position inside the Due Date cell. Every row's icon should vertically align, independent of date character length. Maintain red for overdue, blue for due in the next 7 days; show no icon for neither. Do NOT add a repeated 'N days overdue' subtitle to the main Tasks or Opportunities table (user explicitly rejected that); this text belongs to Dashboard priorities and detail drawers.
+
+13. HISTORY DATE FILTERS — ADD REAL CLEAR/RESET ACTIONS
+Recent Activity drawer and Task History drawer/full page need a plainly visible "Clear filter" control for applied periods. The default period for each is LAST 30 DAYS.
+- Clear filter resets date mode/month/year/custom range and project/owner filters (where present) to the default last 30 days, all projects/owners and first page; disabled/inactive if already at defaults.
+- On Task History full page, existing "Clear All" for project/owner must ALSO reset date filters; use a consistent source of truth.
+- Task History "View All" opens on Last 30 Days when entered fresh; do not leak a stale filter from an older visit.
+- IMPORTANT BACK-NAVIGATION EXCEPTION: If Task History is opened from its drawer and the user clicks View All, pressing Back should restore the PREVIOUS DRAWER STATE, INCLUDING its date/project/owner filter and scroll/selection. Freshly navigating away and re-entering later should reset to Last 30 Days. Distinguish returning from a child view vs navigating fresh.
+- All history remains preserved in storage regardless of default 30-day visibility.
+
+14. SEARCH INPUTS — SINGLE CLEAR X
+Opportunities, Tasks & Follow-Ups, Documents, Relationships, and Meeting History currently sometimes show TWO clear X icons for search input. Fix to show exactly ONE clear X that clears the entire search. Do not overlay a custom X on top of native browser search clear; pick one implementation consistently. Keyboard interaction and search behavior must remain correct.
+
+15. FRESH PAGE VISITS RESET TRANSIENT SEARCH/FILTER/PAGINATION STATE
+When user navigates away from and later re-enters Opportunities, Tasks, Documents, Relationships, or Meeting History via sidebar/main navigation, reset the destination to its defaults: search empty, status = All, filters unselected, page 1, and no transient selection unless specifically required by an originating deep-link action. Example: search "Project Apple" on Opportunities, move to Tasks, return to Opportunities => full All list; visit Documents page 4, navigate away, return => page 1; Relationships Inactive filter resets to All.
+- Do NOT wipe saved records, substantive drafts, or integrations.
+- Do NOT break deliberate back-button restoration: when user opens a detail child page / Full Opportunity Profile / View All from a parent, Back should return the exact originating drawer, selection, and parent filters where that was the user's workflow. A FRESH sidebar navigation resets; BACK returns to context. Implement an explicit navigation-state policy rather than indiscriminate component resets.
+
+16. RECENT ACTIVITY — CONFIRM ARCHIVE + BULK ACTIONS ON FILTERED RESULTS
+Current Recent Activity drawer has default Last 30 Days, a date filter, Show Archived toggle, individual Archive and Restore. Add:
+- Confirmation before archiving an individual activity item; Cancel/Archive actions.
+- "Archive All" when showing active (non-archived) entries, and "Restore All" when showing archived entries; positioned in a neat action column/header above individual Archive/Restore buttons, visually consistent with the drawer.
+- CRUCIAL CONFIRMED DECISION: Archive All / Restore All apply ONLY to the CURRENT FILTERED RESULT SET matching the chosen date/search filters and current archived-state view, INCLUDING matches beyond the current visible scroll viewport/page. Do not archive ALL historical records in the store unless the filter actually includes them. Show a confirmation with the exact number of matching items before bulk action, and Cancel option.
+- When finished, recompute counts and update the active/archived views immediately. Preserve the underlying activity history and existing Security change history; archiving is a visibility operation, not true removal of immutable activity evidence. Do not introduce permanent bulk deletion.
+- Expose Clear filter as in section 13; continue allowing archived entries to be filtered and individual Restore.
+- Do not claim multi-user activity synchronization exists before a future shared backend is implemented.
+
+17. OPPORTUNITY EDITOR DRAWER — COMPACT HEADER WARNINGS ALWAYS VISIBLE
+Current full-height right-side Opportunity editor uses too much vertical height when Needs Attention becomes an entire big callout row; Overview fields then fall below the fold. Make the issue summary COMPACT and ALWAYS VISIBLE in the dark navy header, preferably near the upper-right close X area, WITHOUT covering the project title or X. Use a responsive small warning label/line/chip and allow multi-reason truncated-but-expandable text or compact wrap when necessary.
+- Red only for overdue item details; amber for missing lead, missing next task/action, or non-overdue issues; blue for a task due within seven days as currently defined. Avoid huge alerts that consume full header height.
+- Keep project ID/name/company, status/stage badges, deal lead with initials, last activity, next action + due date and warning summary. Keep all Overview/Company/Next Action fields editable, Save Changes, Delete, and View Full Opportunity Profile, and all current functionality.
+- Ensure the header's height is reasonably stable for deals with no warning, one warning, multiple warnings, or an unassigned lead. This is a UI composition change, not a reason to drop information.
+
+18. OPPORTUNITY STAGE BADGE / TRUNCATION
+In Opportunities table, longer stage labels such as "Preliminary Discussion" are currently cut off in their colored pills. Permit enough width, sensible wrapping, or compact padding/font so the full acquisition stage is readable while keeping columns aligned. Also check status/other pills and screen responsiveness; do not remove financial, lead, action, or date columns.
+
+19. MEETINGS — PRESERVE WORKING AI AND TWO-PANEL OVERVIEW
+Meetings home with Outlook calendar left, selected meeting details center, Transcript / AI Summary / Actions right, and Meeting History is MUCH IMPROVED. Preserve all working behaviors, Microsoft Outlook event/calendar access, Teams/Zoom/Google Meet/general meeting links, automatic participant display and available contact matching, manual linked-contact management, uploaded transcript, Gemini AI summary structure (Meeting Overview, Key Points, Key Decisions, Outstanding Questions, Next Steps), Proposed Follow-Ups -> Create Task, and private per-user meeting history. Do not shorten or rewrite the Gemini output algorithm merely to reduce text; scroll within the right panel. Keep Add Meeting for storing historical meetings and do not change Email -> Calendar -> New Event.
+
+20. MEETING HISTORY RIGHT DRAWER — EXACTLY TWO TOP-LEVEL TABS
+Current Meeting History full-page editor is extremely long because all metadata and Transcript/AI/Actions stack into a single long scroll. Replace with TWO PRIMARY tabs only, using the user's final approved names:
+  TAB 1: "Meeting Details" — CRM display title, calendar date/time, organizer/platform/location, open/copy/add meeting link, linked opportunity, linked contacts, participants, recording link, notes, existing Save/Remove/View Full Opportunity Profile actions. Preserve existing semantics: editing CRM display title DOES NOT rename actual Outlook event; no changes to Outlook event unless explicitly in existing supported flow.
+  TAB 2: "Transcript & AI" — within this tab, retain THREE SUBTABS "Transcript", "AI Summary", and "Actions"; show existing uploaded transcription, generated summary, proposed follow-up tasks and Create Task controls. AI Summary should continue to include proposed actions/follow-ups below the summary when appropriate, as currently desired.
+Use sticky drawer header and footer controls, scroll only the active tab content, and share the same data as Meetings home. Do not duplicate or lose meeting records. Keep private meeting ownership scoping as currently implemented.
+
+21. MEETINGS — BACK STATE VS FRESH SEARCH
+On Meetings home, if the user selects a calendar day and meeting and then enters Meeting History via View All, Back must restore the exact previously selected date/meeting and corresponding right summary/details panels; it must NOT reset to today's default. The same applies to sensible nested profile navigation.
+Meeting History fresh visit, however, must start with EMPTY search (and exactly one clear X when populated), default filters, and page 1. Example: type nonsense into Meeting History search, navigate back, then open a NEW View All visit later => search should be empty, not sticky. Preserve Meeting History details when returning immediately to an open parent editing context, but clear stale searches on new entry.
+
+22. REPORTS — PIPELINE OVERVIEW DONUT CHART POLISH
+The donut "Deals by Status" is visibly clipped; central count is off-center, and status colors are too muted/mismatched. Fix rendering:
+- Fit entire ring within its WHITE card at all standard desktop widths, with sufficient padding and responsive SVG/container sizing. No segment clipping at the left, top, or bottom.
+- Center the actual live count (currently 43 in current screenshots) precisely in the center of the donut hole, with small "deals" label underneath. Recalculate from live matching data/filter, never hard-code 43.
+- Use the SAME semantic color mapping as status badges on Opportunities, with tasteful mid-saturation values: Active green, Pending blue, Completed teal, Inactive gray, Declined muted red, Withdrew muted amber, Closed darker neutral. Keep readable legend and stable color mapping regardless of counts or order. Users dislike an overly dark/dull ring but do not make it garish.
+- Make hover/focus tooltip compact and professional: show status, number of deals, percentage; e.g. "Active · 10 deals · 23.3%" computed from actual data.
+- Preserve other Pipeline Overview charts, their values, series, filtering, and the existing two-chart pagination layout.
+
+23. REPORTS — TRENDS OVER TIME: TWO VIEWS, TWO CHARTS EACH
+User has APPROVED the stepped line previews. Replace the present 3-chart/2-view layout for Trends Over Time with exactly FOUR charts, two side-by-side in EACH of two existing paginated views:
+  VIEW 1, 'Completed Acquisition Financials':
+    LEFT: Cumulative Completed NWP.
+    RIGHT: Cumulative Completed PF EBITDA.
+    Each uses its own correct dollar scale and a STEPPED LINE: horizontal between dated closing events, upward step on a legal acquisition closing; preserve existing date filter behavior and opening historical cumulative balance. Follow existing 24-hour confirmation/reporting logic and reversal treatment. Do not combine disparate NWP/EBITDA scales.
+  VIEW 2, 'Monthly Acquisition Activity':
+    LEFT: New Opportunities Created (per calendar month).
+    RIGHT: Acquisitions Completed (per calendar month).
+    Use STEPPED LINE presentations with flat horizontal segments within each monthly bucket and vertical step transitions at month boundaries. IMPORTANT: THESE TWO ARE NON-CUMULATIVE MONTHLY COUNTS; they can rise, remain flat, or FALL, including to ZERO. For instance 2,2,2,3,0 should be displayed as 2->2->2->3->0; do NOT turn this into a running total. Use the original recorded opportunity createdAt and confirmed legal completion closedAt as the respective event dates. No hard-coded example values. Use discrete integer count axis, clear month/year labels, sensible zeros, and distinct brand-consistent colors.
+- Maintain exactly two charts visible at a time at normal desktop size (same as other Reports tabs). Avoid main-page scroll on desktop. Keep current view navigation controls, All Time/Month/Year/Custom Date Range, Clear filter, and reset to All Time when switching REPORT TABS as previously implemented.
+- The other existing Reports tabs and graphs should remain functionally unchanged except any necessary responsive fixes. Keep all six KPI cards and current export functionality. Do not rewrite or erase historical completion/creation data.
+
+24. NEWPORT SIDEBAR LOGO — DARK BACKGROUND FRIENDLY + COLLAPSED COMPASS
+Current large pale blue rectangular logo appears out of place on dark navy sidebar and CLIPS badly when sidebar collapses. Preserve Newport's actual recognizable logo/compass asset and improve its presentation:
+- EXPANDED: display a restrained LIGHT-ON-DARK logo, with Newport wordmark in white, Specialty Partners in a complementary light blue, and compass white/light blue, on the existing DARK NAVY background. Remove or greatly reduce the glaring baby-blue filled badge/rectangle; retain comfortable padding and center entire logo. If source logo is raster, use an approved available suitable light-background-free brand asset or carefully use CSS/masking where feasible; do NOT crudely invert images if it makes the logo unreadable and do not invent new official brand artwork.
+- COLLAPSED: show ONLY the compass icon/mark, appropriately sized and centered in the narrow sidebar. No clipped wordmark fragments (currently shows pieces like "VIEW"/"SPECIALTY"). It should retain the same tasteful white/light-blue treatment and be clickable.
+- Clicking either expanded logo or collapsed compass from ANY page navigates to Dashboard and resets its TRANSIENT state (All Deals status, default filters/search/page and panels, no stale selection). If already on Dashboard, logo click likewise resets current Dashboard filter to All Deals. This should be a lightweight application navigation/state reset, NOT a hard browser reload that wipes unsaved user work or unnecessarily restarts Outlook authentication. Warn if an editor has unsaved changes, following existing navigation protection.
+- Microsoft sign-in/login screen logo is now good; DO NOT change the sign-in page or Microsoft SSO.
+
+25. CONSISTENCY, SAFETY AND REGRESSION CHECKS
+- All creation forms remain centered with backdrop; all existing editors and read-only Dashboard opportunity snapshots remain in full-height navy-header right drawers with backdrop. Dashboard's opportunity snapshot must remain READ-ONLY and retain its current full detail and View Full Opportunity Profile action; do NOT turn it into an editable drawer.
+- Keep the existing confirmation/cancel patterns and disabled Save when no changes; preserve intentional changes across linked records.
+- Preserve genuine real Outlook/Microsoft email and calendar integration, Gemini summary integration, transcript uploads, document uploads, reports export, data/date metadata, 42+ seeded acquisition sample deals currently present, newly created 43rd record and any other actual user-created records. NO resetting seeded dataset, deleting records, or replacing working integrations with placeholders.
+- Current date must come from runtime clock, not a hard-coded November date. DO NOT artificially shift all stored due dates to remove overdue indicators: past dates must stay past and honestly be flagged overdue; only new sample records should use plausible dates when necessary.
+- No new secure shared backend in this sprint. Do not change authentication scope or permissions. Do not claim shared cross-device sync; keep future capability isolated for later prompt.
+- Responsive layouts must not clip tables, donut chart, logo, record editors, or header warnings. Adjust sensible breakpoints / horizontal scroll for narrow screens rather than dropping important columns/controls.
+- Use one centralized warning date evaluator where practical so blue/red logic and counts remain consistent between Dashboard, Opportunities, Tasks, and full profiles.
+- Maintain a meaningful Recent Activity record for successful writes as the current storage layer supports, but do not fabricate a global shared activity feed before backend implementation.
+
+IMPLEMENTATION PROCESS / ACCEPTANCE TESTS
+A. Inspect relevant React/Vue/etc components, routing, state, date handling, charting, existing test setup. Identify files and explain any technical limitations discovered. Implement with minimal targeted changes.
+B. Run format/lint/typecheck/tests/build available in the repository. Fix new errors. Do not claim tests ran if they did not.
+C. Manually or with component tests validate:
+  1. Tasks list: overdue C beats due-soon A; due-soon B beats no-warning A; A/B/C ordering within each warning tier; Dashboard task list matches.
+  2. Selecting Done keeps green completed task visible, then X+confirm archives; cancel keeps it; seven-day policy behaves as intended.
+  3. Missing Linked Project blocks new Task and new Relationship in all launch points; prelinked forms pass.
+  4. From Documents and Opportunity Profile Documents, click EMPTY FA, populated NDA, populated DA, and IOI; right drawer opens corresponding type, not NDA fallback.
+  5. Opportunity Profile documents fill width until selection; then right drawer appears. Full Profile launch from Task/Document/Meeting opens contextual tab. Back restores original drawer.
+  6. Warning triangle alignment is exact even for Nov 9 vs Nov 10 dates; long Preliminary Discussion badge shows full text; tables fill height without blank band.
+  7. New page visits clear search/status/filter/page; Back from history restores parent selection/filter and Meetings selected day; no double search-clear X.
+  8. Activity Archive All touches only current FILTERED matching records, confirmation count correct, Restore All reverses selected filtered batch, and archive prompts appear. Historical data not destroyed.
+  9. Meeting History editor has Meeting Details and Transcript & AI tabs with nested Transcript/AI Summary/Actions, all original functions still work.
+ 10. Reports donut never clips, center exactly centered and hover correct, status colors mapped; Trends View 1 NWP/EBITDA cumulative stepped lines; View 2 monthly created/completed separate NON-cumulative stepped counts, including a drop to zero; existing filters and exports still work.
+ 11. Sidebar expanded logo is legible on navy; collapsed is compass only; logo click resets Dashboard transient filters with unsaved edits protected; SSO remains untouched.
+D. Final delivery to me: concise list of changed files and features by page, anything not completed, any real test failures, plus a succinct manual QA checklist. Do not assert cross-device shared synchronization works without a backend.
+
+IMPLEMENT ALL REQUESTED ITEMS AS ONE FIXES SPRINT, WITH EXISTING WORKING FEATURES PROTECTED.
+
+===========================================================================
+ADDITIONAL SCOPE — DEAL LEADS PAGE AND CONTROLLED ASSIGNMENTS
+===========================================================================
+
+NEWPORT SPECIALTY PARTNERS CRM — DEAL LEADS PAGE & ASSIGNMENT MANAGEMENT
+STANDALONE CURSOR IMPLEMENTATION PROMPT
+Prepared: November 4, 2026
+
+OBJECTIVE
+Implement a new 'Deal Leads' module in the EXISTING Newport acquisition CRM without rebuilding or destabilizing working features. The goal is to maintain a deliberate roster of acquisition deal leads separate from Microsoft login accounts and from Task Owners, support one primary plus additional deal leads per opportunity, and update all linked views/reports correctly. Use the established Newport UI patterns. Inspect the codebase, state model, current options for Deal Lead and Task Owner, authentication data, report grouping and routing BEFORE editing; then implement actual working end-to-end persistence in the EXISTING storage approach and test it. Do not replace real data with hardcoded display mockups.
+
+CRITICAL BOUNDARIES
+- Do not implement a new shared backend/cross-device database in this sprint. That is a separate future sprint. Preserve current local/user storage behavior and state this limitation honestly in final handoff.
+- Do not rewrite Microsoft login, Outlook email/calendar/Graph integration, Gemini summaries, Meetings, or authentication flows. Read the signed-in identity using whatever mechanism already exists.
+- Do not automatically add a signed-in user as a Deal Lead. Login/CRM access is DISTINCT from deal-lead roster membership. A CRM operations employee may sign in and never become a lead.
+- A user's Deal Lead record is not the same as a Relationship/contact record or Task Owner. Keep these concepts distinct.
+- Do not remove existing opportunity assignments, erase historical fields, reset existing saved records, or add arbitrary sample opportunities or lead identities. Preserve Dennis, Mary, and other valid existing assignments as found in actual saved data. Only migrate/deduplicate where the correct identity can be determined reliably; unknown historical values need review, not deletion.
+
+1. NEW SIDEBAR PAGE: DEAL LEADS
+- Add a navigation entry labeled exactly 'Deal Leads' in the existing sidebar. Place logically near Opportunities/Relationships while respecting current navigation styling; keep icon, active indication, expanded/collapsed behavior, and no unnecessary outer-page desktop scroll.
+- Page heading: 'Deal Leads'. Subheading: 'Manage acquisition leads and their assigned opportunities.' At upper right place a compact 'Search deal leads...' input IMMEDIATELY TO THE LEFT of '+ New Deal Lead', matching the compact Opportunities page header, not an extra search row.
+- Display current roster count (respecting search/filter context if existing design uses that convention). Search by name, job title, and contact email (and optionally linked project). One clear-X only in search. On fresh sidebar entry, reset search, filters, and pagination to defaults; Back from detail context restores previous state.
+- Show responsive CONTACT CARDS similar to Relationships, ideally THREE cards per desktop row where space allows. Use the white card / pale-gray background and navy Newport scheme. Each card shows circular initials or available photo, full name, job title, contact email, phone (if saved), and concise linked-project preview using actual project names (first few chips plus '+N more' when relevant). Do not invent contact data when missing. An understated Active/Inactive badge may appear.
+- Numbered pagination with previous/next; derive page size to fit the desktop viewport without outer-page scrolling, preserve accessibility and usability on smaller displays. No truncated long project names without a tooltip or other readable way to see full text.
+- Clicking a card opens the standard full-height navy-header RIGHT editing drawer with dimmed/blurred backdrop, not a new page. New Deal Lead opens the same CENTERED creation modal and backdrop as other New/Add actions. Preserve unsaved-change warnings, disabled Save until valid/changed, and close/cancel behavior.
+
+2. DEAL LEAD RECORDS AND FORM FIELDS
+- Stable unique lead ID, full display name (required), job title (optional), work/contact email (required, valid syntax), phone number (optional), status Active/Inactive, creation/update timestamps, optional user-account association, and DERIVED linked opportunity assignments. Use a schema compatible with current storage/repository conventions.
+- In Deal Lead editor display: Full Name, Job Title, Contact Email, Phone, Active/Inactive, and Linked Opportunities. Group sensible fields, with linked projects showing searchable multi-select chips and remove 'X' and '+ Add another' akin to Relationships. Sort searchable project options by deal ID (numeric sequence), display PROJECT NAMES, and prevent duplicates.
+- When a lead is associated with an authenticated Microsoft account, store that account's stable authentication identifier separately from the contact/display email. Editing one's contact email or phone must NOT change Microsoft login identity or orphan the lead record.
+- Display exactly which linked opportunities are assigned, with primary versus additional role clearly differentiated where feasible. Changes to linked projects in this drawer and changes made from an opportunity editor must both update the SAME underlying relationship. Avoid maintaining a separate stale editable copy of project lists.
+- Allow personal information correction at any time after saving; do not lock the record. Preserve linked opportunities when contact fields change.
+- Deactivate rather than hard-delete a Deal Lead who leaves the team. Keep their historical assignments/report attribution; do not offer inactive leads for NEW assignments by default. Provide clear warning before deactivation and a sensible reactivation route. If delete is already a global standard, do not allow permanent removal of an actively referenced lead without explicit safe reassignment and historical preservation.
+
+3. SELF-REGISTRATION AND EDIT PERMISSIONS (USER-APPROVED OPTION B)
+- Signing in through Microsoft by itself NEVER creates a Deal Lead profile.
+- Any signed-in employee may explicitly choose 'Add Myself as Deal Lead' and create ONE lead record linked to their own signed-in account. The app should prefill their known authenticated display name/email where available, allow legitimate corrections in editable contact fields, and never let them claim someone else's identity by entering another email.
+- After saving, that employee may continue to edit THEIR OWN Deal Lead full name, role, contact email and phone whenever needed. They can view other leads' cards but must NOT edit other people's profiles or deactivate them.
+- Authorized admins may create and edit OTHER Deal Lead records, manage status and association, correct duplicates, and adjust assignments as permitted by existing CRM authorization. Ordinary users' ability to change an opportunity's Deal Lead assignment should follow existing opportunity-edit permissions rather than granting unrestricted global roster administration.
+- Prevent duplicate Deal Lead profiles for the SAME signed-in Microsoft user even if contact email changes; provide 'Edit My Deal Lead Profile' instead of creating another. If the record already exists and is associated with that account, open it.
+- IMPORTANT SECURITY REALITY: Current browser/local database may not supply trustworthy centralized admin roles or server-enforced access control. Inspect existing auth/authorization before implementing. Use current account identifiers and role data if trustworthy; do not invent an admin account, secretly declare every user an admin, or pretend client-side hiding is secure. Implement feasible UI/self-service safeguards now, document any role enforcement that REQUIRES the future shared backend, and keep current authorized functionality working. Never represent client-side checks as production-ready security.
+- Button labeling: If user has no roster profile, 'Add Myself as Deal Lead' should be clear for self-service; '+ New Deal Lead' can remain the admin/general page action with permissions-aware behavior. No unauthenticated roster edits.
+
+4. ONE PRIMARY + MULTIPLE ADDITIONAL LEADS PER OPPORTUNITY
+- Change the underlying opportunity assignment model to support exactly ZERO OR ONE designated PRIMARY Deal Lead plus ZERO OR MORE ADDITIONAL Deal Leads. The primary must not simultaneously appear as an additional lead. No duplicate IDs.
+- In New Opportunity, existing Opportunity right editor, and Full Opportunity Profile, support a searchable primary-lead selector plus additional-lead multi-select/chips with removable X and '+ Add another'. The user can set/change the primary; show only Active roster members in new-assignment selectors unless intentionally viewing historical assignments. Handle unassigned primary with an 'Unassigned' placeholder and existing warning behavior.
+- Preserve existing single-valued dealLead/owner fields during migration: convert current existing lead into PRIMARY whenever the identity can be resolved, and leave Additional empty initially. Avoid breaking stored records, seed data, or old components; where necessary maintain a clearly defined compatibility adapter until all consumers are updated. Do not create phantom leads by automatically adding sign-ins or arbitrary name matches.
+- Opportunities TABLE continues to show ONLY the PRIMARY lead's avatar/initials plus full name, or 'Unassigned' with neutral placeholder. Do NOT crowd multiple avatars into that table cell.
+- Opportunity Full Profile and editing drawers show the full lead team (primary + additions), with sensible display. Dashboard read-only opportunity drawer may keep primary lead prominent and optionally compact 'additional leads' if space allows; do not break its already approved read-only UI.
+- From Deal Leads page, a lead's Linked Opportunities reflects BOTH primary and additional assignments. Editing a link there must correctly update the opportunity; if removing the current primary, require selecting a new primary or explicitly acknowledge an Unassigned primary so warning logic works. Preserve no accidental reassignment.
+- Task OWNERS ARE A SEPARATE concept. Do not force task owners to be a subset of Deal Leads. Leave Tasks owner dropdown and existing task assignments intact; not every operations colleague is a deal lead.
+- Meetings should not gain forced deal-lead fields merely for consistency; if the current meeting UI has an actual Deal Lead field, its choices must reference the roster and support multiple where specifically relevant, but preserve participants, linked CRM contacts, and organizer as different concepts. Do not break existing Outlook attendees or private meeting permissions.
+
+5. REPORTS, FILTERS, AND OTHER CROSS-PAGE CONSISTENCY
+- Reports 'Deals by Lead', Active/Pending by Lead, Completed by Lead, and NWP/PF EBITDA by Lead must use ONLY the PRIMARY lead for attribution so a $10M deal with Mary+Dennis is counted ONCE, not twice. Unassigned primary is its own bucket when applicable. Other charts and KPI totals remain unchanged.
+- Existing Deal Lead filters/selectors and any Dashboard/Opportunity displays must read the controlled roster and stable lead IDs, NOT automatically enumerate every Microsoft login user. Prefer lead name as display, ID as persistence key. For historical invalid/unknown names, preserve them as legacy unresolved assignments until reviewed rather than silently dropping them.
+- Add/remove lead assignments updates linked opportunity data, lead card project previews, opportunity tables/profiles, and reporting summaries immediately within the current application session/storage. Persist after refresh where supported by the present storage layer.
+- Keep Recent Activity/history meaningful for changes to lead details, activation, and project assignments, following the existing activity architecture without inventing cross-device audit sync.
+
+6. DASHBOARD QUICK ACTION AND SETTINGS IMPORT EXCEL
+- Replace Dashboard Quick Action 'Import Excel' with 'New Deal Lead' (or 'Add Myself as Deal Lead' for regular signed-in users when appropriate); use the centered New Deal Lead creation modal and current identity permissions. Keep other quick actions.
+- MOVE—not delete—Import Excel to Settings, near current local database import/export area. Preserve the EXISTING Excel import implementation/validation, error handling, and its effects on existing CRM records. Do not confuse Excel import with the existing download/import BACKUP database controls; label separate actions distinctly. If existing Excel importer cannot operate in Settings without substantial changes, reuse the existing handler/component via a shared action, not a fresh stub.
+
+7. TESTS AND ACCEPTANCE CRITERIA
+- Account sign-in does not create a lead. A user can self-register exactly once, edit their own contact email/phone/title after Save, and see changes on their card without losing assignments.
+- Regular user cannot edit/deactivate another person's lead; admin role behaves according to actual available authorization, with explicit documented limitations if current storage is local-only.
+- Existing legitimate lead assignments are preserved on upgrade; no new fictitious accounts are inserted; unknown legacy assignments are not silently erased.
+- Opportunity can be assigned Mary primary and Dennis additional; only Mary appears in table primary column; both opportunity and each lead card show project linkage; Reports counts the opportunity NWP/EBITDA exactly once under Mary.
+- Removing an additional lead updates both pages; attempting to remove the primary behaves safely; disabling a lead preserves historical references, prevents new assignments, and can be reversed.
+- Tasks owners remain unaffected. Meetings participant/contact/organizer fields are unaffected. Existing Outlook/Graph + Gemini remain functional.
+- Dashboard quick action opens the new centered lead modal; Settings Excel import remains FUNCTIONAL (not just a button) and database backup actions remain functional.
+- Search, pagination, card layout, full-height right drawer, modal validation, responsive/no-excessive-scroll behavior and correct Back navigation work.
+- Run existing tests/lint/typecheck/build as available. Do not claim passes that were not executed. Report changed files, tested scenarios, unresolved permissions/backend dependencies, and anything not implemented.
+
+IMPLEMENT THESE DEAL LEADS FEATURES AS A TARGETED ADDITION TO THE CURRENT CRM. KEEP ALL ALREADY-WORKING FEATURES AND USER DATA INTACT.
+

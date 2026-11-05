@@ -127,8 +127,13 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
   }, [contact?.id])
 
   const dirty = !sameDraft(draft, baseline)
-  const valid = draft.name.trim().length > 0
-  const canSave = dirty && valid && !saving
+  const [showErrors, setShowErrors] = useState(false)
+  const problems = {
+    name: draft.name.trim() ? null : 'Enter a name.',
+    projects: creating && !draft.projectIds.some((id) => opportunities.some((opp) => opp.id === id)) ? 'Link at least one project. A company does not replace a linked project.' : null,
+  }
+  const valid = !problems.name && !problems.projects
+  const canSave = dirty && !saving
   const dirtyRef = useRef(dirty)
   dirtyRef.current = dirty
 
@@ -166,7 +171,8 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
   const persist = async (): Promise<boolean> => {
     if (savingRef.current) return false
     if (!valid) {
-      setError('Name is required.')
+      setShowErrors(true)
+      setError(null)
       return false
     }
     const ids = draft.projectIds.filter((id) => opportunities.some((opp) => opp.id === id))
@@ -277,8 +283,9 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
 
       <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         <label className={label}>
-          Name
+          Name{creating ? ' *' : ''}
           <input data-testid="relationship-name" value={draft.name} onChange={(e) => set('name', e.target.value)} className={input} />
+          {showErrors && problems.name && <span className="mt-1 block text-xs font-medium tracking-normal text-attention normal-case" data-testid="relationship-name-error">{problems.name}</span>}
         </label>
         <div>
           <span className={label}>Company</span>
@@ -296,7 +303,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
           <input value={draft.title} onChange={(e) => set('title', e.target.value)} className={input} />
         </label>
         <div>
-          <span className={label}>Linked Projects</span>
+          <span className={label}>Linked Projects{creating ? ' *' : ''}</span>
           <MultiSearchSelect
             testId="relationship-projects"
             values={draft.projectIds}
@@ -305,6 +312,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
             placeholder="Search projects"
             emptyText="No matching projects"
           />
+          {showErrors && problems.projects && <p className="mt-1 text-xs font-medium text-attention" data-testid="relationship-projects-error">{problems.projects}</p>}
           <p className="mt-1 text-[11px] text-ink-muted">Company and projects are separate: an advisor can work for a different firm than the target.</p>
         </div>
         <label className={label}>
@@ -363,7 +371,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
       <div className="shrink-0 space-y-2 border-t border-border bg-surface px-5 py-3">
         {error && <p className="text-xs text-attention">{error}</p>}
         {message && !dirty && <p className="text-xs text-success">{message}</p>}
-        {dirty && !valid && <p className="text-xs text-ink-muted">Add a name to save this relationship.</p>}
+        {dirty && !valid && !showErrors && <p className="text-xs text-ink-muted">{creating ? 'Name and at least one Linked Project are required.' : 'Add a name to save this relationship.'}</p>}
         <button
           type="button"
           data-testid="relationship-save"

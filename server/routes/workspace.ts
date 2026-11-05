@@ -14,7 +14,7 @@ import { geminiModel, geminiReachability, geminiSelfTest } from '../services/gem
 export const workspaceRouter = Router()
 export const microsoftAuthRouter = Router()
 
-export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'activity', 'documentTypes', 'meetings'] as const
+export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'dealLeads', 'activity', 'documentTypes', 'meetings'] as const
 const SESSION_HOURS = 12
 
 function initials(name: string): string {

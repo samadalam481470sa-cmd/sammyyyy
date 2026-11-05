@@ -3,12 +3,13 @@
  * reads and writes the same records through it; otherwise the CRM keeps working on this
  * device only. The server verifies each person's Microsoft sign-in and approval.
  */
+import { useEffect, useState } from 'react'
 import { getMicrosoftIdToken } from '@/auth/msal'
 
 export const WORKSPACE_SESSION_KEY = 'newport_crm_workspace_session'
 export const WORKSPACE_STATE_EVENT = 'newport-workspace-state'
 
-export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'activity' | 'documentTypes' | 'meetings'
+export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'dealLeads' | 'activity' | 'documentTypes' | 'meetings'
 
 export interface WorkspaceRecord {
   collection: WorkspaceCollection
@@ -71,6 +72,8 @@ interface StoredSession {
   token: string
   expiresAt: string
   email: string
+  /** Role the server reported at sign-in. */
+  role?: string
 }
 
 function readSession(): StoredSession | null {
@@ -82,6 +85,23 @@ function readSession(): StoredSession | null {
   } catch {
     return null
   }
+}
+
+/** Role the Newport server reported for this session, or null with no shared server. */
+export function workspaceRole(): string | null {
+  return readSession()?.role ?? null
+}
+
+/** React view of workspaceRole, updated when the workspace connects or disconnects. */
+export function useWorkspaceRole(): string | null {
+  const [role, setRole] = useState(workspaceRole)
+  useEffect(() => {
+    const sync = () => setRole(workspaceRole())
+    sync()
+    window.addEventListener(WORKSPACE_STATE_EVENT, sync)
+    return () => window.removeEventListener(WORKSPACE_STATE_EVENT, sync)
+  }, [])
+  return role
 }
 
 export function clearWorkspaceSession(): void {
@@ -131,7 +151,7 @@ export async function connectWorkspace(email: string, force = false): Promise<bo
     setState('error', 'The Newport server could not be reached.')
     throw new WorkspaceAccessError('The Newport server could not be reached. Check the connection and try again.', false)
   }
-  const body = (await res.json().catch(() => ({}))) as { token?: string; expiresAt?: string; error?: string; user?: { email?: string } }
+  const body = (await res.json().catch(() => ({}))) as { token?: string; expiresAt?: string; error?: string; user?: { email?: string; role?: string } }
   if (!res.ok || !body.token || !body.expiresAt) {
     const message = body.error || `The Newport server refused sign-in (${res.status}).`
     setState('error', message)
@@ -143,7 +163,7 @@ export async function connectWorkspace(email: string, force = false): Promise<bo
     throw new WorkspaceAccessError(`The server verified ${verified}, not ${email}. Sign out and sign in again.`, true)
   }
   try {
-    sessionStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify({ token: body.token, expiresAt: body.expiresAt, email: email.toLowerCase() }))
+    sessionStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify({ token: body.token, expiresAt: body.expiresAt, email: email.toLowerCase(), role: body.user?.role }))
   } catch {
     // storage blocked: the session works for this page only
   }

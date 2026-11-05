@@ -82,8 +82,8 @@ export function applyTaskStatusTransition(
   }
 }
 
-/** Deal statuses whose unfinished tasks are worked on. Other statuses pause their tasks. */
-export const WORKING_DEAL_STATUSES = new Set(['Active', 'Pending'])
+/** Deal statuses whose tasks stay in the live lists. Inactive, Closed, Declined and Withdrew pause theirs. */
+export const WORKING_DEAL_STATUSES = new Set(['Active', 'Pending', 'Completed'])
 
 type ParentLookup = ReadonlyArray<{ id: string; status: string }>
 
@@ -92,9 +92,9 @@ function parentOf(task: TaskRecord, opportunities: ParentLookup) {
 }
 
 /**
- * Unfinished task whose parent deal is not Active/Pending (Inactive, Closed, Declined, Withdrew,
- * Completed). It is never completed or deleted automatically: it stays on the opportunity profile
- * marked Paused and returns to the working lists when the deal is Active or Pending again.
+ * Unfinished task whose parent deal is Inactive, Closed, Declined or Withdrew. It is never
+ * completed or deleted automatically: it stays on the opportunity profile marked Paused and
+ * returns to the working lists when the deal is Active, Pending or Completed again.
  */
 export function isPausedTask(task: TaskRecord, opportunities: ParentLookup, now = new Date()): boolean {
   if (!isUnfinishedTask(task, now)) return false
@@ -104,7 +104,7 @@ export function isPausedTask(task: TaskRecord, opportunities: ParentLookup, now 
 
 /**
  * The one eligibility rule shared by Tasks & Follow-Ups, Dashboard priorities and the bell:
- * unfinished, and linked to an Active/Pending deal. A standalone task (no linked deal, for
+ * unfinished, and linked to an Active, Pending or Completed deal. A standalone task (no linked deal, for
  * example after its deal was deleted) stays in the working list so it is never silently lost.
  */
 export function isWorkingTask(task: TaskRecord, opportunities: ParentLookup, now = new Date()): boolean {
@@ -115,12 +115,28 @@ export function isWorkingTask(task: TaskRecord, opportunities: ParentLookup, now
   return WORKING_DEAL_STATUSES.has(parent.status)
 }
 
+/**
+ * A row on Tasks & Follow-Ups: every working task, plus Done tasks that are not archived yet.
+ * Done stays visible (green, with an X to archive) until the user archives it or seven days pass.
+ */
+export function isListedTask(task: TaskRecord, opportunities: ParentLookup, now = new Date()): boolean {
+  if (isWorkingTask(task, opportunities, now)) return true
+  if (task.status !== 'Done' || !isActiveListTask(task, now)) return false
+  const parent = parentOf(task, opportunities)
+  return !parent || WORKING_DEAL_STATUSES.has(parent.status)
+}
+
+/** A Done task still on the main list, waiting for the X (or the seven-day auto archive). */
+export function isDoneAwaitingArchive(task: TaskRecord, now = new Date()): boolean {
+  return task.status === 'Done' && isActiveListTask(task, now)
+}
+
 export type TaskHistoryKind = 'Completed' | 'Cancelled/Deleted' | 'Archived'
 
-/** Task History rows: completed, archived and deleted tasks. Unfinished paused tasks are not history. */
-export function taskHistoryKind(task: TaskRecord): TaskHistoryKind | null {
+/** Task History rows: archived completions, other archived tasks and deleted tasks. Done-but-unarchived and paused tasks are not history. */
+export function taskHistoryKind(task: TaskRecord, now = new Date()): TaskHistoryKind | null {
   if (task.deletedAt) return 'Cancelled/Deleted'
-  if (task.status === 'Done') return 'Completed'
+  if (task.status === 'Done') return task.archivedAt || shouldAutoArchive(task.completedAt, now) ? 'Completed' : null
   if (task.archivedAt) return 'Archived'
   return null
 }

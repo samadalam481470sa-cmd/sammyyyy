@@ -20,7 +20,7 @@ function task(partial: Partial<TaskRecord>): TaskRecord {
 }
 
 describe('task sort', () => {
-  it('orders overdue A/B/C then non-overdue A/B/C, with undated after dated', () => {
+  it('orders by warning tier first, then A/B/C, then due date', () => {
     const rows = sortVisibleTasks(
       [
         task({ id: 'undated-a', priority: 'A', action: 'Undated A', dueDate: null }),
@@ -36,8 +36,8 @@ describe('task sort', () => {
       'overdue-a',
       'overdue-c',
       'today-a',
-      'undated-a',
       'future-b',
+      'undated-a',
       'done',
     ])
   })

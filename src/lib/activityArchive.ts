@@ -48,5 +48,16 @@ export function useActivityArchive(owner: string) {
     next.delete(id)
     write(owner, next)
   }, [owner])
-  return { archived, archive, restore }
+  /** Bulk actions take the exact ids of the current filtered results, never "everything". */
+  const archiveMany = useCallback((ids: readonly string[]) => {
+    const next = readArchivedActivity(owner)
+    ids.forEach((id) => next.add(id))
+    write(owner, next)
+  }, [owner])
+  const restoreMany = useCallback((ids: readonly string[]) => {
+    const next = readArchivedActivity(owner)
+    ids.forEach((id) => next.delete(id))
+    write(owner, next)
+  }, [owner])
+  return { archived, archive, restore, archiveMany, restoreMany }
 }

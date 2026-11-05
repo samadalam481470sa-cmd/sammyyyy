@@ -6,7 +6,8 @@ import {
   type DragEvent,
 } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import newportLogo from '@/assets/newport-logo-centered.png'
+import newportLogo from '@/assets/newport-logo-light.png'
+import newportCompass from '@/assets/newport-compass-light.png'
 import {
   LayoutDashboard,
   Briefcase,
@@ -17,6 +18,7 @@ import {
   FileText,
   BarChart3,
   ShieldCheck,
+  UserCheck,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -46,6 +48,7 @@ import type { LucideIcon } from 'lucide-react'
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   opportunities: Briefcase,
+  'deal-leads': UserCheck,
   relationships: Users,
   tasks: CheckSquare,
   sources: Building2,
@@ -175,23 +178,26 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       <div className={`flex h-full shrink-0 flex-col ${collapsed ? 'w-[72px]' : 'w-60'}`}>
       <div className={`flex items-center justify-center border-b border-navy-800 ${collapsed ? 'px-2 py-4' : 'px-4 py-4'}`}>
-        {/* The real Newport logo; clicking it opens the Dashboard without reloading or resetting data. */}
-        <NavLink
-          to="/"
-          end
-          onClick={(e) => editorGuard?.guardClick(e, '/')}
+        {/* The real Newport artwork, light on the navy sidebar. A light application navigation that resets
+            the Dashboard's view state; unsaved edits get the usual prompt and nothing reloads. */}
+        <button
+          type="button"
+          onClick={() => {
+            const go = () => void navigate('/', { state: { resetDashboard: Date.now() } })
+            if (editorGuard) editorGuard.guardAction(go)
+            else go()
+          }}
           aria-label="Newport Specialty Partners — go to Dashboard"
           title="Dashboard"
           data-testid="sidebar-logo"
-          className={`flex items-center justify-center overflow-hidden rounded-lg bg-[#d3dfec] shadow-sm ring-1 ring-white/10 ${collapsed ? 'h-11 w-11' : 'h-[58px] w-full max-w-[206px]'}`}
+          className={`flex items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent-muted ${collapsed ? 'h-11 w-11' : 'w-full px-1 py-1'}`}
         >
-          <img
-            src={newportLogo}
-            alt="Newport Specialty Partners"
-            className={collapsed ? 'h-11 w-[157px] max-w-none object-cover' : 'h-full w-full object-cover'}
-            style={collapsed ? { objectPosition: '0% 50%' } : undefined}
-          />
-        </NavLink>
+          {collapsed ? (
+            <img src={newportCompass} alt="Newport Specialty Partners" className="h-10 w-10 object-contain" data-testid="sidebar-compass" />
+          ) : (
+            <img src={newportLogo} alt="Newport Specialty Partners" className="h-auto w-full max-w-[192px] object-contain" data-testid="sidebar-wordmark" />
+          )}
+        </button>
       </div>
 
       <nav className="custom-scroll flex-1 overflow-y-auto px-2 py-3" aria-label="Main">

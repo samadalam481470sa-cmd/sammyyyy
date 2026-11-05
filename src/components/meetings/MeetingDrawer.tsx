@@ -8,6 +8,11 @@ import { MeetingDetailsBody, MeetingSaveBar, MeetingTranscriptPanel, meetingWhen
 import { useMeetingController, type MeetingsApi } from '@/components/meetings/useMeetingController'
 import { meetingTitle, type CrmMeeting } from '@/types/crmMeeting'
 
+const DRAWER_TABS = [
+  ['details', 'Meeting Details'],
+  ['transcript', 'Transcript & AI'],
+] as const
+
 interface Props {
   api: MeetingsApi
   meeting: CrmMeeting | null
@@ -32,6 +37,7 @@ export function MeetingDrawer({ api, meeting, onClose, hideProfileLink = false }
 
 function MeetingDrawerBody({ api, meeting, onClose, hideProfileLink, closeRef }: { api: MeetingsApi; meeting: CrmMeeting; onClose: () => void; hideProfileLink: boolean; closeRef: React.MutableRefObject<(() => void) | null> }) {
   const ctl = useMeetingController(api, meeting)
+  const [tab, setTab] = useState<'details' | 'transcript'>('details')
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [leavePrompt, setLeavePrompt] = useState(false)
   const project = ctl.opportunities.find((o) => o.id === ctl.current.opportunityId)
@@ -44,14 +50,22 @@ function MeetingDrawerBody({ api, meeting, onClose, hideProfileLink, closeRef }:
       <DrawerHeader eyebrow={project ? project.projectName : 'Meeting'} title={meetingTitle({ displayTitle: ctl.draft.displayTitle, outlookSubject: ctl.current.outlookSubject })} subtitle={meetingWhen(ctl.current)} onClose={requestClose} closeLabel="Close meeting details">
         <p className="text-[11px] text-white/70">Private to you · {ctl.current.outlookEventId ? 'from your Outlook calendar' : 'added to CRM history'} · the Outlook event is never changed here</p>
       </DrawerHeader>
-      <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="px-5 py-4">
+      <div className="flex shrink-0 gap-1 border-b border-border bg-surface px-4 pt-2" role="tablist" aria-label="Meeting">
+        {DRAWER_TABS.map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} data-testid={`meeting-drawer-tab-${id}`} onClick={() => setTab(id)} className={`border-b-2 px-3.5 py-2 text-sm font-semibold ${tab === id ? 'border-navy-900 text-navy-900' : 'border-transparent text-ink-muted hover:text-ink'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'details' ? (
+        <div className="custom-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <MeetingDetailsBody ctl={ctl} compact />
         </div>
-        <div className="mx-5 mb-5 overflow-hidden rounded-xl border border-border">
-          <MeetingTranscriptPanel ctl={ctl} fill={false} />
+      ) : (
+        <div className="min-h-0 flex-1">
+          <MeetingTranscriptPanel ctl={ctl} />
         </div>
-      </div>
+      )}
       <MeetingSaveBar
         ctl={ctl}
         extra={
@@ -64,7 +78,7 @@ function MeetingDrawerBody({ api, meeting, onClose, hideProfileLink, closeRef }:
       />
       {!hideProfileLink && (
         <div className="shrink-0 bg-surface px-4 pb-3">
-          <ProfileLinkButton opportunityId={ctl.current.opportunityId} />
+          <ProfileLinkButton opportunityId={ctl.current.opportunityId} tab="meetings" focus={{ meeting: ctl.current.id }} />
         </div>
       )}
       <ConfirmDialog

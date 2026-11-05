@@ -15,7 +15,7 @@ import { SearchSelect } from '@/components/shared/SearchSelect'
 import { PeriodFilterControl } from '@/components/shared/PeriodFilterControl'
 import { ContentCard, PageShell, PageToolbar, PrimaryButton, RecordCount, SearchBox } from '@/components/shared/PageChrome'
 import { useFitRows } from '@/hooks/useFitRows'
-import { useSessionState } from '@/hooks/useSessionState'
+import { useRestorableSelection, useSessionState } from '@/hooks/useSessionState'
 import { paginate } from '@/lib/paginate'
 import { inPeriod, resolvePeriod, type PeriodFilter } from '@/lib/reports'
 import { readTranscriptSource } from '@/lib/crmMeetings'
@@ -34,7 +34,7 @@ export function MeetingHistoryPage() {
   const [period, setPeriod] = useSessionState<PeriodFilter>(`${KEY}:period`, { kind: 'all' })
   const [oppFilter, setOppFilter] = useSessionState(`${KEY}:opp`, '')
   const [pageState, setPageState] = useSessionState(`${KEY}:page`, { key: '', page: 1 })
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useRestorableSelection(KEY)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [removeId, setRemoveId] = useState<string | null>(null)
   const [uploadFor, setUploadFor] = useState<CrmMeeting | null>(null)
@@ -89,7 +89,7 @@ export function MeetingHistoryPage() {
     <PageShell testId="meeting-history-page">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 pt-4 pb-3 lg:px-8">
         <div className="min-w-0">
-          <button type="button" onClick={() => navigate('/meetings')} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="history-back">
+          <button type="button" onClick={() => navigate('/meetings', { state: { restore: true } })} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="history-back">
             <ArrowLeft className="h-3.5 w-3.5" /> Meetings
           </button>
           <h1 className="font-brand text-2xl leading-tight font-bold text-navy-900">Meeting History</h1>

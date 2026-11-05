@@ -51,6 +51,10 @@ interface DocumentWorkspaceProps {
   opportunity: Opportunity
   onClose: () => void
   initialDocumentId?: string | null
+  /** The exact standard slot to open (NDA, LOI, CIM, IOI, DA, FA), filled or empty. */
+  initialSlot?: string | null
+  /** Open straight on the Add New Document form. */
+  startCreating?: boolean
   /** Told when "Add New Document" creation starts or ends, so the page can dim behind it. */
   onCreatingChange?: (creating: boolean) => void
   /** Increment to ask the workspace to leave creation (backdrop click / Escape); unsaved work is confirmed first. */
@@ -112,7 +116,7 @@ function emptyDraft(docType: string): DocDraft {
 }
 
 export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWorkspaceProps>(
-  function DocumentWorkspace({ opportunity, onClose, initialDocumentId, onCreatingChange, cancelCreateRequest, footerExtra, hideClose = false }, ref) {
+  function DocumentWorkspace({ opportunity, onClose, initialDocumentId, initialSlot, startCreating = false, onCreatingChange, cancelCreateRequest, footerExtra, hideClose = false }, ref) {
     const { documents, createDocument, saveDocument, deleteDocument } = useData()
     const { user } = useAuth()
     const owner = sessionOwnerKey(user)
@@ -122,11 +126,11 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
       () => documents.filter((d) => d.opportunityId === opportunity.id),
       [documents, opportunity.id],
     )
-    const [tab, setTab] = useState<string>('NDA')
+    const [tab, setTab] = useState<string>(initialSlot || 'NDA')
     const [mode, setMode] = useState<'slot' | 'custom' | 'new'>('slot')
     const [editingId, setEditingId] = useState<string | null>(null)
-    const [draft, setDraft] = useState<DocDraft>(() => emptyDraft('NDA'))
-    const [saved, setSaved] = useState<DocDraft>(() => emptyDraft('NDA'))
+    const [draft, setDraft] = useState<DocDraft>(() => emptyDraft(initialSlot || 'NDA'))
+    const [saved, setSaved] = useState<DocDraft>(() => emptyDraft(initialSlot || 'NDA'))
     const [pendingFile, setPendingFile] = useState<File | null>(null)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -193,9 +197,17 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
           return
         }
       }
-      loadSlot('NDA')
+      loadSlot(initialSlot || 'NDA')
+      if (startCreating) {
+        const next = emptyDraft('')
+        setMode('new')
+        setEditingId(null)
+        setTab('new')
+        setDraft(next)
+        setSaved(next)
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [opportunity.id, initialDocumentId])
+    }, [opportunity.id, initialDocumentId, initialSlot])
 
     const requestLeave = useCallback((next: () => void) => {
       if (savingRef.current) return
@@ -563,7 +575,7 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
         />
 
         {/* Six standard slots in one row; navy = a file is saved, gray = empty. */}
-        <div className="shrink-0 border-b border-border px-4 pt-3 pb-2">
+        <div className="shrink-0 border-b border-border px-4 pt-3 pb-2" data-active-slot={mode === 'slot' ? tab : ''}>
           <div className="grid grid-cols-6 gap-1.5" data-testid="document-slots">
             {DOCUMENT_SLOT_META.map((slot) => {
               const record = slotDocument(related, opportunity.id, slot.id)
@@ -574,6 +586,8 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
                   type="button"
                   title={`${slot.label}${hasAttachedFile(record) ? ' — file saved' : ' — empty'}`}
                   aria-label={slot.label}
+                  aria-pressed={active}
+                  data-testid={`document-slot-${slot.id}`}
                   onClick={() => requestLeave(() => loadSlot(slot.id))}
                   className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-1.5 text-[10px] font-semibold ${active ? 'border-accent bg-accent-soft text-navy-900' : 'border-transparent text-ink-muted hover:bg-canvas'}`}
                 >

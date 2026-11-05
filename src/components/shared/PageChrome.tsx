@@ -51,9 +51,18 @@ export function SearchBox({ value, onChange, placeholder, label, testId, width =
       <span className="sr-only">{label ?? placeholder}</span>
       <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
       <input
-        type="search"
+        type="text"
+        inputMode="search"
+        enterKeyHint="search"
+        autoComplete="off"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.stopPropagation()
+            onChange('')
+          }
+        }}
         placeholder={placeholder}
         data-testid={testId}
         className="h-10 w-full rounded-lg border border-border bg-surface pr-8 pl-9 text-sm text-ink outline-none placeholder:text-ink-subtle focus:border-accent focus:ring-2 focus:ring-accent/20"

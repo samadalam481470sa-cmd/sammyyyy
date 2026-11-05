@@ -28,6 +28,8 @@ export function DocumentsPage() {
   const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useRestorableSelection('documents')
   const [selectDocId, setSelectDocId] = useState<string | null>(null)
+  // The slot clicked on a card. Kept so Back from the profile reopens the same document.
+  const [selectSlot, setSelectSlot] = useSessionState<string | null>('documents:slot', null)
   const [search, setSearch] = useSessionState('documents:search', '')
   const [statusFilter, setStatusFilter] = useSessionState<OpportunityStatus | ''>('documents:status', '')
   const [stageFilter, setStageFilter] = useSessionState<AcquisitionStage | ''>('documents:stage', '')
@@ -78,6 +80,7 @@ export function DocumentsPage() {
   const close = () => {
     setSelectedId(null)
     setSelectDocId(null)
+    setSelectSlot(null)
   }
   const requestClose = () => (editorRef.current ? editorRef.current.requestLeave(close) : close())
 
@@ -112,13 +115,24 @@ export function DocumentsPage() {
           {loading && <p className="text-sm text-ink-muted">Loading records…</p>}
           <div ref={gridRef} className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="document-cards">
             {view.rows.map((opp) => (
-              <button
+              <div
                 key={opp.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 data-doc-card
                 data-testid={`document-card-${opp.id}`}
-                onClick={() => setSelectedId(opp.id)}
-                className={`flex h-[124px] min-w-0 flex-col justify-between rounded-xl border bg-surface p-4 text-left shadow-(--shadow-card) transition-shadow hover:shadow-(--shadow-elevated) ${selectedId === opp.id ? 'border-accent ring-2 ring-accent/20' : 'border-border'}`}
+                onClick={() => {
+                  setSelectSlot(null)
+                  setSelectedId(opp.id)
+                }}
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault()
+                    setSelectSlot(null)
+                    setSelectedId(opp.id)
+                  }
+                }}
+                className={`flex h-[124px] min-w-0 cursor-pointer flex-col justify-between rounded-xl border bg-surface p-4 text-left shadow-(--shadow-card) transition-shadow hover:shadow-(--shadow-elevated) ${selectedId === opp.id ? 'border-accent ring-2 ring-accent/20' : 'border-border'}`}
               >
                 <span className="flex min-w-0 items-baseline justify-between gap-2">
                   <span className="min-w-0 font-brand text-lg leading-tight font-bold break-words text-navy-900">{opp.projectName}</span>
@@ -129,14 +143,27 @@ export function DocumentsPage() {
                   {DOCUMENT_SLOT_META.map((slot) => {
                     const available = hasAttachedFile(slotDocument(documents, opp.id, slot.id))
                     return (
-                      <span key={slot.id} className="flex flex-col items-center gap-0.5" title={`${slot.label}${available ? ' — file saved' : ' — empty'}`}>
+                      <button
+                        key={slot.id}
+                        type="button"
+                        className="flex flex-col items-center gap-0.5 rounded-md py-0.5 hover:bg-accent-soft"
+                        title={`${slot.label}${available ? ' — file saved' : ' — empty'}`}
+                        aria-label={`${slot.label} for ${opp.projectName}${available ? ', file saved' : ', empty'}`}
+                        data-testid={`card-slot-${opp.id}-${slot.id}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectDocId(null)
+                          setSelectSlot(slot.id)
+                          setSelectedId(opp.id)
+                        }}
+                      >
                         <SlotPresenceIcon available={available} size="sm" />
                         <span className="text-[9px] font-semibold tracking-wide text-ink-muted">{slot.abbr}</span>
-                      </span>
+                      </button>
                     )
                   })}
                 </span>
-              </button>
+              </div>
             ))}
           </div>
           {!loading && filtered.length === 0 && <p className="text-sm text-ink-muted">No projects match these filters.</p>}
@@ -148,7 +175,7 @@ export function DocumentsPage() {
 
       <SideDrawer open={Boolean(selected)} onRequestClose={requestClose} label="Project documents" width="max-w-[580px]" testId="documents-drawer">
         {selected && (
-          <DocumentWorkspace ref={editorRef} opportunity={selected} initialDocumentId={selectDocId} footerExtra={<ProfileLinkButton opportunityId={selected.id} />} onClose={close} />
+          <DocumentWorkspace key={`${selected.id}:${selectSlot ?? ''}:${selectDocId ?? ''}`} ref={editorRef} opportunity={selected} initialDocumentId={selectDocId} initialSlot={selectSlot} footerExtra={<ProfileLinkButton opportunityId={selected.id} tab="documents" focus={selectSlot ? { slot: selectSlot } : selectDocId ? { doc: selectDocId } : undefined} />} onClose={close} />
         )}
       </SideDrawer>
     </PageShell>

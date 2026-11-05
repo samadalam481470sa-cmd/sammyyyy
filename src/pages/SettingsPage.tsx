@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { useData } from '@/data/DataContext'
 import { InstallAppButton } from '@/components/shared/InstallAppButton'
+import { ExcelImportAction } from '@/components/dashboard/ExcelImportAction'
 import { calendarOwnerLabel } from '@/lib/meetingCalendar'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { SCHEMA_VERSION } from '@/lib/portableDatabase'
@@ -72,11 +73,21 @@ export function SettingsPage() {
           </p>
         </section>
 
+        <section data-testid="settings-excel" className="mt-4 min-w-0 rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)">
+          <h2 className="font-brand text-lg font-bold text-navy-900">Excel Import</h2>
+          <p className="mt-1 mb-4 text-sm leading-relaxed text-ink-muted">
+            Bring opportunities, tasks or contacts in from a spreadsheet. This adds to your records and is separate from the database backup below.
+          </p>
+          <div className="flex flex-col gap-3">
+            <ExcelImportAction />
+          </div>
+        </section>
+
         <section
           data-testid="settings-database"
           className="mt-4 min-w-0 rounded-xl border border-border bg-surface p-5 shadow-(--shadow-card)"
         >
-          <h2 className="font-brand text-lg font-bold text-navy-900">Database</h2>
+          <h2 className="font-brand text-lg font-bold text-navy-900">Database Backup</h2>
           <p data-testid="database-status" className="mt-2 text-sm text-ink">
             Schema version {SCHEMA_VERSION}. This device keeps its own database.
           </p>
@@ -90,11 +101,11 @@ export function SettingsPage() {
               onClick={downloadDatabase}
               className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-navy-900 px-4 text-sm font-semibold text-white hover:bg-navy-800 sm:w-auto"
             >
-              Download database
+              Download database backup
             </button>
             <div className="min-w-0">
               <label htmlFor="import-database" className="text-sm font-medium text-ink">
-                Import database
+                Restore database backup (JSON)
               </label>
               <input
                 id="import-database"

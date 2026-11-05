@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Archive, ArchiveRestore, ArrowRightLeft, FileUp, MessageSquare, RefreshCw, StickyNote } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowRightLeft, FileUp, MessageSquare, RefreshCw, StickyNote, X } from 'lucide-react'
 import type { ActivityItem } from '@/types'
 import type { LucideIcon } from 'lucide-react'
 import { formatRelativeTime } from '@/utils/dashboard'
 import { DrawerHeader, SideDrawer } from '@/components/shared/Overlay'
 import { PeriodFilterControl } from '@/components/shared/PeriodFilterControl'
-import { inPeriod, resolvePeriod, type PeriodFilter } from '@/lib/reports'
+import { SearchBox } from '@/components/shared/PageChrome'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { inPeriod, isLast30, LAST_30_DAYS, resolvePeriod, type PeriodFilter } from '@/lib/reports'
 
 interface RecentActivityProps {
   /** Every retained activity record, newest first. */
@@ -13,6 +15,8 @@ interface RecentActivityProps {
   archived: Set<string>
   onArchive: (id: string) => void
   onRestore: (id: string) => void
+  onArchiveMany: (ids: readonly string[]) => void
+  onRestoreMany: (ids: readonly string[]) => void
   onItemClick?: (item: ActivityItem) => void
   historyOpen: boolean
   onOpenHistory: () => void
@@ -64,16 +68,31 @@ function ActivityRow({ item, onItemClick, action }: { item: ActivityItem; onItem
  * date filter (default rolling last 30 days) and Archive / Restore. Archive only hides an entry
  * from the feed. The underlying activity and Security change history are never changed or deleted.
  */
-export function RecentActivity({ allItems, archived, onArchive, onRestore, onItemClick, historyOpen, onOpenHistory, onCloseHistory }: RecentActivityProps) {
-  const [period, setPeriod] = useState<PeriodFilter>({ kind: 'last30' })
+export function RecentActivity({ allItems, archived, onArchive, onRestore, onArchiveMany, onRestoreMany, onItemClick, historyOpen, onOpenHistory, onCloseHistory }: RecentActivityProps) {
+  const [period, setPeriod] = useState<PeriodFilter>(LAST_30_DAYS)
   const [showArchived, setShowArchived] = useState(false)
+  const [search, setSearch] = useState('')
+  const [confirm, setConfirm] = useState<{ kind: 'one'; item: ActivityItem } | { kind: 'all'; ids: string[] } | null>(null)
   const feed = useMemo(() => allItems.filter((i) => !archived.has(i.id)), [allItems, archived])
   const resolved = resolvePeriod(period)
-  const drawerRows = useMemo(
-    () => allItems.filter((i) => inPeriod(i.timestamp, resolved) && (showArchived ? archived.has(i.id) : !archived.has(i.id))),
-    [allItems, archived, resolved, showArchived],
-  )
-  const btn = 'inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-ink-muted hover:text-ink'
+  // The filtered result set: bulk actions use exactly these ids, including rows scrolled out of view.
+  const drawerRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return allItems.filter(
+      (i) =>
+        inPeriod(i.timestamp, resolved) &&
+        (showArchived ? archived.has(i.id) : !archived.has(i.id)) &&
+        (!q || `${i.actor ?? ''} ${i.message} ${i.projectName ?? ''}`.toLowerCase().includes(q)),
+    )
+  }, [allItems, archived, resolved, showArchived, search])
+  const atDefaults = isLast30(period) && !search
+  const clearFilter = () => {
+    setPeriod(LAST_30_DAYS)
+    setSearch('')
+  }
+  const confirmBulk = confirm?.kind === 'all'
+  const noun = (n: number) => `${n} activity item${n === 1 ? '' : 's'}`
+  const btn = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-ink-muted hover:text-ink disabled:opacity-40'
 
   return (
     <>
@@ -98,14 +117,34 @@ export function RecentActivity({ allItems, archived, onArchive, onRestore, onIte
       <SideDrawer open={historyOpen} onRequestClose={onCloseHistory} label="Recent activity" width="max-w-[560px]" testId="activity-drawer">
         <DrawerHeader title="Recent Activity" subtitle="Archive hides an entry from the feed. Records and the security change history are kept." onClose={onCloseHistory} closeLabel="Close activity" />
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-2.5">
-          <PeriodFilterControl value={period} onChange={setPeriod} allowLast30 testId="activity-period" />
+          <div className="flex flex-wrap items-center gap-2">
+            <PeriodFilterControl value={period} onChange={setPeriod} allowLast30 testId="activity-period" />
+            <button type="button" onClick={clearFilter} disabled={atDefaults} className="inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-ink-muted hover:text-ink disabled:opacity-40" data-testid="activity-clear-filter">
+              <X className="h-3.5 w-3.5" /> Clear filter
+            </button>
+          </div>
           <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived ({archived.size})
           </label>
         </div>
-        <p className="shrink-0 px-5 pt-2 text-[11px] text-ink-subtle">
-          {drawerRows.length} {showArchived ? 'archived ' : ''}entr{drawerRows.length === 1 ? 'y' : 'ies'} · {resolved.label}. Activity from other people’s devices appears here once the shared backend is in place.
-        </p>
+        <div className="shrink-0 border-b border-border px-5 py-2">
+          <SearchBox value={search} onChange={setSearch} placeholder="Search activity" testId="activity-search" width="w-full" />
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-2">
+          <p className="min-w-0 text-[11px] text-ink-subtle" data-testid="activity-count">
+            {drawerRows.length} {showArchived ? 'archived ' : ''}entr{drawerRows.length === 1 ? 'y' : 'ies'} · {resolved.label}
+          </p>
+          <button
+            type="button"
+            className={btn}
+            disabled={drawerRows.length === 0}
+            onClick={() => setConfirm({ kind: 'all', ids: drawerRows.map((row) => row.id) })}
+            data-testid={showArchived ? 'activity-restore-all' : 'activity-archive-all'}
+          >
+            {showArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+            {showArchived ? 'Restore All' : 'Archive All'}
+          </button>
+        </div>
         <ul className="custom-scroll min-h-0 flex-1 divide-y divide-border overflow-y-auto">
           {drawerRows.length === 0 && <li className="px-5 py-8 text-sm text-ink-muted">Nothing in this period. Choose All Time to see every retained record.</li>}
           {drawerRows.map((item) => (
@@ -119,7 +158,7 @@ export function RecentActivity({ allItems, archived, onArchive, onRestore, onIte
                     <ArchiveRestore className="h-3.5 w-3.5" /> Restore
                   </button>
                 ) : (
-                  <button type="button" className={btn} onClick={() => onArchive(item.id)} title="Hide from the feed (record is kept)" data-testid="archive-activity">
+                  <button type="button" className={btn} onClick={() => setConfirm({ kind: 'one', item })} title="Hide from the feed (record is kept)" data-testid="archive-activity">
                     <Archive className="h-3.5 w-3.5" /> Archive
                   </button>
                 )
@@ -128,6 +167,23 @@ export function RecentActivity({ allItems, archived, onArchive, onRestore, onIte
           ))}
         </ul>
       </SideDrawer>
+      <ConfirmDialog
+        open={confirm != null}
+        title={confirmBulk ? (showArchived ? 'Restore all matching entries?' : 'Archive all matching entries?') : 'Archive this activity entry?'}
+        message={
+          confirm?.kind === 'all'
+            ? `${showArchived ? 'Restore' : 'Archive'} ${noun(confirm.ids.length)} matching the current filter (${resolved.label}${search.trim() ? `, “${search.trim()}”` : ''})? Entries outside this filter do not change. Archiving only hides an entry from the feed; the record and the security change history are kept.`
+            : 'This hides the entry from the feed. The record and the security change history are kept, and you can restore it later.'
+        }
+        confirmLabel={confirmBulk ? (showArchived ? 'Restore All' : 'Archive All') : 'Archive'}
+        tone="default"
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (confirm?.kind === 'one') onArchive(confirm.item.id)
+          else if (confirm?.kind === 'all') (showArchived ? onRestoreMany : onArchiveMany)(confirm.ids)
+          setConfirm(null)
+        }}
+      />
     </>
   )
 }

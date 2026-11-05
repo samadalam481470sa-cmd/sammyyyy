@@ -7,6 +7,8 @@ const EDIT_KEYS = [
   'status',
   'stage',
   'dealLead',
+  'primaryLeadId',
+  'additionalLeadIds',
   'sourceType',
   'sourceName',
   'specialty',
@@ -29,6 +31,8 @@ export interface OpportunityDraft {
   status: Opportunity['status']
   stage: Opportunity['stage']
   dealLead: string
+  primaryLeadId: string | null
+  additionalLeadIds: string[]
   sourceType: Opportunity['sourceType']
   sourceName: string
   specialty: string
@@ -53,6 +57,8 @@ export function snapshotOpportunityDraft(record: Opportunity): OpportunityDraft 
     status: record.status,
     stage: record.stage,
     dealLead: record.dealLead,
+    primaryLeadId: record.primaryLeadId ?? null,
+    additionalLeadIds: [...(record.additionalLeadIds ?? [])],
     sourceType: record.sourceType,
     sourceName: record.sourceName,
     specialty: record.specialty,
@@ -97,6 +103,10 @@ export function opportunityDraftPatch(
       const left = (saved.outstandingItems ?? []).join('\n')
       const right = (draft.outstandingItems ?? []).join('\n')
       if (left !== right) patch.outstandingItems = [...(draft.outstandingItems ?? [])]
+      continue
+    }
+    if (key === 'additionalLeadIds') {
+      if (saved.additionalLeadIds.join('\n') !== draft.additionalLeadIds.join('\n')) patch.additionalLeadIds = [...draft.additionalLeadIds]
       continue
     }
     if (saved[key] !== draft[key]) {

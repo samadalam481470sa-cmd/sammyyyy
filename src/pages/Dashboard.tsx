@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { TopHeader } from '@/components/layout/TopHeader'
 import { StatusFilter } from '@/components/dashboard/StatusFilter'
 import { KPIRow } from '@/components/dashboard/KPIRow'
@@ -10,8 +10,6 @@ import { AttentionAlerts } from '@/components/dashboard/AttentionAlerts'
 import { RecentActivity } from '@/components/dashboard/RecentActivity'
 import { QuickActions } from '@/components/dashboard/QuickActions'
 import { NewportAI } from '@/components/dashboard/NewportAI'
-import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
-import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { OpportunityDrawer } from '@/components/dashboard/OpportunityDrawer'
 import { NewTaskDrawer } from '@/components/tasks/NewTaskDrawer'
 import { NewRelationshipDrawer } from '@/components/relationships/NewRelationshipDrawer'
@@ -19,11 +17,9 @@ import { OpportunityCreateForm } from '@/components/shared/OpportunityCreateForm
 import { DEMO_DISCLAIMER } from '@/data/constants'
 import { useData } from '@/data/DataContext'
 import { useAuth } from '@/auth/AuthContext'
-import { isLocalPersistence } from '@/lib/persistenceMode'
-import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import { sessionOwnerKey } from '@/lib/ownerKey'
-import { mockContacts } from '@/data/mockModules'
-import type { ImportRow } from '@/lib/excelImport'
+import { NewDealLeadModal } from '@/components/dealLeads/NewDealLeadModal'
+import { useDealLeads } from '@/hooks/useDealLeads'
 import type {
   AcquisitionStage,
   ActivityItem,
@@ -38,7 +34,7 @@ import {
   hasActiveFilters,
 } from '@/utils/dashboard'
 import { attentionRows, rankOpportunitiesByNextAction, uniqueAttentionCount } from '@/lib/attention'
-import { useRestorableSelection, useRestoringFromProfile } from '@/hooks/useSessionState'
+import { useRestorableSelection, useRestoringFromProfile, useSessionState } from '@/hooks/useSessionState'
 import { useActivityArchive } from '@/lib/activityArchive'
 import { rankWeekPriorityTasks } from '@/lib/taskSort'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -55,15 +51,24 @@ export function Dashboard() {
     tasks,
     documents,
     activity,
-    createOpportunity,
-    saveOpportunity,
-    createTask,
   } = useData()
   const { user } = useAuth()
   const owner = sessionOwnerKey(user)
   const navigate = useNavigate()
-  const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
+  const [filters, setFilters] = useSessionState<DashboardFilters>('dashboard:filters', DEFAULT_FILTERS)
   const [selectedId, setSelectedId] = useRestorableSelection('dashboard')
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const resetKey = (location.state as { resetDashboard?: number } | null)?.resetDashboard
+  // The logo: back to All Deals with no stale selection, also when already on the Dashboard.
+  useEffect(() => {
+    if (!resetKey || navigationType === 'POP') return
+    setFilters(DEFAULT_FILTERS)
+    setSelectedId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey])
+  const roster = useDealLeads()
+  const [leadModal, setLeadModal] = useState<'create' | 'self' | null>(null)
   const selected = selectedId ? (opportunities.find((o) => o.id === selectedId) ?? null) : null
   const setSelected = (opp: Opportunity | null) => setSelectedId(opp?.id ?? null)
   const activityArchive = useActivityArchive(owner)
@@ -92,8 +97,6 @@ export function Dashboard() {
   const [taskOpen, setTaskOpen] = useState(false)
   const [relationshipOpen, setRelationshipOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [excelOpen, setExcelOpen] = useState(false)
-  const { addSheet } = useSpreadsheetColumns()
   const [createOpen, setCreateOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityNotice, setActivityNotice] = useState<string | null>(null)
@@ -102,14 +105,6 @@ export function Dashboard() {
     setToast(message)
     window.setTimeout(() => setToast(null), 2800)
   }, [])
-
-  const keepSpreadsheet = useCallback(
-    (grid: Parameters<typeof addSheet>[0], sourceName: string) => {
-      addSheet(grid, sourceName)
-      showToast('Spreadsheet column added in the sidebar')
-    },
-    [addSheet, showToast],
-  )
 
   const filtered = useMemo(
     () => filterDashboardOpportunities(opportunities, filters),
@@ -138,7 +133,7 @@ export function Dashboard() {
   )
 
   // Same eligibility as Tasks & Follow-Ups (paused tasks of inactive deals never appear here).
-  const weekTasks = useMemo(() => rankWeekPriorityTasks(tasks, new Date(), opportunities).slice(0, 6), [tasks, opportunities])
+  const weekTasks = useMemo(() => rankWeekPriorityTasks(tasks, new Date(), opportunities).slice(0, 7), [tasks, opportunities])
 
   const allActivity = useMemo(
     () => [...activity].sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
@@ -218,7 +213,7 @@ export function Dashboard() {
         onNewOpportunity={() => setCreateOpen(true)}
       />
 
-      <main data-testid="crm-dashboard" className="flex-1 px-6 py-6 lg:px-8">
+      <main data-testid="crm-dashboard" className="min-w-0 flex-1 px-6 py-6 lg:px-8">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-5">
           <StatusFilter
             filters={filters}
@@ -238,7 +233,7 @@ export function Dashboard() {
 
           <PriorityDealsTable opportunities={tableRows} onSelect={setSelected} />
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
             <PriorityTasks
               tasks={weekTasks}
               onProjectClick={openById}
@@ -247,13 +242,15 @@ export function Dashboard() {
             <AttentionAlerts rows={attention} onProjectClick={openById} onViewAll={() => void navigate('/opportunities?attention=1')} />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
             <div className="lg:col-span-1">
               <RecentActivity
                 allItems={allActivity}
                 archived={activityArchive.archived}
                 onArchive={activityArchive.archive}
                 onRestore={activityArchive.restore}
+                onArchiveMany={activityArchive.archiveMany}
+                onRestoreMany={activityArchive.restoreMany}
                 onItemClick={openActivity}
                 historyOpen={activityOpen}
                 onOpenHistory={() => setActivityOpen(true)}
@@ -262,9 +259,12 @@ export function Dashboard() {
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
+                leadLabel={roster.isAdmin ? 'New Deal Lead' : roster.own ? 'Edit My Deal Lead Profile' : 'Add Myself as Deal Lead'}
                 onAction={(action) => {
-                  if (action === 'import-excel') {
-                    setExcelOpen(true)
+                  if (action === 'deal-lead') {
+                    if (roster.isAdmin) setLeadModal('create')
+                    else if (roster.own || roster.claimable) void navigate('/deal-leads?new=self')
+                    else setLeadModal('self')
                     return
                   }
                   if (action === 'new-opportunity') {
@@ -294,55 +294,7 @@ export function Dashboard() {
         onCreated={(opp) => showToast(`Created ${opp.projectName}`)}
       />
 
-      <ExcelImportModal
-        open={excelOpen}
-        onClose={() => setExcelOpen(false)}
-        opportunities={opportunities}
-        onCreateOpportunities={async (drafts) => {
-          for (const d of drafts) {
-            await createOpportunity(d)
-          }
-          showToast(`Imported ${drafts.length} opportunit${drafts.length === 1 ? 'y' : 'ies'}`)
-        }}
-        onUpdateOpportunity={async (id, patch) => {
-          await saveOpportunity(id, patch)
-          showToast('Opportunity autofilled from Excel')
-        }}
-        onImportTasks={async (rows: ImportRow[]) => {
-          for (const [i, r] of rows.entries()) {
-            await createTask({
-              action: String(r.action ?? r.nextAction ?? r.name ?? `Imported task ${i + 1}`),
-              priority: String(r.priority ?? 'B'),
-              owner: String(r.dealLead ?? r.owner ?? ''),
-              projectName: String(r.projectName ?? ''),
-              dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
-              status: 'Open',
-              notes: String(r.notes ?? 'Excel import'),
-            })
-          }
-        }}
-        onKeepAsColumn={keepSpreadsheet}
-        onImportContacts={async (rows: ImportRow[]) => {
-          if (isLocalPersistence()) {
-            const existing = loadOwnedCollection('contacts', owner, mockContacts)
-            const mapped = rows.map((r, i) => ({
-              id: `con_import_${Date.now()}_${i}`,
-              name: String(r.name ?? r.entityName ?? `Contact ${i + 1}`),
-              title: String(r.title ?? ''),
-              company: String(r.company ?? r.entityName ?? ''),
-              category: 'Other',
-              email: String(r.email ?? ''),
-              phone: String(r.phone ?? ''),
-              opportunityId: null,
-              projectName: String(r.projectName ?? ''),
-              status: 'Active',
-              lastContactDate: null,
-              notes: String(r.notes ?? 'Excel import'),
-            }))
-            saveOwnedCollection('contacts', owner, [...mapped, ...existing])
-          }
-        }}
-      />
+      <NewDealLeadModal open={leadModal != null} mode={leadModal ?? 'self'} roster={roster} onClose={() => setLeadModal(null)} onCreated={(lead) => showToast(`Added deal lead: ${lead.name}`)} />
 
       <OpportunityDrawer opportunity={selected} onClose={() => setSelected(null)} />
 

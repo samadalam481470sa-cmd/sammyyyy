@@ -32,7 +32,8 @@ import { useData } from '@/data/DataContext'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { CompletionConfirmDialog } from '@/components/shared/CompletionConfirmDialog'
 import { DrawerHeader } from '@/components/shared/Overlay'
-import { OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
+import { HeaderWarningChip, OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
+import { LeadTeamFields } from '@/components/opportunities/LeadTeamFields'
 import { todayDateInput } from '@/lib/calendarDate'
 import { formatDate } from '@/utils/dashboard'
 
@@ -70,7 +71,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const [confirmDelete, setConfirmDelete] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [completionPrompt, setCompletionPrompt] = useState(false)
-    const { tasks, documents, deleteOpportunity, users } = useData()
+    const { tasks, documents, deleteOpportunity } = useData()
     const deletingRef = useRef(false)
 
     const dirty = !opportunityDraftsEqual(saved, draft)
@@ -211,7 +212,6 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
       setMessage(null)
     }
 
-    const leadOptions = [...new Set([...users.map((u) => u.name), draft.dealLead].filter((n) => n && n.trim()))].sort()
     const closeButton = onClose ? () => requestLeave(onClose) : undefined
 
     return (
@@ -223,6 +223,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
             subtitle={opportunity.entityName}
             onClose={closeButton}
             closeLabel="Close opportunity editor"
+            actions={<HeaderWarningChip opportunity={opportunity} tasks={tasks} />}
           >
             <OpportunityHeaderDetails opportunity={opportunity} tasks={tasks} />
           </DrawerHeader>
@@ -297,16 +298,13 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
               <Field label="Company Name">
                 <input className="field-input" value={draft.entityName} onChange={(e) => setField('entityName', e.target.value)} />
               </Field>
-              <Field label="Deal lead">
-                <select className="field-input" value={draft.dealLead} onChange={(e) => setField('dealLead', e.target.value)} data-testid="editor-deal-lead">
-                  <option value="">Unassigned</option>
-                  {leadOptions.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <LeadTeamFields
+                value={{ dealLead: draft.dealLead, primaryLeadId: draft.primaryLeadId, additionalLeadIds: draft.additionalLeadIds }}
+                onChange={(team) => {
+                  setDraft((prev) => ({ ...prev, dealLead: team.dealLead, primaryLeadId: team.primaryLeadId ?? null, additionalLeadIds: team.additionalLeadIds ?? [] }))
+                  setMessage(null)
+                }}
+              />
               <div className="grid grid-cols-3 gap-3">
                 <Field label="NWP">
                   <input type="number" className="field-input" value={draft.nwp} onChange={(e) => setField('nwp', Number(e.target.value))} />

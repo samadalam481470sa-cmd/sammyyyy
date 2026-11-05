@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, FileText, Plus } from 'lucide-react'
 import { SideDrawer } from '@/components/shared/Overlay'
@@ -9,6 +9,8 @@ import { useCrmMeetings } from '@/hooks/useCrmMeetings'
 import { meetingTitle } from '@/types/crmMeeting'
 import { priorityChipClass } from '@/lib/priorityStyles'
 import { useData } from '@/data/DataContext'
+import { useDealLeads } from '@/hooks/useDealLeads'
+import { badgeClass, stageBadge, statusBadge } from '@/utils/badges'
 import { mockContacts, type ContactRecord, type TaskRecord } from '@/data/mockModules'
 import { useResource } from '@/hooks/useResource'
 import { primaryDealWarning } from '@/lib/attention'
@@ -80,8 +82,17 @@ export function OpportunityProfilePage() {
   const tab: TabId = TABS.some((row) => row.id === tabParam) ? (tabParam as TabId) : 'overview'
   const [taskId, setTaskId] = useState<string | null>(null)
   const [contactId, setContactId] = useState<string | null>(null)
-  const [docId, setDocId] = useState<string | null>(null)
-  const [docWorkspaceKey, setDocWorkspaceKey] = useState(0)
+  // Which document the right drawer shows: an exact slot, a saved custom document, or the new form.
+  const [docOpen, setDocOpen] = useState<{ slot?: string; id?: string; create?: boolean } | null>(null)
+  const { leads } = useDealLeads()
+  // Arriving from a task, document or meeting editor: that record is highlighted on its tab.
+  const focusTask = params.get('task')
+  const focusSlot = params.get('slot')
+  const focusDoc = params.get('doc')
+  const focusMeeting = params.get('meeting')
+  useEffect(() => {
+    document.querySelector('[data-focused-row="true"]')?.scrollIntoView({ block: 'center' })
+  }, [tabParam, focusTask, focusSlot, focusDoc, focusMeeting])
   const [newTask, setNewTask] = useState(false)
   const [newContact, setNewContact] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -99,6 +110,7 @@ export function OpportunityProfilePage() {
       setTaskId(null)
       setContactId(null)
       setNotice(null)
+      setDocOpen(null)
       const nextParams = new URLSearchParams(params)
       if (next === 'overview') nextParams.delete('tab')
       else nextParams.set('tab', next)
@@ -159,16 +171,16 @@ export function OpportunityProfilePage() {
     if (type === 'document' && id) {
       if (!documents.some((doc) => doc.id === id)) return setNotice('That document was removed and is no longer available.')
       setTab('documents')
-      setDocId(id)
-      setDocWorkspaceKey((k) => k + 1)
+      setDocOpen({ id })
       return
     }
     setTab('overview')
   }
 
-  const pausedDeal = !['Active', 'Pending'].includes(opportunity.status)
+  const pausedDeal = !['Active', 'Pending', 'Completed'].includes(opportunity.status)
   const panel_ = 'h-full min-h-[420px] overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card) lg:min-h-0'
   const conflict = statusStageConflict(opportunity)
+  const additionalLeadNames = (opportunity.additionalLeadIds ?? []).map((id) => leads.find((row) => row.id === id)?.name).filter(Boolean) as string[]
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-none flex-col overflow-y-auto bg-canvas lg:overflow-hidden" data-testid="opportunity-profile">
@@ -176,32 +188,42 @@ export function OpportunityProfilePage() {
         <button type="button" onClick={goBack} className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted hover:text-ink" data-testid="profile-back">
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </button>
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Identity on the left. On the right the dropdown pair stays at the same spot on every deal;
+            the Needs Attention slot beside it has a fixed size, whether or not a callout is showing. */}
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold tracking-[0.12em] text-accent uppercase">{dealId}</p>
             <h1 className="flex items-center gap-2 font-brand text-2xl leading-tight font-bold text-navy-900">
-              {opportunity.projectName}
+              <span className="truncate" title={opportunity.projectName}>{opportunity.projectName}</span>
               <WarningTriangle warning={warning} className="mt-1" />
             </h1>
-            <p className="text-sm text-ink-muted">
-              {opportunity.entityName} · Deal lead: <span className={`font-semibold ${opportunity.dealLead ? 'text-ink' : 'text-[var(--color-danger)]'}`}>{opportunity.dealLead || 'Unassigned'}</span>
-            </p>
-            <p className="mt-0.5 text-[11px] text-ink-subtle" data-testid="profile-dates">
+            <p className="truncate text-sm text-ink-muted" title={opportunity.entityName}>{opportunity.entityName}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2" data-testid="profile-identity-badges">
+              <span className={badgeClass(statusBadge(opportunity.status))} data-testid="profile-status-badge">{opportunity.status}</span>
+              <span className={badgeClass(stageBadge(opportunity.stage))} data-testid="profile-stage-badge">{opportunity.stage}</span>
+              <span className="text-xs text-ink-muted" data-testid="profile-deal-lead" title={additionalLeadNames.length ? `Additional: ${additionalLeadNames.join(', ')}` : undefined}>
+                Deal lead: <span className={`font-semibold ${opportunity.dealLead ? 'text-ink' : 'text-[#946200]'}`}>{opportunity.dealLead || 'Unassigned'}</span>
+                {additionalLeadNames.length > 0 && <span> · + {additionalLeadNames.join(', ')}</span>}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-ink-subtle" data-testid="profile-dates">
               Created {opportunity.createdAt ? formatDate(opportunity.createdAt) : 'not recorded'} · Updated {formatDate(opportunity.updatedAt ?? opportunity.lastActivityDate ?? null)}
               {opportunity.status === 'Completed' && opportunity.closedAt ? ` · Legally closed ${formatDate(opportunity.closedAt)}` : ''}
               {opportunity.seedDates ? ' · demo dates on fictional record' : ''}
             </p>
           </div>
-          <div className="flex flex-wrap items-start gap-3">
+          <div className="flex flex-wrap items-center gap-3 lg:flex-nowrap">
+            <div className="h-[64px] w-full overflow-hidden sm:w-64" data-testid="profile-attention-slot">
+              {(warning || opportunity.needsAttention) && (
+                <div className={`h-full rounded-lg border px-3 py-1.5 text-xs ${warning?.level === 'navy' ? 'border-accent-muted bg-accent-soft text-navy-900' : warning?.level === 'red' ? 'border-attention-border bg-[#fdecea] text-[var(--color-danger)]' : 'border-[#f0e2bd] bg-[#fdf7e7] text-[#8a5a00]'}`} data-testid="profile-attention" title={warning?.detail}>
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Needs Attention
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-ink">{warning?.detail ?? opportunity.attentionReasons.join(', ')}</p>
+                </div>
+              )}
+            </div>
             <StatusStageControls opportunity={opportunity} />
-            {(warning || opportunity.needsAttention) && (
-              <div className={`max-w-xs rounded-lg border px-3 py-1.5 text-xs ${warning?.level === 'navy' ? 'border-accent-muted bg-accent-soft text-navy-900' : 'border-attention-border bg-[#fdecea] text-[var(--color-danger)]'}`} data-testid="profile-attention">
-                <p className="flex items-center gap-1.5 font-semibold">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Needs Attention
-                </p>
-                <p className="mt-0.5 text-ink">{warning?.detail ?? opportunity.attentionReasons.join(', ')}</p>
-              </div>
-            )}
           </div>
         </div>
         {conflict && (
@@ -209,7 +231,7 @@ export function OpportunityProfilePage() {
             {conflict}
           </p>
         )}
-        <dl className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {[
             ['NWP', formatCurrency(opportunity.nwp)],
             ['Net Revenue', formatCurrency(opportunity.netRevenue)],
@@ -225,7 +247,7 @@ export function OpportunityProfilePage() {
             </div>
           ))}
         </dl>
-        <nav className="mt-2 flex flex-wrap gap-1" aria-label="Profile sections">
+        <nav className="mt-4 flex flex-wrap gap-1" aria-label="Profile sections">
           {TABS.map((row) => (
             <button
               key={row.id}
@@ -280,13 +302,13 @@ export function OpportunityProfilePage() {
             <Card title={`Open tasks (${openTasks.length})`} action={<button type="button" className={addButton} onClick={() => guarded(() => setNewTask(true))} data-testid="profile-new-task"><Plus className="h-4 w-4" /> New Task</button>}>
               {pausedDeal && openTasks.length > 0 && (
                 <p className="border-b border-border bg-canvas px-5 py-2 text-xs text-ink-muted" data-testid="paused-note">
-                  Paused — this deal is {opportunity.status}. Its unfinished tasks stay here unchanged, are hidden from Tasks & Follow-Ups and the Dashboard, and return there if the deal becomes Active or Pending.
+                  Paused — this deal is {opportunity.status}. Its unfinished tasks stay here unchanged, are hidden from Tasks & Follow-Ups and the Dashboard, and return there if the deal becomes Active, Pending or Completed.
                 </p>
               )}
-              <TaskTable rows={openTasks} selectedId={taskId} paused={pausedDeal} drivingId={opportunity.nextActionTaskId ?? null} onOpen={(id) => setTaskId(id)} empty="No open tasks for this opportunity." />
+              <TaskTable rows={openTasks} selectedId={taskId ?? focusTask} paused={pausedDeal} drivingId={opportunity.nextActionTaskId ?? null} onOpen={(id) => setTaskId(id)} empty="No open tasks for this opportunity." />
             </Card>
             <Card title={`Completed & archived (${doneTasks.length})`}>
-              <TaskTable rows={doneTasks} selectedId={taskId} onOpen={(id) => setTaskId(id)} empty="No completed tasks yet." />
+              <TaskTable rows={doneTasks} selectedId={taskId ?? focusTask} onOpen={(id) => setTaskId(id)} empty="No completed tasks yet." />
             </Card>
           </div>
         )}
@@ -336,23 +358,19 @@ export function OpportunityProfilePage() {
         )}
 
         {tab === 'documents' && (
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[minmax(0,1fr)]">
-            <div className="custom-scroll min-h-0 overflow-y-auto">
-            <Card title="Documents">
+          <div className="custom-scroll min-h-0 flex-1 overflow-y-auto" data-testid="profile-documents">
+            <Card title="Documents" action={<button type="button" className={addButton} onClick={() => setDocOpen({ create: true })} data-testid="profile-add-document"><Plus className="h-4 w-4" /> Add New Document</button>}>
               <ul className="divide-y divide-border">
                 {DOCUMENT_SLOT_META.map((slot) => {
                   const doc = slotDocument(relatedDocs, opportunityId, slot.id)
+                  const focused = focusSlot === slot.id || (doc && focusDoc === doc.id)
                   return (
                     <li key={slot.id}>
-                      <button
-                        type="button"
-                        onClick={() => guarded(() => { setDocId(doc?.id ?? null); setDocWorkspaceKey((k) => k + 1) })}
-                        className={`flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30 ${doc && docId === doc.id ? 'bg-accent-soft/60' : ''}`}
-                      >
+                      <button type="button" data-testid={`profile-doc-slot-${slot.id}`} data-focused-row={focused ? 'true' : undefined} onClick={() => setDocOpen({ slot: slot.id })} className={`flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30 ${focused ? 'bg-accent-soft/60' : ''}`}>
                         <SlotPresenceIcon available={hasAttachedFile(doc)} size="sm" />
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-semibold text-navy-900">{slot.label}</span>
-                          <span className="block truncate text-xs text-ink-muted">{doc ? `${doc.status}${doc.fileName ? ` · ${doc.fileName}` : ''}` : 'Empty slot'}</span>
+                          <span className="block truncate text-xs text-ink-muted">{doc ? `${doc.status}${doc.fileName ? ` · ${doc.fileName}` : ''}` : 'Empty slot — click to add a file'}</span>
                         </span>
                       </button>
                     </li>
@@ -360,11 +378,7 @@ export function OpportunityProfilePage() {
                 })}
                 {customDocs.map((doc) => (
                   <li key={doc.id}>
-                    <button
-                      type="button"
-                      onClick={() => guarded(() => { setDocId(doc.id); setDocWorkspaceKey((k) => k + 1) })}
-                      className={`flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30 ${docId === doc.id ? 'bg-accent-soft/60' : ''}`}
-                    >
+                    <button type="button" data-focused-row={focusDoc === doc.id ? 'true' : undefined} onClick={() => setDocOpen({ id: doc.id })} className={`flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30 ${focusDoc === doc.id ? 'bg-accent-soft/60' : ''}`}>
                       <FileText className="h-4 w-4 text-navy-900" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-navy-900">{doc.name || doc.docType}</span>
@@ -374,12 +388,7 @@ export function OpportunityProfilePage() {
                   </li>
                 ))}
               </ul>
-              <p className="border-t border-border px-5 py-3 text-xs text-ink-muted">Open, upload, or add documents in the workspace. Use “Add New Document” there for custom types.</p>
             </Card>
-            </div>
-            <aside className={panel_}>
-              <DocumentWorkspace key={docWorkspaceKey} ref={panel} opportunity={opportunity} initialDocumentId={docId} hideClose onClose={() => { setDocId(null); setDocWorkspaceKey((k) => k + 1) }} />
-            </aside>
           </div>
         )}
 
@@ -393,7 +402,7 @@ export function OpportunityProfilePage() {
                 <ul className="divide-y divide-border" data-testid="profile-meetings">
                   {myMeetings.map((m) => (
                     <li key={m.id}>
-                      <button type="button" onClick={() => setMeetingId(m.id)} className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30">
+                      <button type="button" data-focused-row={focusMeeting === m.id ? 'true' : undefined} onClick={() => setMeetingId(m.id)} className={`flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-accent-soft/30 ${focusMeeting === m.id ? 'bg-accent-soft/60' : ''}`}>
                         <span className="w-24 shrink-0 text-xs text-ink-muted">{new Date(m.start).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-navy-900">{meetingTitle(m)}</span>
@@ -442,6 +451,9 @@ export function OpportunityProfilePage() {
         )}
       </main>
 
+      <SideDrawer open={docOpen != null} onRequestClose={() => (panel.current ? panel.current.requestLeave(() => setDocOpen(null)) : setDocOpen(null))} label="Project documents" width="max-w-[580px]" testId="profile-document-drawer">
+        {docOpen && <DocumentWorkspace ref={panel} opportunity={opportunity} initialSlot={docOpen.slot} initialDocumentId={docOpen.id} startCreating={docOpen.create} onClose={() => setDocOpen(null)} />}
+      </SideDrawer>
       <SideDrawer open={Boolean(selectedTask)} onRequestClose={() => (panel.current ? panel.current.requestLeave(() => setTaskId(null)) : setTaskId(null))} label="Edit task" testId="profile-task-drawer">
         {selectedTask && <TaskEditor ref={panel} mode="existing" task={selectedTask} onClose={() => setTaskId(null)} onDeleted={() => setTaskId(null)} />}
       </SideDrawer>
@@ -475,6 +487,7 @@ function TaskTable({ rows, selectedId, onOpen, empty, drivingId = null, paused =
             key={task.id}
             tabIndex={0}
             aria-selected={selectedId === task.id}
+            data-focused-row={selectedId === task.id ? 'true' : undefined}
             onClick={() => onOpen(task.id)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') onOpen(task.id)

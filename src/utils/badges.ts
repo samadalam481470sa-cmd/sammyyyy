@@ -24,15 +24,15 @@ export const STAGE_BADGE: Record<AcquisitionStage, string> = {
   Closing: 'bg-emerald-100 text-emerald-900 border border-emerald-300',
 }
 
-/** Restrained chart colors per status (Reports). */
+/** Chart colors with the same meaning as the status badges: green, blue, teal, gray, muted red, muted amber, dark neutral. */
 export const STATUS_CHART_COLORS: Record<string, string> = {
-  Active: '#0b1f3a',
-  Pending: '#3d7eb8',
+  Active: '#3f9d6b',
+  Pending: '#4a90c9',
+  Completed: '#2a9d8f',
   Inactive: '#a3adbd',
-  Closed: '#5a6577',
   Declined: '#c0675c',
   Withdrew: '#d2a058',
-  Completed: '#2f8f83',
+  Closed: '#5a6577',
 }
 
 export function statusBadge(status: string): string {

@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, FileText, Link2, Loader2, Plus, Video, X } from 'lucide-react'
 import { useOutlookCalendar } from '@/hooks/useOutlookCalendar'
+import { useSessionState } from '@/hooks/useSessionState'
 import { useCrmMeetings } from '@/hooks/useCrmMeetings'
 import { useData } from '@/data/DataContext'
 import { MonthDots, monthRange } from '@/components/meetings/MonthDots'
@@ -63,9 +64,14 @@ export function MeetingsPage() {
   const navigate = useNavigate()
   const { opportunities } = useData()
   const api = useCrmMeetings()
-  const [anchor, setAnchor] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [selected, setSelected] = useState<CrmMeeting | null>(null)
+  // Fresh visits start on this month with nothing selected; Back from Meeting History or a profile restores all three.
+  const [anchorIso, setAnchorIso] = useSessionState('meetings:anchor', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
+  const anchor = useMemo(() => new Date(anchorIso), [anchorIso])
+  const [selectedDay, setSelectedDay] = useSessionState<string | null>('meetings:day', null)
+  // A saved meeting is kept by id so its transcript stays out of session storage; an Outlook-only one keeps its small snapshot.
+  const [selectedRef, setSelectedRef] = useSessionState<{ id: string; snapshot: CrmMeeting | null } | null>('meetings:selected', null)
+  const selected = selectedRef ? (api.meetings.find((m) => m.id === selectedRef.id) ?? selectedRef.snapshot) : null
+  const setSelected = (meeting: CrmMeeting | null) => setSelectedRef(meeting ? { id: meeting.id, snapshot: api.meetings.some((m) => m.id === meeting.id) ? null : meeting } : null)
   const [adding, setAdding] = useState(false)
   const [allUpcoming, setAllUpcoming] = useState(false)
   const { from, to } = useMemo(() => monthRange(anchor), [anchor])
@@ -118,7 +124,7 @@ export function MeetingsPage() {
             events={month.events}
             selectedDay={selectedDay}
             onSelectDay={(day) => setSelectedDay(day === selectedDay ? null : day)}
-            onMove={(step) => setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + step, 1))}
+            onMove={(step) => setAnchorIso(new Date(anchor.getFullYear(), anchor.getMonth() + step, 1).toISOString())}
             compact
           />
         </section>

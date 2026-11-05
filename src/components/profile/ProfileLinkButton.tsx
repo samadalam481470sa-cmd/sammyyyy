@@ -8,6 +8,10 @@ interface ProfileLinkButtonProps {
   missingText?: string
   className?: string
   onNavigate?: () => void
+  /** Profile tab to open. Omitted = Overview. */
+  tab?: 'tasks' | 'relationships' | 'documents' | 'meetings' | 'activity'
+  /** Record to highlight on that tab, for example `task=abc`. */
+  focus?: Record<string, string>
 }
 
 export function opportunityProfilePath(id: string): string {
@@ -15,7 +19,7 @@ export function opportunityProfilePath(id: string): string {
 }
 
 /** "View Full Opportunity Profile" — navigates by stable opportunity id, respecting unsaved-change guards. */
-export function ProfileLinkButton({ opportunityId, missingText = 'No linked opportunity', className = '', onNavigate }: ProfileLinkButtonProps) {
+export function ProfileLinkButton({ opportunityId, missingText = 'No linked opportunity', className = '', onNavigate, tab, focus }: ProfileLinkButtonProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const guard = useEditorGuard()
@@ -31,7 +35,8 @@ export function ProfileLinkButton({ opportunityId, missingText = 'No linked oppo
   }
   const go = () => {
     onNavigate?.()
-    navigate(opportunityProfilePath(opportunityId), { state: { from: `${location.pathname}${location.search}` } })
+    const query = new URLSearchParams({ ...(tab ? { tab } : {}), ...(focus ?? {}) }).toString()
+    navigate(`${opportunityProfilePath(opportunityId)}${query ? `?${query}` : ''}`, { state: { from: `${location.pathname}${location.search}` } })
   }
   return (
     <button

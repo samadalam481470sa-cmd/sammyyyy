@@ -33,6 +33,13 @@ export interface PeriodFilter {
   to?: string
 }
 
+/** Default window of Recent Activity and Task History. History older than this stays stored. */
+export const LAST_30_DAYS: PeriodFilter = { kind: 'last30' }
+
+export function isLast30(filter: PeriodFilter): boolean {
+  return filter.kind === 'last30'
+}
+
 export interface Period {
   /** Inclusive start, exclusive end. null = unbounded (All Time). */
   from: Date | null
@@ -327,6 +334,77 @@ export function buildTrends(opportunities: Opportunity[], period: Period, now = 
     if (points.length > 240) break
   }
   return { points, undatedCreated, undatedCompleted, reversals: 0, provisional }
+}
+
+export interface CompletionStep {
+  /** Local noon of the date, in ms, for a time axis. */
+  t: number
+  label: string
+  cumulativeNwp: number
+  cumulativePfEbitda: number
+}
+
+/**
+ * Cumulative Completed NWP and PF EBITDA as dated steps: flat between closings, rising on each
+ * legal closing date. Starts from the opening balance of everything closed before the period. Only
+ * final completions count (24-hour rule), so a reversed deal simply is not in the series.
+ */
+export function completionSteps(opportunities: Opportunity[], period: Period, now = new Date()): CompletionStep[] {
+  const closings = opportunities.flatMap((o) => {
+    if (o.status !== 'Completed' || completionReportState(o, now) !== 'final') return []
+    const closed = legalClosingDate(o)
+    if (!closed) return []
+    const at = new Date(`${closed}T12:00:00`)
+    if (Number.isNaN(at.getTime())) return []
+    const v = closingValues(o)
+    return [{ at, nwp: safeMoney(v.nwp), pfEbitda: safeMoney(v.pfEbitda) }]
+  }).sort((a, b) => a.at.getTime() - b.at.getTime())
+  if (!closings.length) return []
+  const label = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const step = (d: Date, nwp: number, pfEbitda: number): CompletionStep => ({ t: d.getTime(), label: label(d), cumulativeNwp: nwp, cumulativePfEbitda: pfEbitda })
+  const start = period.from ?? new Date(closings[0].at.getFullYear(), closings[0].at.getMonth(), 1)
+  const end = period.to && period.to.getTime() - 1 < now.getTime() ? new Date(period.to.getTime() - 1) : now
+  let nwp = 0
+  let pfEbitda = 0
+  for (const c of closings) {
+    if (c.at < start) {
+      nwp += c.nwp
+      pfEbitda += c.pfEbitda
+    }
+  }
+  const inWindow = closings.filter((c) => c.at >= start && c.at <= end)
+  if (!inWindow.length && nwp === 0 && pfEbitda === 0) return []
+  const points = [step(start, nwp, pfEbitda)]
+  for (const c of inWindow) {
+    nwp += c.nwp
+    pfEbitda += c.pfEbitda
+    const key = label(c.at)
+    const last = points[points.length - 1]
+    if (last.label === key) {
+      last.cumulativeNwp = nwp
+      last.cumulativePfEbitda = pfEbitda
+    } else points.push(step(c.at, nwp, pfEbitda))
+  }
+  if (end.getTime() > points[points.length - 1].t) points.push(step(end, nwp, pfEbitda))
+  return points
+}
+
+export interface MonthlyStepPoint {
+  /** Month position on a numeric axis: month i runs from i to i + 1. */
+  x: number
+  label: string
+  value: number
+}
+
+/**
+ * A NON-cumulative monthly count as a stepped line: flat across each month, vertical at the month
+ * boundary. It can fall, including to zero (2, 2, 2, 3, 0 draws exactly that).
+ */
+export function monthlyStepSeries(points: readonly TrendPoint[], key: 'created' | 'completed'): MonthlyStepPoint[] {
+  return points.flatMap((point, i) => [
+    { x: i, label: point.label, value: point[key] },
+    { x: i + 1, label: point.label, value: point[key] },
+  ])
 }
 
 /** Opportunities in scope for an export of the current tab and period. */

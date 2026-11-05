@@ -1,6 +1,6 @@
 import { ProfileLinkButton } from '@/components/profile/ProfileLinkButton'
 import { DrawerHeader, SideDrawer } from '@/components/shared/Overlay'
-import { OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
+import { HeaderWarningChip, OpportunityHeaderDetails } from '@/components/opportunities/OpportunityHeaderDetails'
 import { useData } from '@/data/DataContext'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import type { Opportunity } from '@/types'
@@ -23,7 +23,7 @@ export function OpportunityDrawer({ opportunity, onClose }: OpportunityDrawerPro
     <SideDrawer open={Boolean(live)} onRequestClose={onClose} label="Opportunity details" testId="dashboard-opportunity-drawer">
       {live && (
         <div className="flex h-full min-h-0 flex-col">
-          <DrawerHeader eyebrow={dealIdFromOpportunity(live)} title={live.projectName} subtitle={live.entityName} onClose={onClose} closeLabel="Close opportunity details">
+          <DrawerHeader eyebrow={dealIdFromOpportunity(live)} title={live.projectName} subtitle={live.entityName} onClose={onClose} closeLabel="Close opportunity details" actions={<HeaderWarningChip opportunity={live} tasks={tasks} />}>
             <OpportunityHeaderDetails opportunity={live} tasks={tasks} showFinancials />
           </DrawerHeader>
           <div className="custom-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
