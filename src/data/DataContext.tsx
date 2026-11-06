@@ -24,12 +24,21 @@ import {
   isWorkspaceShared,
   pullWorkspace,
   pushWorkspaceChanges,
+  deleteWorkspaceLead,
+  restoreWorkspaceLead,
+  uploadWorkspaceFile,
   workspaceApiBase,
+  type WorkspaceChange,
   type WorkspaceCollection,
   type WorkspaceRecord,
 } from '@/lib/workspaceSync'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
+import { CRM_MEETINGS_CHANGED, syncPrivateMeetings } from '@/lib/privateMeetingSync'
+import { displayValue, fieldLabel, mergeRecord, recordLabel } from '@/lib/recordMerge'
+import { compareImport, type ImportOptions, type ImportPreview, type ImportResult } from '@/lib/safeImport'
 import { DOCUMENT_TYPES_CHANGED, saveCustomTypes, storedCustomTypes } from '@/lib/documentTypes'
 import { RESOURCE_CHANGED, type ResourceChangedDetail } from '@/hooks/useResource'
+import { LeadInUseError } from '@/lib/workspaceSync'
 import {
   mockContacts,
   mockDocuments,
@@ -57,15 +66,16 @@ import {
 import { registerVaultFlush } from '@/lib/userVault'
 import { demoProjectNumber } from '@/lib/demoAliases'
 import { sessionOwnerKey } from '@/lib/ownerKey'
-import { crmUsersForSession, findCrmUserById, findCrmUserByName, type CrmUser } from '@/lib/crmUsers'
+import { findCrmUserById, findCrmUserByName, type CrmUser } from '@/lib/crmUsers'
 import { nextProjectNumber } from '@/lib/dealId'
 import { nowIso, todayDateInput } from '@/lib/calendarDate'
 import { isLocalPersistence } from '@/lib/persistenceMode'
-import { deleteDocumentBlob } from '@/lib/documentFileStore'
+import { deleteDocumentBlob, getDocumentBlob, putDocumentBlob } from '@/lib/documentFileStore'
 import {
   applyTaskArchiveRules,
   applyTaskStatusTransition,
   migrateTaskRecord,
+  restoreTaskFields,
 } from '@/lib/taskLifecycle'
 import {
   applyNextActionSummary,
@@ -75,11 +85,10 @@ import {
   withManualNextActionOverride,
 } from '@/lib/nextAction'
 import { withLiveAttention } from '@/lib/attention'
-import { mergeMissingById } from '@/data/sprintSeed'
-import { DEAL_LEADS_RESOURCE, DEFAULT_DEAL_LEADS, migrateOpportunityLeads, resolveLeadIdByName, type DealLead } from '@/lib/dealLeads'
+import { DEAL_LEADS_RESOURCE, DEFAULT_DEAL_LEADS, leadUsage, migrateOpportunityLeads, migrateTaskOwner, resolveLeadIdByName, type DealLead } from '@/lib/dealLeads'
 import { applyStatusChange, initialStatusHistory } from '@/lib/statusHistory'
 import { applyDataFixes, applyTaskDataFixes } from '@/lib/dataFixes'
-import { mergeSeedRecordsForOwner } from '@/lib/seedLedger'
+import { mergeSeedRecordsForOwner, readSeedLedger } from '@/lib/seedLedger'
 import { runConsistencyAudit } from '@/lib/consistencyAudit'
 import {
   documentActivity,
@@ -96,6 +105,8 @@ interface DataContextValue {
   documents: DocumentRecord[]
   activity: ActivityItem[]
   users: CrmUser[]
+  /** The shared Deal Lead roster, Active and Inactive. */
+  dealLeads: DealLead[]
   loading: boolean
   error: string | null
   isLocalPersistence: boolean
@@ -106,21 +117,81 @@ interface DataContextValue {
   saveTask: (id: string, patch: Partial<TaskRecord>) => Promise<TaskRecord>
   createTask: (draft: Partial<TaskRecord>) => Promise<TaskRecord>
   archiveTask: (id: string) => Promise<TaskRecord>
+  /** Back to Open from Task History. Original due date and completion history stay. */
+  restoreTask: (id: string) => Promise<TaskRecord>
   deleteTask: (id: string) => Promise<void>
   saveDocument: (id: string, patch: Partial<DocumentRecord>) => Promise<DocumentRecord>
   createDocument: (draft: Partial<DocumentRecord>) => Promise<DocumentRecord>
   deleteDocument: (id: string) => Promise<void>
   downloadDatabase: () => void
-  importDatabase: (file: File) => Promise<string | null>
+  /** Compares a backup file with the current records. Changes nothing. */
+  previewImport: (file: Blob) => Promise<{ error: string } | { preview: ImportPreview }>
+  /** Adds what was reviewed. Records already saved are only replaced when asked, and never deleted. */
+  applyImport: (preview: ImportPreview, options: ImportOptions) => Promise<ImportResult>
+  undoLastImport: () => Promise<{ removed: number; kept: number }>
+  lastImport: () => LastImport | null
+  /** The copy of this browser's data taken before it joined the shared workspace. */
+  localBackup: () => Promise<Blob | null>
+  /** Waits for the server to confirm pending changes. Throws when it cannot be reached. */
+  confirmSaved: () => Promise<void>
+  saveInBatch: <T>(run: () => Promise<T>) => Promise<T>
+  sync: SyncStatus
+  dismissConflict: (id: string) => void
+  /** Removes a lead nothing refers to. Throws LeadInUseError, with counts, when something does. */
+  deleteDealLead: (id: string) => Promise<void>
+  undoDeleteDealLead: (id: string) => Promise<void>
   /** After a lead is renamed: deals with that primary lead show the new name. */
   syncLeadName: (leadId: string, name: string) => void
   /** A saved change to the roster, for Recent Activity. */
   logLeadActivity: (message: string, lead: Pick<DealLead, 'name'>) => void
 }
 
+export interface ConflictNotice {
+  id: string
+  message: string
+}
+
+export interface SyncStatus {
+  /** local: no shared server. saving: changes on their way. synced: the server has everything. failed: it does not. */
+  state: 'local' | 'connecting' | 'saving' | 'synced' | 'failed'
+  lastSyncedAt: string | null
+  message: string | null
+  conflicts: ConflictNotice[]
+}
+
+export interface LastImport {
+  batchId: string
+  at: string
+  fileName: string
+  added: { collection: WorkspaceCollection; id: string; rev: number }[]
+}
+
 const DataContext = createContext<DataContextValue | null>(null)
 
+const OFFLINE_EDITS_PREFIX = 'newport_crm_offline_edits__'
+const LOCAL_BACKUP_DOC = 'pre-sync-local-backup'
+const LAST_IMPORT_PREFIX = 'newport_crm_last_import__'
+
+const flagGet = (key: string) => {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+const flagSet = (key: string, value: string | null) => {
+  try {
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch {
+    // Storage blocked: this only affects the backup reminder.
+  }
+}
+
 const API_BASE = '/api/resources'
+
+/** Someone else saved the same field first: the save did not take, and rolling back would be wrong. */
+class SaveConflict extends Error {}
 
 async function resourceRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getStoredSession()?.token
@@ -151,7 +222,8 @@ function decorateOpportunities(list: Opportunity[], tasks: TaskRecord[]): Opport
 }
 
 function loadRoster(owner: string): DealLead[] {
-  return mergeMissingById(loadOwnedCollection<DealLead>(DEAL_LEADS_RESOURCE, owner, DEFAULT_DEAL_LEADS), DEFAULT_DEAL_LEADS)
+  // The starting leads are used only when this browser has no roster, so a deleted lead stays deleted.
+  return loadOwnedCollection<DealLead>(DEAL_LEADS_RESOURCE, owner, DEFAULT_DEAL_LEADS)
 }
 
 function snapshotLocalCrm(owner: string, users: CrmUser[]) {
@@ -166,7 +238,7 @@ function snapshotLocalCrm(owner: string, users: CrmUser[]) {
 }
 
 function presentDatabase(database: PortableDatabase, users: CrmUser[], roster: readonly DealLead[]) {
-  const rawTasks = applyTaskArchiveRules(applyTaskDataFixes(database.tasks).map((row) => migrateTaskRecord(row, users)))
+  const rawTasks = applyTaskArchiveRules(applyTaskDataFixes(database.tasks).map((row) => migrateTaskOwner(migrateTaskRecord(row, users), roster)))
   return {
     tasks: rawTasks.tasks,
     opportunities: decorateOpportunities(applyDataFixes(database.opportunities).map((row) => migrateOpportunityLeads(row, roster)), rawTasks.tasks),
@@ -178,7 +250,13 @@ function presentDatabase(database: PortableDatabase, users: CrmUser[], roster: r
 export function DataProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user } = useAuth()
   const owner = sessionOwnerKey(user)
-  const users = useMemo(() => crmUsersForSession(user), [user])
+  // Task owners come from the Deal Lead roster, by stable id. Inactive leads are in this list so old
+  // assignments keep their name; pickers offer Active leads only.
+  const [roster, setRoster] = useState<DealLead[]>(() => loadRoster(owner))
+  const users = useMemo<CrmUser[]>(() => roster.map((lead) => ({ id: lead.id, name: lead.name })), [roster])
+  useEffect(() => setRoster(loadRoster(owner)), [owner])
+  const usersRef = useRef(users)
+  usersRef.current = users
   const local = isLocalPersistence()
   const seeded =
     local && isAuthenticated
@@ -263,12 +341,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // ── Shared workspace (server) sync ────────────────────────────────────────
   const sharedRef = useRef(false)
   const syncedRef = useRef<Map<string, string>>(new Map())
+  const revRef = useRef<Map<string, number>>(new Map())
   const sinceRef = useRef<string | null>(null)
   const sharedTimer = useRef<number | null>(null)
-  const pushingRef = useRef(false)
+  const pushChain = useRef<Promise<unknown>>(Promise.resolve())
+  const serverConfigured = useRef(false)
+  const channelRef = useRef<BroadcastChannel | null>(null)
+  const [syncState, setSyncState] = useState<Pick<SyncStatus, 'state' | 'lastSyncedAt' | 'message'>>({ state: 'local', lastSyncedAt: null, message: null })
+  const [conflicts, setConflicts] = useState<ConflictNotice[]>([])
+  const notifyConflict = (message: string) => setConflicts((prev) => [...prev.slice(-4), { id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, message }])
 
-  // Meeting history is user-private (Nov 2026): it is never part of the shared snapshot, and
-  // server rows in the legacy 'meetings' collection are neither pulled into this browser nor deleted.
+  // Meeting history is user-private: it is never part of the shared snapshot.
   const workspaceSnapshot = (): Partial<Record<WorkspaceCollection, { id: string }[]>> => ({
     opportunities: oppsRef.current,
     tasks: tasksRef.current,
@@ -287,49 +370,133 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return map
   }
 
-  /** Send only records that changed since the last sync, so people editing different records never collide. */
+  const parseRow = (json: string | undefined) => (json ? (JSON.parse(json) as Record<string, unknown>) : null)
+
+  /** Someone saved this record first. Keep their work, merge what is safe, and say what was not applied. */
+  const settleConflict = (record: WorkspaceRecord, base: string | undefined, mine: string | undefined): string | null => {
+    const key = `${record.collection}/${record.id}`
+    const result = mergeRecord(parseRow(base), parseRow(mine), record.deleted ? null : record.data)
+    const label = recordLabel(parseRow(mine) ?? record.data, record.id)
+    const who = record.updatedBy || 'Another person'
+    let notice: string | null = null
+    if (result.deleteConflict === 'theirs-deleted') notice = `${who} deleted “${label}”. Your edits to it were not saved.`
+    else if (result.deleteConflict === 'mine-deleted') notice = `${who} changed “${label}”, so it was not deleted.`
+    else if (result.conflicts.length) {
+      const list = result.conflicts.map((row) => `${fieldLabel(row.field)} (saved: ${displayValue(row.theirs)}, yours: ${displayValue(row.mine)})`).join('; ')
+      notice = `${who} changed “${label}” while you were editing. Their value was kept for ${list}. Your other changes were saved.`
+    }
+    if (notice) notifyConflict(notice)
+    revRef.current.set(key, record.rev ?? 0)
+    if (result.merged) applyShared([{ ...record, deleted: false, data: result.merged }], false, true)
+    else applyShared([{ ...record, deleted: true, data: null }], false, true)
+    if (result.hasMine) syncedRef.current.set(key, JSON.stringify(record.data))
+    return notice
+  }
+
+  /** One push at a time. Sends only records that changed, each with the revision it was based on. */
+  const runPush = async (): Promise<{ key: string; notice: string }[]> => {
+    const current = snapshotKeys()
+    const changes: WorkspaceChange[] = []
+    const sent = new Map<string, string | null>()
+    for (const [key, json] of current) {
+      if (syncedRef.current.get(key) === json) continue
+      const [collection, ...rest] = key.split('/')
+      const known = revRef.current.get(key)
+      changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: JSON.parse(json), baseRev: known ?? (syncedRef.current.has(key) ? undefined : 0) })
+      sent.set(key, json)
+    }
+    for (const key of syncedRef.current.keys()) {
+      // The feed is trimmed on screen. Older entries stay on the server and in the audit trail.
+      if (current.has(key) || key.startsWith('activity/')) continue
+      const [collection, ...rest] = key.split('/')
+      changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: null, baseRev: revRef.current.get(key) })
+      sent.set(key, null)
+    }
+    if (!changes.length) {
+      setSyncState((prev) => ({ state: 'synced', lastSyncedAt: prev.lastSyncedAt ?? new Date().toISOString(), message: null }))
+      return []
+    }
+    setSyncState((prev) => ({ ...prev, state: 'saving', message: null }))
+    const result = await pushWorkspaceChanges(changes)
+    const stamp = new Date().toISOString()
+    const before = new Map(syncedRef.current)
+    if (!result.versioned) {
+      for (const [key, json] of sent) {
+        if (json === null) syncedRef.current.delete(key)
+        else syncedRef.current.set(key, json)
+      }
+    }
+    for (const row of result.applied) {
+      const key = `${row.collection}/${row.id}`
+      revRef.current.set(key, row.rev)
+      const json = sent.get(key)
+      if (json === null || json === undefined) syncedRef.current.delete(key)
+      else syncedRef.current.set(key, json)
+    }
+    const notices: { key: string; notice: string }[] = []
+    for (const record of result.conflicts) {
+      const key = `${record.collection}/${record.id}`
+      const notice = settleConflict(record, before.get(key), current.get(key))
+      if (notice) notices.push({ key, notice })
+    }
+    for (const row of result.blocked) {
+      const key = `${row.collection}/${row.id}`
+      notifyConflict(row.reason)
+      notices.push({ key, notice: row.reason })
+    }
+    setError(null)
+    flagSet(OFFLINE_EDITS_PREFIX + owner, null)
+    setSyncState({ state: 'synced', lastSyncedAt: stamp, message: null })
+    channelRef.current?.postMessage('changed')
+    // A merge can leave this person's safe changes still to send.
+    if (result.conflicts.length) schedulePush(50)
+    return notices
+  }
+
+  const queuePush = () => {
+    const run = pushChain.current.catch(() => undefined).then(runPush)
+    pushChain.current = run
+    return run
+  }
+
+  const schedulePush = (delay: number) => {
+    if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
+    sharedTimer.current = window.setTimeout(() => void pushShared(), delay)
+  }
+
+  /** Background sends: a failure is shown, retried, and flagged so a later full pull keeps a copy. */
   const pushShared = async () => {
-    if (!sharedRef.current || pushingRef.current) return
-    pushingRef.current = true
+    if (!sharedRef.current) return
     try {
-      const current = snapshotKeys()
-      const changes: { collection: WorkspaceCollection; id: string; data: unknown | null }[] = []
-      for (const [key, json] of current) {
-        if (syncedRef.current.get(key) === json) continue
-        const [collection, ...rest] = key.split('/')
-        changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: JSON.parse(json) })
-      }
-      for (const key of syncedRef.current.keys()) {
-        if (current.has(key) || key.startsWith('meetings/')) continue
-        const [collection, ...rest] = key.split('/')
-        changes.push({ collection: collection as WorkspaceCollection, id: rest.join('/'), data: null })
-      }
-      if (!changes.length) return
-      await pushWorkspaceChanges(changes)
-      syncedRef.current = current
-      setError(null)
+      await queuePush()
     } catch (err) {
-      setError(err instanceof Error ? `Not saved to the server yet: ${err.message} It will retry.` : 'Not saved to the server yet. It will retry.')
-      if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
-      sharedTimer.current = window.setTimeout(() => void pushShared(), 8000)
-    } finally {
-      pushingRef.current = false
+      flagSet(OFFLINE_EDITS_PREFIX + owner, '1')
+      const message = err instanceof Error ? `Not saved to the server yet: ${err.message} It will retry.` : 'Not saved to the server yet. It will retry.'
+      setError(message)
+      setSyncState((prev) => ({ ...prev, state: 'failed', message }))
+      schedulePush(8000)
     }
   }
 
   /** Apply records from the server. A full pull replaces local data; a partial pull merges. */
-  const applyShared = (records: WorkspaceRecord[], full: boolean) => {
+  const applyShared = (records: WorkspaceRecord[], full: boolean, force = false) => {
     const base = workspaceSnapshot()
+    const currentKeys = snapshotKeys()
+    // Only a real unsent edit counts. Presenting the data below can reorder or fill fields on any record.
+    const unsent = new Set([...currentKeys.keys(), ...syncedRef.current.keys()].filter((key) => currentKeys.get(key) !== syncedRef.current.get(key)))
     const touched = new Set<string>()
     const collections = {} as Record<WorkspaceCollection, Map<string, unknown>>
     for (const name of Object.keys(base) as WorkspaceCollection[]) {
       collections[name] = new Map(full ? [] : (base[name] ?? []).map((row) => [row.id, row]))
     }
     for (const record of records) {
-      if (record.collection === 'meetings') continue
       const target = collections[record.collection]
       if (!target) continue
-      touched.add(`${record.collection}/${record.id}`)
+      const key = `${record.collection}/${record.id}`
+      // This device has an unsent edit: leave it. Sending it brings the conflict check into play.
+      if (!full && !force && unsent.has(key)) continue
+      if (typeof record.rev === 'number') revRef.current.set(key, record.rev)
+      touched.add(key)
       if (record.deleted || !record.data) target.delete(record.id)
       else target.set(record.id, record.data)
     }
@@ -339,9 +506,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     saveOwnedCollection('contacts', owner, contacts)
     const detail: ResourceChangedDetail = { resource: 'contacts', owner, source: -1, items: contacts }
     window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
-    // The roster is shared the same way. The two starting leads stay present until the server has them.
-    const dealLeads = mergeMissingById(list<DealLead>('dealLeads'), DEFAULT_DEAL_LEADS)
+    // The roster is what the server says. Nothing adds a lead back here.
+    const dealLeads = list<DealLead>('dealLeads')
     saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, dealLeads)
+    setRoster(dealLeads)
     const leadDetail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: dealLeads }
     window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail: leadDetail }))
     saveCustomTypes(list<{ name: string }>('documentTypes').map((row) => row.name).filter(Boolean))
@@ -364,10 +532,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // What is on screen now matches the server; record it so it is not pushed back.
     const now = snapshotKeys()
     if (full) syncedRef.current = now
-    else for (const key of touched) {
-      const json = now.get(key)
-      if (json) syncedRef.current.set(key, json)
-      else syncedRef.current.delete(key)
+    else {
+      for (const key of new Set([...now.keys(), ...syncedRef.current.keys()])) {
+        if (unsent.has(key) && !touched.has(key)) continue
+        const json = now.get(key)
+        if (json) syncedRef.current.set(key, json)
+        else syncedRef.current.delete(key)
+      }
     }
     // Repair known starter-data problems on the shared copy too; the change is pushed to the server.
     const repaired = applyDataFixes(oppsRef.current)
@@ -378,8 +549,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const pushCloud = () => {
     if (sharedRef.current) {
       if (applyingRemote.current) return
-      if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
-      sharedTimer.current = window.setTimeout(() => void pushShared(), 600)
+      schedulePush(600)
+      return
+    }
+    // Disconnected from a configured server: this edit is on this device only until a copy is reviewed.
+    if (serverConfigured.current) {
+      if (!applyingRemote.current) flagSet(OFFLINE_EDITS_PREFIX + owner, '1')
       return
     }
     if (!allowCloudPush.current || user?.authMethod !== 'microsoft') return
@@ -402,11 +577,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const syncOpportunitySummaries = (opps: Opportunity[], taskList: TaskRecord[]) =>
     decorateOpportunities(opps, taskList)
 
+  /**
+   * One copy per browser of the data it held before joining the shared workspace, and a new copy
+   * whenever edits were made while disconnected. A full pull can then never lose them.
+   */
+  const keepLocalBackup = async () => {
+    const flagKey = `${OFFLINE_EDITS_PREFIX}${owner}`
+    const hadOwnData = readSeedLedger(owner) !== null
+    const existing = await getDocumentBlob(owner, LOCAL_BACKUP_DOC).catch(() => null)
+    if (!flagGet(flagKey) && (existing || !hadOwnData)) return
+    const database = buildPortableDatabase(
+      {
+        opportunities: oppsRef.current,
+        tasks: tasksRef.current,
+        documents: docsRef.current,
+        activity: activityRef.current,
+        contacts: loadOwnedCollection<ContactRecord>('contacts', owner, []),
+        dealLeads: loadRoster(owner),
+      },
+      new Date().toISOString(),
+    )
+    const copy = new File([JSON.stringify(database)], `newport-crm-this-device-${todayDateInput()}.json`, { type: 'application/json' })
+    await putDocumentBlob(owner, LOCAL_BACKUP_DOC, copy).catch(() => undefined)
+    flagSet(flagKey, null)
+  }
+
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
       sharedRef.current = false
       syncedRef.current = new Map()
+      revRef.current = new Map()
       sinceRef.current = null
+      setConflicts([])
+      setSyncState({ state: 'local', lastSyncedAt: null, message: null })
       oppsRef.current = []
       tasksRef.current = []
       docsRef.current = []
@@ -419,32 +622,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     setError(null)
     const loadLocal = () => {
-      const snap = snapshotLocalCrm(owner, users)
-      persistTasks(snap.tasks)
-      persistOpps(snap.opportunities)
-      persistDocs(snap.documents)
-      persistActivity(snap.activity)
+      const snap = snapshotLocalCrm(owner, usersRef.current)
+      applyingRemote.current = true
+      try {
+        persistTasks(snap.tasks)
+        persistOpps(snap.opportunities)
+        persistDocs(snap.documents)
+        persistActivity(snap.activity)
+      } finally {
+        applyingRemote.current = false
+      }
     }
     if (isLocalPersistence()) {
       loadLocal()
       setLoading(false)
       if (isWorkspaceShared() || (await workspaceApiBase())) {
+        serverConfigured.current = true
         // Shared company workspace: the server is the source of truth for every approved user.
+        setSyncState((prev) => ({ ...prev, state: 'connecting', message: null }))
         try {
+          // Before the server's records replace this browser's copy, keep that copy to review later.
+          await keepLocalBackup()
           const pulled = await pullWorkspace()
           sharedRef.current = true
           sinceRef.current = pulled.serverTime
+          revRef.current = new Map()
           if (pulled.empty) {
             // First person on a new server: their records become the shared starting data.
             syncedRef.current = new Map()
             void pushShared()
           } else {
             applyShared(pulled.records, true)
+            setSyncState({ state: 'synced', lastSyncedAt: pulled.serverTime, message: null })
           }
           setError(null)
         } catch (err) {
           sharedRef.current = false
-          setError(err instanceof Error ? `Shared workspace unavailable: ${err.message}` : 'Shared workspace unavailable.')
+          const message = err instanceof Error ? `Shared workspace unavailable: ${err.message} Changes stay on this device until it reconnects.` : 'Shared workspace unavailable.'
+          setError(message)
+          setSyncState((prev) => ({ ...prev, state: 'failed', message }))
         }
         return
       }
@@ -502,7 +718,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           loadOwnedCollection('documents', owner, mockDocuments),
         ),
       ])
-      const rawTasks = applyTaskArchiveRules(apiTasks.map((row) => migrateTaskRecord(row, users)))
+      const rawTasks = applyTaskArchiveRules(apiTasks.map((row) => migrateTaskRecord(row, usersRef.current)))
       persistTasks(rawTasks.tasks)
       persistOpps(syncOpportunitySummaries(data, rawTasks.tasks))
       persistDocs(apiDocs)
@@ -513,7 +729,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [isAuthenticated, owner, users, user])
+    // The roster changing must not start a new full pull, so people are read from usersRef.
+  }, [isAuthenticated, owner, user])
 
   useEffect(() => {
     writeDatabaseRef.current = (database, sync) => {
@@ -525,6 +742,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       writeStoredSchemaVersion(owner, SCHEMA_VERSION)
       if (database.dealLeads) {
         saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, database.dealLeads)
+        setRoster(database.dealLeads)
         const detail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: database.dealLeads }
         window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
       }
@@ -555,20 +773,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) return
     let running = false
     const poll = async () => {
-      if (!sharedRef.current || running || document.visibilityState === 'hidden') return
+      if (!sharedRef.current || running) return
       running = true
       try {
         const pulled = await pullWorkspace(sinceRef.current)
         sinceRef.current = pulled.serverTime
         applyShared(pulled.records, false)
+        setSyncState((prev) => (prev.state === 'failed' || prev.state === 'connecting' ? { state: 'synced', lastSyncedAt: pulled.serverTime, message: null } : { ...prev, lastSyncedAt: pulled.serverTime }))
       } catch {
         // offline or server busy: the next poll retries
+        setSyncState((prev) => (prev.state === 'saving' ? prev : { ...prev, state: 'failed', message: 'The Newport server cannot be reached. Showing the last records received.' }))
       } finally {
         running = false
       }
     }
     const onLocalChange = (event: Event) => {
       const detail = (event as CustomEvent<ResourceChangedDetail>).detail
+      if (detail?.resource === DEAL_LEADS_RESOURCE && detail.owner === owner) setRoster(detail.items as DealLead[])
       if ((detail?.resource === 'contacts' || detail?.resource === DEAL_LEADS_RESOURCE) && detail.source !== -1) pushCloud()
     }
     const onTypes = () => pushCloud()
@@ -576,13 +797,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (!isWorkspaceShared()) return
       if (!sharedRef.current) void refresh()
     }
-    const timer = window.setInterval(() => void poll(), 10_000)
+    // A hidden tab checks less often. Other tabs of this browser update at once through the channel.
+    let ticks = 0
+    const timer = window.setInterval(() => {
+      ticks += 1
+      if (document.visibilityState === 'hidden' && ticks % 6 !== 0) return
+      void poll()
+    }, 10_000)
+    const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('newport-crm-workspace')
+    channelRef.current = channel
+    if (channel) channel.onmessage = () => void poll()
+    const onOnline = () => {
+      void poll()
+      void pushShared()
+    }
+    window.addEventListener('online', onOnline)
     window.addEventListener('focus', poll)
     window.addEventListener(RESOURCE_CHANGED, onLocalChange)
     window.addEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
     window.addEventListener(WORKSPACE_STATE_EVENT, onState)
     return () => {
       window.clearInterval(timer)
+      channel?.close()
+      channelRef.current = null
+      window.removeEventListener('online', onOnline)
       window.removeEventListener('focus', poll)
       window.removeEventListener(RESOURCE_CHANGED, onLocalChange)
       window.removeEventListener(DOCUMENT_TYPES_CHANGED, onTypes)
@@ -590,6 +828,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, owner])
+
+  // The signed-in person's own meetings follow them to their other devices.
+  const meetingOwner = calendarOwnerKey(user)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let timer = 0
+    const run = () => void syncPrivateMeetings(meetingOwner).catch(() => undefined)
+    const soon = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(run, 400)
+    }
+    run()
+    const interval = window.setInterval(run, 30_000)
+    window.addEventListener(CRM_MEETINGS_CHANGED, soon)
+    window.addEventListener(WORKSPACE_STATE_EVENT, soon)
+    window.addEventListener('focus', soon)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearInterval(interval)
+      window.removeEventListener(CRM_MEETINGS_CHANGED, soon)
+      window.removeEventListener(WORKSPACE_STATE_EVENT, soon)
+      window.removeEventListener('focus', soon)
+    }
+  }, [isAuthenticated, meetingOwner])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -615,8 +877,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return
       }
       if (waitingForLogin) return
-      void fetchSeedSnapshot(document.baseURI).then((seed) => {
+      void Promise.all([fetchSeedSnapshot(document.baseURI), workspaceApiBase()]).then(([seed, server]) => {
         if (cancelled || !seed || microsoftLoginInProgress()) return
+        // With a shared server, starter records are never merged in: they could bring back what the team deleted.
+        if (server || sharedRef.current || isWorkspaceShared()) return
         fetchedSeedRef.current = seed
         const contacts = loadOwnedCollection<ContactRecord>('contacts', owner, [])
         const current = buildPortableDatabase(
@@ -985,6 +1249,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [saveTask],
   )
 
+  const restoreTask = useCallback(
+    async (id: string) => {
+      const existing = tasksRef.current.find((row) => row.id === id)
+      if (!existing) throw new Error('Task not found')
+      const merged = { ...existing, ...restoreTaskFields(existing, user?.name ?? null) }
+      persistTasks(tasksRef.current.map((row) => (row.id === id ? merged : row)))
+      persistOpps(syncOpportunitySummaries(oppsRef.current, tasksRef.current))
+      touchLinkedOpportunity(merged.opportunityId)
+      logChange('task', id, 'update', ['status', 'completedAt', 'archivedAt', 'restoreHistory'])
+      pushActivity(taskActivity(user?.name ?? null, merged, 'restored'))
+      return merged
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [owner, user],
+  )
+
   const deleteTask = useCallback(
     async (id: string) => {
       const existing = tasksRef.current.find((row) => row.id === id)
@@ -1089,6 +1369,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   )
 
   const syncLeadName = useCallback((leadId: string, name: string) => {
+    if (tasksRef.current.some((row) => row.ownerId === leadId && row.owner !== name)) {
+      persistTasks(tasksRef.current.map((row) => (row.ownerId === leadId ? { ...row, owner: name } : row)))
+    }
     if (!oppsRef.current.some((row) => row.primaryLeadId === leadId && row.dealLead !== name)) return
     persistOpps(oppsRef.current.map((row) => (row.primaryLeadId === leadId ? { ...row, dealLead: name } : row)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1117,25 +1400,224 @@ export function DataProvider({ children }: { children: ReactNode }) {
     )
   }, [owner])
 
-  const importDatabase = useCallback(async (file: File) => {
+  const currentRecords = () => ({
+    opportunities: oppsRef.current as unknown as { id: string }[],
+    tasks: tasksRef.current as unknown as { id: string }[],
+    documents: docsRef.current as unknown as { id: string }[],
+    contacts: loadOwnedCollection<ContactRecord>('contacts', owner, []) as unknown as { id: string }[],
+    dealLeads: loadRoster(owner) as { id: string }[],
+  })
+
+  const previewImport = useCallback(async (file: Blob) => {
     let raw = ''
     try {
       raw = await file.text()
     } catch {
-      return DATABASE_FILE_ERROR
+      return { error: DATABASE_FILE_ERROR }
     }
     const parsed = parsePortableDatabase(raw)
-    if (!parsed.ok) return parsed.error
-    let result: { ok: true; database: PortableDatabase } = {
-      ok: true,
-      database: mergeSeedRecordsForOwner(applySchemaMigrations(parsed.database), bundledSeedSnapshot(), owner),
-    }
-    if (fetchedSeedRef.current) {
-      result = { ok: true, database: mergeSeedRecordsForOwner(result.database, fetchedSeedRef.current, owner) }
-    }
-    writeDatabaseRef.current({ ...result.database, dealLeads: parsed.database.dealLeads }, true)
-    return null
+    if (!parsed.ok) return { error: parsed.error }
+    const database = applySchemaMigrations(parsed.database)
+    return { preview: compareImport(database, currentRecords(), (file as File).name || 'backup file') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner])
+
+  const applyImport = useCallback(async (preview: ImportPreview, options: ImportOptions): Promise<ImportResult> => {
+    const rows = preview.rows.filter((row) => row.kind === 'new' || (options.includeChanged && row.kind === 'changed') || (options.includeDuplicates && row.kind === 'duplicate'))
+    const batchId = `import_${Date.now()}`
+    if (!sharedRef.current) {
+      // No shared server: the same review, applied to this browser's copy only.
+      const byCollection = (name: string) => rows.filter((row) => row.collection === name)
+      const merge = <T extends { id: string }>(list: T[], name: string) => {
+        const incoming = new Map(byCollection(name).map((row) => [row.id, row.data as unknown as T]))
+        return [...list.map((row) => incoming.get(row.id) ?? row), ...[...incoming.values()].filter((row) => !list.some((old) => old.id === row.id))]
+      }
+      persistTasks(merge(tasksRef.current, 'tasks'))
+      persistOpps(decorateOpportunities(merge(oppsRef.current, 'opportunities'), tasksRef.current))
+      persistDocs(merge(docsRef.current, 'documents'))
+      saveOwnedCollection('contacts', owner, merge(loadOwnedCollection<ContactRecord>('contacts', owner, []), 'contacts'))
+      const leads = merge(loadRoster(owner), 'dealLeads')
+      saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, leads)
+      setRoster(leads)
+      return { added: rows.filter((row) => row.kind !== 'changed').length, replaced: rows.filter((row) => row.kind === 'changed').length, keptDeleted: 0, failed: [] }
+    }
+    const changes: WorkspaceChange[] = rows.map((row) => ({
+      collection: row.collection as WorkspaceCollection,
+      id: row.id,
+      data: row.data,
+      baseRev: revRef.current.get(`${row.collection}/${row.id}`) ?? 0,
+    }))
+    const result = await pushWorkspaceChanges(changes, batchId)
+    // Files held only in this browser go up with their records.
+    const failed: string[] = []
+    for (const applied of result.applied) {
+      if (applied.collection !== 'documents') continue
+      const blob = await getDocumentBlob(owner, applied.id).catch(() => null)
+      if (blob) await uploadWorkspaceFile(applied.id, blob, (blob as File).name || applied.id).catch(() => failed.push(applied.id))
+    }
+    const added = result.applied.filter((row) => rows.find((r) => r.id === row.id && r.collection === row.collection)?.kind !== 'changed')
+    flagSet(
+      LAST_IMPORT_PREFIX + owner,
+      JSON.stringify({ batchId, at: new Date().toISOString(), fileName: preview.fileName, added: added.map((row) => ({ collection: row.collection, id: row.id, rev: row.rev })) } satisfies LastImport),
+    )
+    const pulled = await pullWorkspace(sinceRef.current)
+    sinceRef.current = pulled.serverTime
+    applyShared(pulled.records, false)
+    return {
+      added: added.length,
+      replaced: result.applied.length - added.length,
+      keptDeleted: result.conflicts.filter((row) => row.deleted).length,
+      failed: [...failed, ...result.conflicts.filter((row) => !row.deleted).map((row) => row.id)],
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+
+  const lastImport = useCallback((): LastImport | null => {
+    try {
+      return JSON.parse(flagGet(LAST_IMPORT_PREFIX + owner) ?? 'null') as LastImport | null
+    } catch {
+      return null
+    }
+  }, [owner])
+
+  /** Removes what the last import added. A record someone has since edited is left alone. */
+  const undoLastImport = useCallback(async () => {
+    const last = lastImport()
+    if (!last || !sharedRef.current) return { removed: 0, kept: 0 }
+    const result = await pushWorkspaceChanges(last.added.map((row) => ({ collection: row.collection, id: row.id, data: null, baseRev: row.rev })), `undo_${last.batchId}`)
+    const pulled = await pullWorkspace(sinceRef.current)
+    sinceRef.current = pulled.serverTime
+    applyShared(pulled.records, false)
+    flagSet(LAST_IMPORT_PREFIX + owner, null)
+    return { removed: result.applied.length, kept: result.conflicts.length }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+
+  const localBackup = useCallback(() => getDocumentBlob(owner, LOCAL_BACKUP_DOC).catch(() => null), [owner])
+
+  const confirmSaved = useCallback(async () => {
+    if (!sharedRef.current) return
+    if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
+    const notices = await queuePush()
+    const blocking = notices[0]
+    if (blocking) throw new Error(blocking.notice)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+
+  /**
+   * Save, then wait for the server. "Saved" appears only after it answers. If it cannot be reached
+   * the change is taken back and the editor keeps its draft. If someone else saved the same field
+   * first, their value stays and the editor shows what happened.
+   */
+  const batchDepth = useRef(0)
+  /** Many saves in a row, such as a spreadsheet import, travel to the server together. */
+  const saveInBatch = useCallback(async <T,>(run: () => Promise<T>): Promise<T> => {
+    batchDepth.current += 1
+    try {
+      return await run()
+    } finally {
+      batchDepth.current -= 1
+      if (batchDepth.current === 0 && sharedRef.current) await queuePush()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner])
+
+  const confirmed = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => {
+    if (!sharedRef.current || batchDepth.current > 0) return fn(...args)
+    const before = { opps: oppsRef.current, tasks: tasksRef.current, docs: docsRef.current, activity: activityRef.current }
+    const result = await fn(...args)
+    if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
+    try {
+      const notices = await queuePush()
+      if (notices[0]) throw new SaveConflict(notices[0].notice)
+    } catch (err) {
+      if (!(err instanceof SaveConflict)) {
+        applyingRemote.current = true
+        try {
+          persistOpps(before.opps)
+          persistTasks(before.tasks)
+          persistDocs(before.docs)
+          persistActivity(before.activity)
+        } finally {
+          applyingRemote.current = false
+        }
+        const reason = err instanceof Error ? err.message : 'The server did not answer.'
+        const message = `Not saved. ${reason} Your edit is still here. Try again when the connection is back.`
+        setSyncState((prev) => ({ ...prev, state: 'failed', message }))
+        throw new Error(message)
+      }
+      throw err
+    }
+    return result
+  }
+  const confirmedRef = useRef(confirmed)
+  confirmedRef.current = confirmed
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  const api = useMemo(
+    () => ({
+      saveOpportunity: (...a: Parameters<typeof saveOpportunity>) => confirmedRef.current(saveOpportunity)(...a),
+      createOpportunity: (...a: Parameters<typeof createOpportunity>) => confirmedRef.current(createOpportunity)(...a),
+      deleteOpportunity: (...a: Parameters<typeof deleteOpportunity>) => confirmedRef.current(deleteOpportunity)(...a),
+      saveTask: (...a: Parameters<typeof saveTask>) => confirmedRef.current(saveTask)(...a),
+      createTask: (...a: Parameters<typeof createTask>) => confirmedRef.current(createTask)(...a),
+      archiveTask: (...a: Parameters<typeof archiveTask>) => confirmedRef.current(archiveTask)(...a),
+      restoreTask: (...a: Parameters<typeof restoreTask>) => confirmedRef.current(restoreTask)(...a),
+      deleteTask: (...a: Parameters<typeof deleteTask>) => confirmedRef.current(deleteTask)(...a),
+      saveDocument: (...a: Parameters<typeof saveDocument>) => confirmedRef.current(saveDocument)(...a),
+      createDocument: (...a: Parameters<typeof createDocument>) => confirmedRef.current(createDocument)(...a),
+      deleteDocument: (...a: Parameters<typeof deleteDocument>) => confirmedRef.current(deleteDocument)(...a),
+    }),
+    [saveOpportunity, createOpportunity, deleteOpportunity, saveTask, createTask, archiveTask, restoreTask, deleteTask, saveDocument, createDocument, deleteDocument],
+  )
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  const deleteDealLead = useCallback(async (id: string) => {
+    const lead = loadRoster(owner).find((row) => row.id === id)
+    if (!lead) throw new Error('That deal lead is no longer on the roster.')
+    const key = `dealLeads/${id}`
+    if (sharedRef.current) {
+      // The server checks for uses again inside one transaction. This screen may be out of date.
+      const { rev } = await deleteWorkspaceLead(id)
+      revRef.current.set(key, rev)
+    } else {
+      const usage = leadUsage(lead, oppsRef.current, tasksRef.current)
+      if (usage.total > 0) throw new LeadInUseError(usage)
+    }
+    syncedRef.current.delete(key)
+    const next = loadRoster(owner).filter((row) => row.id !== id)
+    saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, next)
+    setRoster(next)
+    const detail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: next }
+    window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+    deletedLeads.current.set(id, lead)
+    pushActivity(makeActivity({ actor: user?.name ?? null, message: `deleted deal lead ${lead.name}`, projectName: 'Deal Leads', type: 'update' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, user])
+
+  const undoDeleteDealLead = useCallback(async (id: string) => {
+    let lead = deletedLeads.current.get(id) ?? null
+    const key = `dealLeads/${id}`
+    if (sharedRef.current) {
+      const restored = await restoreWorkspaceLead(id)
+      revRef.current.set(key, restored.rev)
+      lead = restored.lead as unknown as DealLead
+    }
+    if (!lead) return
+    const next = [lead, ...loadRoster(owner).filter((row) => row.id !== id)]
+    saveOwnedCollection(DEAL_LEADS_RESOURCE, owner, next)
+    setRoster(next)
+    syncedRef.current.set(key, JSON.stringify(lead))
+    const detail: ResourceChangedDetail = { resource: DEAL_LEADS_RESOURCE, owner, source: -1, items: next }
+    window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+    deletedLeads.current.delete(id)
+    pushActivity(makeActivity({ actor: user?.name ?? null, message: `restored deal lead ${lead.name}`, projectName: 'Deal Leads', type: 'update' }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner, user])
+  const deletedLeads = useRef(new Map<string, DealLead>())
+
+  const dismissConflict = useCallback((id: string) => setConflicts((prev) => prev.filter((row) => row.id !== id)), [])
+  const sync = useMemo<SyncStatus>(() => ({ ...syncState, conflicts }), [syncState, conflicts])
 
   const value = useMemo(
     () => ({
@@ -1144,22 +1626,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
       documents,
       activity,
       users,
+      dealLeads: roster,
       loading,
       error,
       isLocalPersistence: local,
       refresh,
-      saveOpportunity,
-      createOpportunity,
-      deleteOpportunity,
-      saveTask,
-      createTask,
-      archiveTask,
-      deleteTask,
-      saveDocument,
-      createDocument,
-      deleteDocument,
+      ...api,
       downloadDatabase,
-      importDatabase,
+      previewImport,
+      applyImport,
+      undoLastImport,
+      lastImport,
+      localBackup,
+      confirmSaved,
+      saveInBatch,
+      sync,
+      dismissConflict,
+      deleteDealLead,
+      undoDeleteDealLead,
       syncLeadName,
       logLeadActivity,
     }),
@@ -1169,22 +1653,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
       documents,
       activity,
       users,
+      roster,
       loading,
       error,
       local,
       refresh,
-      saveOpportunity,
-      createOpportunity,
-      deleteOpportunity,
-      saveTask,
-      createTask,
-      archiveTask,
-      deleteTask,
-      saveDocument,
-      createDocument,
-      deleteDocument,
+      api,
       downloadDatabase,
-      importDatabase,
+      previewImport,
+      applyImport,
+      undoLastImport,
+      lastImport,
+      localBackup,
+      confirmSaved,
+      saveInBatch,
+      sync,
+      dismissConflict,
+      deleteDealLead,
+      undoDeleteDealLead,
       syncLeadName,
       logLeadActivity,
     ],

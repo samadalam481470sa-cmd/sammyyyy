@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, FileText, Plus } from 'lucide-react'
 import { SideDrawer } from '@/components/shared/Overlay'
-import { StatusStageControls } from '@/components/opportunities/StatusStageControls'
+import { StatusStageControls, type StatusStageDraft } from '@/components/opportunities/StatusStageControls'
+import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
+import { useEditorGuard } from '@/components/shared/EditorGuardContext'
 import { MeetingDrawer } from '@/components/meetings/MeetingDrawer'
 import { AddMeetingDrawer } from '@/components/meetings/AddMeetingDrawer'
 import { useCrmMeetings } from '@/hooks/useCrmMeetings'
@@ -103,7 +105,46 @@ export function OpportunityProfilePage() {
   const panel = useRef<OpportunityEditorHandle>(null)
   const from = (location.state as { from?: string } | null)?.from
 
-  const guarded = (run: () => void) => (panel.current ? panel.current.requestLeave(run) : run())
+  // Status and stage chosen in the header stay a draft until Save Changes.
+  const [headerDraft, setHeaderDraft] = useState<StatusStageDraft | null>(null)
+  const [headerSaving, setHeaderSaving] = useState(false)
+  const [headerError, setHeaderError] = useState<string | null>(null)
+  const [headerLeave, setHeaderLeave] = useState<(() => void) | null>(null)
+  useEffect(() => {
+    setHeaderDraft(null)
+    setHeaderError(null)
+  }, [opportunityId])
+  const saveHeader = async () => {
+    if (!headerDraft) return true
+    setHeaderSaving(true)
+    setHeaderError(null)
+    try {
+      await saveOpportunity(opportunityId, headerDraft)
+      setHeaderDraft(null)
+      return true
+    } catch (err) {
+      // The draft stays on screen, and the saved record is unchanged.
+      setHeaderError(err instanceof Error ? err.message : 'Save failed')
+      return false
+    } finally {
+      setHeaderSaving(false)
+    }
+  }
+  const guarded = (run: () => void) => {
+    if (panel.current) return panel.current.requestLeave(run)
+    if (headerDraft) return setHeaderLeave(() => run)
+    run()
+  }
+  // Sidebar links and sign-out honour the header draft when no editor is open to do it.
+  const editorGuard = useEditorGuard()
+  const headerDirtyRef = useRef(false)
+  headerDirtyRef.current = headerDraft != null
+  const noEditor = tab !== 'overview' && !taskId && !contactId && !docOpen && !meetingId
+  useEffect(() => {
+    if (!noEditor || !editorGuard) return
+    editorGuard.register({ isDirty: () => headerDirtyRef.current, requestLeave: (next) => (headerDirtyRef.current ? setHeaderLeave(() => next) : next()) })
+    return () => editorGuard.register(null)
+  }, [noEditor, editorGuard])
 
   const setTab = (next: TabId) =>
     guarded(() => {
@@ -199,8 +240,9 @@ export function OpportunityProfilePage() {
             </h1>
             <p className="truncate text-sm text-ink-muted" title={opportunity.entityName}>{opportunity.entityName}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-2" data-testid="profile-identity-badges">
-              <span className={badgeClass(statusBadge(opportunity.status))} data-testid="profile-status-badge">{opportunity.status}</span>
-              <span className={badgeClass(stageBadge(opportunity.stage))} data-testid="profile-stage-badge">{opportunity.stage}</span>
+              <span className={badgeClass(statusBadge(headerDraft?.status ?? opportunity.status))} data-testid="profile-status-badge">{headerDraft?.status ?? opportunity.status}</span>
+              <span className={badgeClass(stageBadge(headerDraft?.stage ?? opportunity.stage))} data-testid="profile-stage-badge">{headerDraft?.stage ?? opportunity.stage}</span>
+              {headerDraft && <span className="rounded-md bg-attention-bg px-1.5 py-0.5 text-[10px] font-semibold text-[#946200]" data-testid="profile-draft-tag">Unsaved</span>}
               <span className="text-xs text-ink-muted" data-testid="profile-deal-lead" title={additionalLeadNames.length ? `Additional: ${additionalLeadNames.join(', ')}` : undefined}>
                 Deal lead: <span className={`font-semibold ${opportunity.dealLead ? 'text-ink' : 'text-[#946200]'}`}>{opportunity.dealLead || 'Unassigned'}</span>
                 {additionalLeadNames.length > 0 && <span> · + {additionalLeadNames.join(', ')}</span>}
@@ -223,7 +265,18 @@ export function OpportunityProfilePage() {
                 </div>
               )}
             </div>
-            <StatusStageControls opportunity={opportunity} />
+            <StatusStageControls
+              opportunity={opportunity}
+              draft={headerDraft}
+              onChange={(next) => {
+                setHeaderDraft(next)
+                setHeaderError(null)
+              }}
+              showActions={tab !== 'overview'}
+              saving={headerSaving}
+              error={headerError}
+              onSave={() => void saveHeader()}
+            />
           </div>
         </div>
         {conflict && (
@@ -281,6 +334,7 @@ export function OpportunityProfilePage() {
               onSave={(patch) => saveOpportunity(opportunity.id, patch).then(() => undefined)}
               onDeleted={() => navigate('/opportunities', { replace: true })}
               hideHeader
+              headerDraft={headerDraft ? { patch: headerDraft, onCommitted: () => setHeaderDraft(null), onDiscard: () => setHeaderDraft(null) } : null}
             />
           </div>
         )}
@@ -450,6 +504,28 @@ export function OpportunityProfilePage() {
           </div>
         )}
       </main>
+
+      <UnsavedChangesDialog
+        open={headerLeave != null}
+        saving={headerSaving}
+        error={headerError}
+        recordLabel="opportunity"
+        onSave={() =>
+          void saveHeader().then((ok) => {
+            if (!ok) return
+            const next = headerLeave
+            setHeaderLeave(null)
+            next?.()
+          })
+        }
+        onDiscard={() => {
+          const next = headerLeave
+          setHeaderLeave(null)
+          setHeaderDraft(null)
+          next?.()
+        }}
+        onCancel={() => setHeaderLeave(null)}
+      />
 
       <SideDrawer open={docOpen != null} onRequestClose={() => (panel.current ? panel.current.requestLeave(() => setDocOpen(null)) : setDocOpen(null))} label="Project documents" width="max-w-[580px]" testId="profile-document-drawer">
         {docOpen && <DocumentWorkspace ref={panel} opportunity={opportunity} initialSlot={docOpen.slot} initialDocumentId={docOpen.id} startCreating={docOpen.create} onClose={() => setDocOpen(null)} />}

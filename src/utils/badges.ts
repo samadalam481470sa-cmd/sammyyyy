@@ -50,5 +50,5 @@ export function stageBadge(stage: string): string {
 }
 
 export function badgeClass(extra = ''): string {
-  return `inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide ${extra}`
+  return `inline-block w-fit max-w-full truncate rounded-md px-2 py-0.5 align-middle text-[11px] leading-4 font-semibold tracking-wide whitespace-nowrap ${extra}`
 }

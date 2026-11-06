@@ -47,6 +47,8 @@ interface OpportunityEditorProps {
   tabs?: Array<{ id: string; label: string }>
   /** Shown at the very bottom, below Delete Opportunity. */
   footerExtra?: ReactNode
+  /** Status and stage drafted in the profile header. Save Changes here commits them with the rest. */
+  headerDraft?: { patch: OpportunityUpdate; onCommitted: () => void; onDiscard: () => void } | null
   /** Hide the title block when the surrounding page already shows the deal (the full profile). */
   hideHeader?: boolean
 }
@@ -59,7 +61,7 @@ const DEFAULT_TABS = [
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
-  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra, hideHeader = false }, ref) {
+  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra, hideHeader = false, headerDraft = null }, ref) {
     const [tab, setTab] = useState(tabs[0]?.id ?? 'overview')
     const [saved, setSaved] = useState(() => snapshotOpportunityDraft(opportunity))
     const [draft, setDraft] = useState<OpportunityDraft>(() => snapshotOpportunityDraft(opportunity))
@@ -74,7 +76,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const { tasks, documents, deleteOpportunity } = useData()
     const deletingRef = useRef(false)
 
-    const dirty = !opportunityDraftsEqual(saved, draft)
+    const dirty = !opportunityDraftsEqual(saved, draft) || headerDraft != null
     const linkedTaskCount = tasks.filter(
       (task) => task.opportunityId === opportunity.id && !task.deletedAt,
     ).length
@@ -94,12 +96,12 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     }, [opportunity.id])
 
     const persist = useCallback(async (): Promise<boolean> => {
-      if (opportunityDraftsEqual(saved, draft)) {
+      if (opportunityDraftsEqual(saved, draft) && !headerDraft) {
         setMessage('No changes to save')
         return true
       }
       if (savingRef.current) return false
-      const patchPreview = opportunityDraftPatch(saved, draft) as { status?: string; stage?: string }
+      const patchPreview = { ...opportunityDraftPatch(saved, draft), ...headerDraft?.patch } as { status?: string; stage?: string }
       const nextStatus = patchPreview.status ?? opportunity.status
       const nextStage = patchPreview.stage ?? opportunity.stage
       if ((patchPreview.status !== undefined || patchPreview.stage !== undefined) && nextStatus === 'Completed' && nextStage !== 'Closing') {
@@ -110,9 +112,12 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
       setSaving(true)
       setError(null)
       try {
-        const patch = opportunityDraftPatch(saved, draft)
+        const patch = { ...opportunityDraftPatch(saved, draft), ...headerDraft?.patch }
         await onSave(patch)
-        setSaved(draft)
+        const committed = headerDraft?.patch ? { ...draft, ...headerDraft.patch } as OpportunityDraft : draft
+        setSaved(committed)
+        setDraft(committed)
+        headerDraft?.onCommitted()
         setMessage(savedMessageLabel())
         return true
       } catch (err) {
@@ -122,7 +127,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         savingRef.current = false
         setSaving(false)
       }
-    }, [saved, draft, onSave, opportunity.status, opportunity.stage])
+    }, [saved, draft, onSave, opportunity.status, opportunity.stage, headerDraft])
 
     const persistRef = useRef(persist)
     persistRef.current = persist
@@ -190,6 +195,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     }
 
     const handleDialogDiscard = () => {
+      headerDraft?.onDiscard()
       discard()
       const next = pendingLeave
       setPendingLeave(null)
@@ -244,8 +250,8 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           ))}
         </div>
 
-        <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {!hideHeader && <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 p-3">
+        <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3">
+          {!hideHeader && <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 px-3 py-2">
             <label className="block min-w-0">
               <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
               <select
@@ -292,12 +298,14 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
 
           {tab === 'overview' && (
             <>
-              <Field label="Project name">
-                <input className="field-input" value={draft.projectName} onChange={(e) => setField('projectName', e.target.value)} />
-              </Field>
-              <Field label="Company Name">
-                <input className="field-input" value={draft.entityName} onChange={(e) => setField('entityName', e.target.value)} />
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Project name">
+                  <input className="field-input" value={draft.projectName} onChange={(e) => setField('projectName', e.target.value)} />
+                </Field>
+                <Field label="Company Name">
+                  <input className="field-input" value={draft.entityName} onChange={(e) => setField('entityName', e.target.value)} />
+                </Field>
+              </div>
               <LeadTeamFields
                 value={{ dealLead: draft.dealLead, primaryLeadId: draft.primaryLeadId, additionalLeadIds: draft.additionalLeadIds }}
                 onChange={(team) => {
@@ -316,7 +324,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                   <input type="number" className="field-input" value={draft.pfEbitda} onChange={(e) => setField('pfEbitda', Number(e.target.value))} />
                 </Field>
               </div>
-              <dl className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-canvas px-3 py-2 text-xs" data-testid="record-dates">
+              <dl className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs" data-testid="record-dates">
                 <div>
                   <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Created</dt>
                   <dd className="text-ink">{opportunity.createdAt ? formatDate(opportunity.createdAt) : 'Not recorded'}</dd>

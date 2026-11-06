@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Mail, Phone, Plus, UserCheck } from 'lucide-react'
+import { Mail, Phone, Plus, UserCheck, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
+import type { DealLead } from '@/lib/dealLeads'
 import { useDealLeads } from '@/hooks/useDealLeads'
 import { useFitRows, useGridColumns } from '@/hooks/useFitRows'
 import { useRestorableSelection, useSessionState } from '@/hooks/useSessionState'
@@ -21,8 +22,14 @@ type Segment = (typeof SEGMENTS)[number]
 /** The controlled roster of acquisition leads. Signing in never adds anyone here. */
 export function DealLeadsPage() {
   const roster = useDealLeads()
-  const { leads, isAdmin, own, claimable, api } = roster
-  const { opportunities } = useData()
+  const { leads, own, claimable, api } = roster
+  const { opportunities, undoDeleteDealLead } = useData()
+  const [undo, setUndo] = useState<{ lead: DealLead; error: string | null } | null>(null)
+  useEffect(() => {
+    if (!undo || undo.error) return
+    const timer = window.setTimeout(() => setUndo(null), 10_000)
+    return () => window.clearTimeout(timer)
+  }, [undo])
   const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useRestorableSelection(KEY)
   const [search, setSearch] = useSessionState(`${KEY}:search`, '')
@@ -53,7 +60,7 @@ export function DealLeadsPage() {
     const next = new URLSearchParams(params)
     next.delete('new')
     setParams(next, { replace: true })
-    if (action === 'lead' && isAdmin) setCreating('create')
+    if (action === 'lead') setCreating('create')
     else openSelf()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, api.loading])
@@ -89,11 +96,9 @@ export function DealLeadsPage() {
         <button type="button" onClick={openSelf} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-ink hover:bg-canvas" data-testid="deal-lead-self">
           <UserCheck className="h-4 w-4" /> {selfLabel}
         </button>
-        {isAdmin && (
-          <PrimaryButton onClick={() => setCreating('create')} icon={<Plus className="h-4 w-4" />} testId="new-deal-lead">
-            New Deal Lead
-          </PrimaryButton>
-        )}
+        <PrimaryButton onClick={() => setCreating('create')} icon={<Plus className="h-4 w-4" />} testId="new-deal-lead">
+          New Deal Lead
+        </PrimaryButton>
       </PageTitleBar>
       <PageToolbar
         left={<SegmentButtons label="Deal lead status" value={status} onChange={setStatus} options={SEGMENTS.map((s) => ({ id: s, label: s, count: counts[s] }))} />}
@@ -156,8 +161,30 @@ export function DealLeadsPage() {
       </ContentCard>
 
       <SideDrawer open={Boolean(selected)} onRequestClose={requestClose} label="Edit deal lead" testId="deal-lead-drawer">
-        {selected && <DealLeadEditor key={selected.id} ref={editorRef} roster={roster} mode={claiming ? 'self' : 'edit'} lead={selected} onClose={close} onSaved={() => setClaiming(false)} />}
+        {selected && <DealLeadEditor key={selected.id} ref={editorRef} roster={roster} mode={claiming ? 'self' : 'edit'} lead={selected} onDeleted={(lead) => setUndo({ lead, error: null })} onClose={close} onSaved={() => setClaiming(false)} />}
       </SideDrawer>
+      {undo && (
+        <div role="status" data-testid="deal-lead-undo" className="fixed bottom-5 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-3 rounded-lg bg-navy-900 px-4 py-2.5 text-sm text-white shadow-(--shadow-drawer)">
+          <span>{undo.error ?? `${undo.lead.name} was deleted.`}</span>
+          {!undo.error && (
+            <button
+              type="button"
+              data-testid="deal-lead-undo-button"
+              className="font-semibold underline"
+              onClick={() => {
+                void undoDeleteDealLead(undo.lead.id)
+                  .then(() => setUndo(null))
+                  .catch((err: unknown) => setUndo({ lead: undo.lead, error: err instanceof Error ? err.message : 'It could not be restored.' }))
+              }}
+            >
+              Undo
+            </button>
+          )}
+          <button type="button" aria-label="Dismiss" onClick={() => setUndo(null)} className="rounded p-0.5 hover:bg-white/10">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       <NewDealLeadModal open={creating != null} mode={creating ?? 'self'} roster={roster} onClose={() => setCreating(null)} onCreated={(lead) => setSelectedId(lead.id)} />
     </PageShell>
   )

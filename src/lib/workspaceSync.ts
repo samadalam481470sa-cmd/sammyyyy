@@ -9,7 +9,7 @@ import { getMicrosoftIdToken } from '@/auth/msal'
 export const WORKSPACE_SESSION_KEY = 'newport_crm_workspace_session'
 export const WORKSPACE_STATE_EVENT = 'newport-workspace-state'
 
-export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'dealLeads' | 'activity' | 'documentTypes' | 'meetings'
+export type WorkspaceCollection = 'opportunities' | 'tasks' | 'documents' | 'contacts' | 'dealLeads' | 'activity' | 'documentTypes'
 
 export interface WorkspaceRecord {
   collection: WorkspaceCollection
@@ -17,6 +17,8 @@ export interface WorkspaceRecord {
   deleted: boolean
   updatedAt: string
   updatedBy: string
+  /** Server revision of this record. Absent from servers older than the Nov 2026 build. */
+  rev?: number
   data: Record<string, unknown> | null
 }
 
@@ -222,13 +224,127 @@ export async function pullWorkspace(since?: string | null): Promise<WorkspacePul
   return (await res.json()) as WorkspacePull
 }
 
-export async function pushWorkspaceChanges(changes: { collection: WorkspaceCollection; id: string; data: unknown | null }[]): Promise<string> {
-  let serverTime = ''
+export interface WorkspaceChange {
+  collection: WorkspaceCollection
+  id: string
+  data: unknown | null
+  /** Revision this edit was based on; 0 means a new record. */
+  baseRev?: number
+}
+
+export interface WorkspacePushResult {
+  serverTime: string
+  applied: { collection: WorkspaceCollection; id: string; rev: number; updatedAt: string }[]
+  /** Records someone else saved first. The server kept their copy; the client merges. */
+  conflicts: WorkspaceRecord[]
+  blocked: { collection: WorkspaceCollection; id: string; reason: string }[]
+  /** False for a server older than the Nov 2026 build, which applies every change. */
+  versioned: boolean
+}
+
+export async function pushWorkspaceChanges(changes: WorkspaceChange[], batchId?: string): Promise<WorkspacePushResult> {
+  const result: WorkspacePushResult = { serverTime: '', applied: [], conflicts: [], blocked: [], versioned: false }
   for (let i = 0; i < changes.length; i += 400) {
-    const res = await request('/changes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changes: changes.slice(i, i + 400) }) })
-    serverTime = ((await res.json()) as { serverTime?: string }).serverTime ?? serverTime
+    const res = await request('/changes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changes: changes.slice(i, i + 400), batchId }) })
+    const body = (await res.json()) as Partial<WorkspacePushResult>
+    result.serverTime = body.serverTime ?? result.serverTime
+    if (body.applied) {
+      result.versioned = true
+      result.applied.push(...body.applied)
+    }
+    if (body.conflicts) result.conflicts.push(...body.conflicts)
+    if (body.blocked) result.blocked.push(...body.blocked)
   }
-  return serverTime
+  return result
+}
+
+export interface LeadDependencies {
+  primary: number
+  additional: number
+  taskOwner: number
+  legacyName: number
+  total: number
+}
+
+export class LeadInUseError extends Error {
+  readonly dependencies: LeadDependencies
+  constructor(dependencies: LeadDependencies) {
+    super('This deal lead is still in use.')
+    this.name = 'LeadInUseError'
+    this.dependencies = dependencies
+  }
+}
+
+async function rawRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  const base = await workspaceApiBase()
+  const session = readSession()
+  if (!base || !session) throw new Error('The shared workspace is not connected.')
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${session.token}`)
+  return fetch(`${base}/api/workspace${path}`, { ...init, headers })
+}
+
+/** The server checks for uses inside one transaction, so a stale screen cannot remove a used lead. */
+export async function deleteWorkspaceLead(id: string): Promise<{ rev: number; serverTime: string }> {
+  const res = await rawRequest(`/deal-leads/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  const body = (await res.json().catch(() => ({}))) as { error?: string; dependencies?: LeadDependencies; rev?: number; serverTime?: string }
+  if (res.status === 409 && body.dependencies) throw new LeadInUseError(body.dependencies)
+  if (!res.ok) throw new Error(body.error || `The Newport server returned ${res.status}.`)
+  return { rev: body.rev ?? 0, serverTime: body.serverTime ?? '' }
+}
+
+export async function restoreWorkspaceLead(id: string): Promise<{ rev: number; serverTime: string; lead: Record<string, unknown> }> {
+  const res = await rawRequest(`/deal-leads/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+  const body = (await res.json().catch(() => ({}))) as { error?: string; rev?: number; serverTime?: string; lead?: Record<string, unknown> }
+  if (!res.ok || !body.lead) throw new Error(body.error || `The Newport server returned ${res.status}.`)
+  return { rev: body.rev ?? 0, serverTime: body.serverTime ?? '', lead: body.lead }
+}
+
+// ── Private meetings: readable and writable only by the signed-in person ─────
+
+export interface PrivateMeetingRow {
+  id: string
+  deleted: boolean
+  rev: number
+  updatedAt: string
+  data: Record<string, unknown> | null
+}
+
+export async function pullPrivateMeetings(): Promise<{ serverTime: string; records: PrivateMeetingRow[] }> {
+  const res = await request('/meetings')
+  return (await res.json()) as { serverTime: string; records: PrivateMeetingRow[] }
+}
+
+export type PrivateMeetingSave = { ok: true; rev: number; updatedAt: string } | { ok: false; rev: number; deleted: boolean; updatedAt: string; data: Record<string, unknown> | null }
+
+export async function pushPrivateMeeting(id: string, data: unknown, baseRev: number): Promise<PrivateMeetingSave> {
+  const res = await rawRequest(`/meetings/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data, baseRev }) })
+  const body = (await res.json().catch(() => ({}))) as { error?: string; rev?: number; deleted?: boolean; updatedAt?: string; data?: Record<string, unknown> | null }
+  if (res.status === 409) return { ok: false, rev: body.rev ?? 0, deleted: Boolean(body.deleted), updatedAt: body.updatedAt ?? '', data: body.data ?? null }
+  if (!res.ok) throw new Error(body.error || `The Newport server returned ${res.status}.`)
+  return { ok: true, rev: body.rev ?? 0, updatedAt: body.updatedAt ?? '' }
+}
+
+export async function deletePrivateMeeting(id: string): Promise<void> {
+  const res = await rawRequest(`/meetings/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok && res.status !== 404) throw new Error(`The Newport server returned ${res.status}.`)
+}
+
+export async function uploadPrivateTranscript(id: string, kind: 'text' | 'source', file: Blob, name: string): Promise<void> {
+  const res = await rawRequest(`/meetings/${encodeURIComponent(id)}/files/${kind}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(name) },
+    body: file,
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error || `The Newport server returned ${res.status}.`)
+  }
+}
+
+export async function downloadPrivateTranscript(id: string, kind: 'text' | 'source'): Promise<Blob | null> {
+  const res = await rawRequest(`/meetings/${encodeURIComponent(id)}/files/${kind}`).catch(() => null)
+  return res?.ok ? res.blob() : null
 }
 
 export async function uploadWorkspaceFile(docId: string, file: Blob, name: string): Promise<void> {

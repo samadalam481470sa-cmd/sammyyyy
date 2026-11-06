@@ -37,6 +37,7 @@ import {
   leadFinancials,
   missedDeadlinesByOwner,
   monthlyStepSeries,
+  monthlyCountAxis,
   pipelineByStage,
   reportKpis,
   resolvePeriod,
@@ -430,12 +431,13 @@ export function ReportsPage() {
   const monthly = (key: 'created' | 'completed', name: string, color: string) => {
     const data = monthlyStepSeries(trends.points, key)
     const count = trends.points.length
+    const axis = monthlyCountAxis(data.map((row) => row.value))
     return (
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
           <XAxis dataKey="x" type="number" domain={[0, count]} ticks={trends.points.map((_, i) => i + 0.5)} interval="preserveStartEnd" minTickGap={24} tick={AXIS} axisLine={false} tickLine={false} tickFormatter={(x: number) => trends.points[Math.floor(x)]?.label ?? ''} />
-          <YAxis allowDecimals={false} domain={[0, (max: number) => Math.max(1, max)]} tick={AXIS} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={false} domain={[0, axis.max]} ticks={axis.ticks} interval={0} tick={AXIS} axisLine={false} tickLine={false} />
           <Tooltip content={<StepTooltip name={name} format={(v) => String(v)} />} />
           <Line isAnimationActive={false} type="linear" dataKey="value" name={name} stroke={color} strokeWidth={2.25} dot={false} />
         </LineChart>

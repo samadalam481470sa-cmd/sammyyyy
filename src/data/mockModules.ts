@@ -43,6 +43,8 @@ export interface TaskRecord {
   initialDueDate?: string | null
   /** Each saved due date change, oldest first. */
   dueDateHistory?: { from: string | null; to: string | null; at: string }[]
+  /** One entry per Restore from Task History; earlier completions stay for reporting. */
+  restoreHistory?: { completedAt: string | null; archivedAt: string | null; restoredAt: string; restoredBy: string | null }[]
 }
 
 export interface SourceRecord {

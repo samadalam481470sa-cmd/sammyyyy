@@ -27,15 +27,15 @@ describe('Nov 2026 sprint rules', () => {
     const t = task('t1', 'o1', '2026-10-01')
     const active = [opp('o1', 'Active')]
     const inactive = [opp('o1', 'Inactive')]
-    expect(isWorkingTask(t, active, NOW)).toBe(true)
-    expect(isWorkingTask(t, inactive, NOW)).toBe(false)
-    expect(isPausedTask(t, inactive, NOW)).toBe(true)
+    expect(isWorkingTask(t, active)).toBe(true)
+    expect(isWorkingTask(t, inactive)).toBe(false)
+    expect(isPausedTask(t, inactive)).toBe(true)
     expect(overdueTaskList([t], NOW, inactive)).toHaveLength(0)
     expect(rankWeekPriorityTasks([t], NOW, inactive)).toHaveLength(0)
     expect(overdueTaskList([t], NOW, active)).toHaveLength(1)
     expect(t.status).toBe('Open')
     // A standalone task is kept in the working list, never silently lost.
-    expect(isWorkingTask(task('t2', null, '2026-11-10'), active, NOW)).toBe(true)
+    expect(isWorkingTask(task('t2', null, '2026-11-10'), active)).toBe(true)
   })
 
   it('task history separates completed, archived and deleted, and never lists paused tasks', () => {

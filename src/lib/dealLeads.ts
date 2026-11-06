@@ -1,6 +1,7 @@
 /**
- * Deal Leads: a deliberate roster of acquisition leads. It is separate from Microsoft sign-ins,
- * from Task Owners and from Relationships. Signing in never creates a lead.
+ * Deal Leads: a deliberate roster of acquisition leads, separate from Microsoft sign-ins and from
+ * Relationships. Signing in never creates a lead. Task Owner pickers read this roster, but a task
+ * owner is not a deal lead on that deal: the two remain separate fields.
  *
  * An opportunity has zero or one PRIMARY lead and any number of ADDITIONAL leads, stored as stable
  * lead ids. `opportunity.dealLead` stays as the primary's display name: older screens, exports and
@@ -161,18 +162,44 @@ export function emailConflict(leads: readonly DealLead[], email: string, selfId:
   return wanted ? leads.find((lead) => lead.id !== selfId && norm(lead.email) === wanted) ?? null : null
 }
 
-export interface LeadPermissions {
-  /** Create or edit other people's records, change status and links to accounts. */
-  admin: boolean
-  isOwn: boolean
-  canEditProfile: boolean
-  canChangeStatus: boolean
+/** What still points at a lead. The server runs the same count before it deletes one. */
+export function leadUsage(
+  lead: Pick<DealLead, 'id' | 'name'>,
+  opportunities: readonly Partial<LeadFields>[],
+  tasks: readonly { ownerId?: string | null; owner?: string | null; deletedAt?: string | null }[],
+) {
+  const name = norm(lead.name)
+  let primary = 0
+  let additional = 0
+  let legacyName = 0
+  for (const opp of opportunities) {
+    if (opp.primaryLeadId === lead.id) primary += 1
+    else if (name && !opp.primaryLeadId && norm(opp.dealLead) === name) legacyName += 1
+    if (opp.additionalLeadIds?.includes(lead.id)) additional += 1
+  }
+  const taskOwner = tasks.filter((task) => !task.deletedAt && (task.ownerId === lead.id || (name && norm(task.owner) === name))).length
+  return { primary, additional, taskOwner, legacyName, total: primary + additional + taskOwner + legacyName }
 }
 
-/** These checks shape the screen. The server enforces the same rules: see dealLeadWriteAllowed in server/middleware/defense.ts. */
-export function leadPermissions(lead: DealLead | null, user: Pick<AuthUser, 'id'> | null | undefined, admin: boolean): LeadPermissions {
-  const isOwn = Boolean(lead && user?.id && lead.authAccountId === user.id)
-  return { admin, isOwn, canEditProfile: admin || isOwn, canChangeStatus: admin }
+/** A task saved before owners came from the roster. A name that matches no lead stays exactly as it was. */
+export function migrateTaskOwner<T extends { owner?: string | null; ownerId?: string | null }>(task: T, roster: readonly DealLead[]): T {
+  if (task.ownerId && roster.some((lead) => lead.id === task.ownerId)) return task
+  const id = resolveLeadIdByName(task.owner, roster)
+  return id ? { ...task, ownerId: id } : task
+}
+
+/** Task Owner choices: Active leads, plus the task's current owner so an old name stays visible. */
+export function taskOwnerOptions(roster: readonly DealLead[], current: { ownerId?: string | null; owner?: string | null } | null) {
+  const options = roster
+    .filter((lead) => lead.status === 'Active' || lead.id === current?.ownerId)
+    .map((lead) => ({ id: lead.id, label: lead.name, detail: lead.status === 'Inactive' ? 'Inactive — current owner' : lead.jobTitle || undefined }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  const known = current?.ownerId && roster.some((lead) => lead.id === current.ownerId)
+  const historical = current?.owner?.trim()
+  if (!known && historical) {
+    return [{ id: current?.ownerId || `legacy:${historical}`, label: historical, detail: 'Not on the roster — historical owner' as string | undefined }, ...options]
+  }
+  return options
 }
 
 /** Primary selector options: Active leads, plus the current value when it is inactive or legacy. */

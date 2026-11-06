@@ -20,7 +20,19 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
       </div>
 
       <div className="custom-scroll overflow-x-auto">
-        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1220px] table-fixed border-collapse text-left text-sm" data-testid="priority-deals-table">
+          <colgroup>
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[106px]" />
+            <col className="w-[178px]" />
+            <col className="w-[132px]" />
+            <col className="w-[78px]" />
+            <col className="w-[84px]" />
+            <col className="w-[78px]" />
+            <col />
+            <col className="w-[112px]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-canvas/80 text-[11px] tracking-[0.06em] text-ink-subtle uppercase">
               <th className="px-5 py-3 font-semibold">Project</th>
@@ -65,10 +77,10 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
                           title="Needs attention"
                         />
                       )}
-                      <span className="font-semibold text-navy-900">{opp.projectName}</span>
+                      <span className="truncate font-semibold text-navy-900" title={opp.projectName}>{opp.projectName}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-3.5 text-ink-muted">{opp.entityName}</td>
+                  <td className="truncate px-3 py-3.5 text-ink-muted" title={opp.entityName}>{opp.entityName}</td>
                   <td className="px-3 py-3.5">
                     <span
                       className={badgeClass(statusBadge(opp.status))}
@@ -77,9 +89,9 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
                     </span>
                   </td>
                   <td className="px-3 py-3.5">
-                    <span className={badgeClass(stageBadge(opp.stage))}>{opp.stage}</span>
+                    <span className={badgeClass(stageBadge(opp.stage))} title={opp.stage} data-testid="deal-stage-badge">{opp.stage}</span>
                   </td>
-                  <td className="px-3 py-3.5 text-ink-muted">{opp.dealLead || '—'}</td>
+                  <td className="truncate px-3 py-3.5 text-ink-muted" title={opp.dealLead || undefined}>{opp.dealLead || '—'}</td>
                   <td className="px-3 py-3.5 text-right font-medium tabular-nums text-ink">
                     {formatCurrency(opp.nwp)}
                   </td>
@@ -89,7 +101,7 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
                   <td className="px-3 py-3.5 text-right tabular-nums text-ink-muted">
                     {formatCurrency(opp.pfEbitda)}
                   </td>
-                  <td className="max-w-[180px] truncate px-3 py-3.5 text-ink">
+                  <td className="truncate px-3 py-3.5 text-ink">
                     {opp.nextAction ?? (
                       <span className="text-warning italic">No next action</span>
                     )}

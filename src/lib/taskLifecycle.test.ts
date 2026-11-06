@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { TaskRecord } from '@/data/mockModules'
 import { applyTaskArchiveRules, isActiveListTask, isHistoryTask } from './taskLifecycle'
 
-const NOW = new Date('2026-10-16T15:00:00Z')
 
 function task(partial: Partial<TaskRecord>): TaskRecord {
   return {
@@ -21,22 +20,22 @@ function task(partial: Partial<TaskRecord>): TaskRecord {
 }
 
 describe('taskLifecycle', () => {
-  it('keeps a freshly completed task on the active list', () => {
+  it('a completed task is in history at once', () => {
     const recent = task({ completedAt: '2026-10-14T15:00:00Z' })
-    expect(isActiveListTask(recent, NOW)).toBe(true)
-    expect(isHistoryTask(recent, NOW)).toBe(false)
+    expect(isActiveListTask(recent)).toBe(false)
+    expect(isHistoryTask(recent)).toBe(true)
   })
 
-  it('moves a done task to history after seven days without requiring the browser to stay open', () => {
-    const { tasks } = applyTaskArchiveRules([task({ completedAt: '2026-10-01T15:00:00Z' })], NOW)
-    expect(tasks[0].archivedAt).toBeTruthy()
-    expect(isHistoryTask(tasks[0], NOW)).toBe(true)
-    expect(isActiveListTask(tasks[0], NOW)).toBe(false)
+  it('a task left over from the old flow is archived on its completion date', () => {
+    const { tasks } = applyTaskArchiveRules([task({ completedAt: '2026-10-01T15:00:00Z' })])
+    expect(tasks[0].archivedAt).toBe('2026-10-01T15:00:00Z')
+    expect(isHistoryTask(tasks[0])).toBe(true)
+    expect(isActiveListTask(tasks[0])).toBe(false)
   })
 
   it('excludes deleted tasks from history', () => {
     const deleted = task({ deletedAt: '2026-10-16T12:00:00Z', archivedAt: null })
-    expect(isHistoryTask(deleted, NOW)).toBe(false)
-    expect(isActiveListTask(deleted, NOW)).toBe(false)
+    expect(isHistoryTask(deleted)).toBe(false)
+    expect(isActiveListTask(deleted)).toBe(false)
   })
 })

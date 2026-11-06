@@ -10,7 +10,9 @@ import { useEditorGuard, type OpportunityEditorHandle } from '@/components/share
 import { registerPendingCommit } from '@/lib/userVault'
 import { DrawerHeader, ModalHeader } from '@/components/shared/Overlay'
 import { taskWarning } from '@/lib/taskWarning'
-import { isPausedTask } from '@/lib/taskLifecycle'
+import { isHistoryTask, isPausedTask } from '@/lib/taskLifecycle'
+import { taskOwnerOptions } from '@/lib/dealLeads'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { forwardRef, useCallback, useImperativeHandle, useRef, type ReactNode } from 'react'
 
 export type TaskDraft = {
@@ -62,7 +64,7 @@ interface TaskEditorProps {
 
 export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
   function TaskEditor({ mode, task, draftSeed, onClose, onSaved, onDeleted, footerExtra, dueHint }, ref) {
-    const { opportunities, users, saveTask, createTask, deleteTask } = useData()
+    const { opportunities, dealLeads, saveTask, createTask, deleteTask, restoreTask } = useData()
     const guard = useEditorGuard()
     const [draft, setDraft] = useState<TaskDraft>(
       () => draftSeed ?? (task ? snapshotTask(task) : emptyTaskDraft()),
@@ -75,6 +77,8 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
     const [message, setMessage] = useState<string | null>(null)
     const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [doneAsk, setDoneAsk] = useState(false)
+    const inHistory = mode === 'existing' && task ? isHistoryTask(task) : false
     const savingRef = useRef(false)
 
     useEffect(() => {
@@ -123,10 +127,9 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
         })),
       [opportunities],
     )
-    const ownerOptions = useMemo(
-      () => users.map((u) => ({ id: u.id, label: u.name })),
-      [users],
-    )
+    // New owners come from Active Deal Leads only. An old owner stays visible until someone changes it.
+    const ownerOptions = useMemo(() => taskOwnerOptions(dealLeads, task ?? null), [dealLeads, task])
+    const legacyOwnerValue = !draft.ownerId && task?.owner?.trim() ? `legacy:${task.owner.trim()}` : null
     const linked = opportunities.find((o) => o.id === draft.opportunityId) ?? null
 
     const persist = async (): Promise<boolean> => {
@@ -223,8 +226,18 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
         <div className="custom-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
-            <select className={field} value={draft.status} onChange={(e) => setDraft((p) => ({ ...p, status: e.target.value }))}>
-              {TASK_STATUSES.map((s) => (
+            <select
+              className={field}
+              value={draft.status}
+              data-testid="task-editor-status"
+              disabled={inHistory}
+              onChange={(e) => {
+                // Completing is confirmed first, and moves the task out of the live lists at once.
+                if (e.target.value === 'Done' && mode !== 'draft') setDoneAsk(true)
+                else setDraft((p) => ({ ...p, status: e.target.value }))
+              }}
+            >
+              {TASK_STATUSES.filter((s) => mode !== 'draft' || s !== 'Done').map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
@@ -259,7 +272,7 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           </label>
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Owner</span>
-            <SearchSelect value={draft.ownerId} options={ownerOptions} onChange={(id) => setDraft((p) => ({ ...p, ownerId: id }))} placeholder="Select an authorized user" emptyText="No matching users" />
+            <SearchSelect value={draft.ownerId ?? legacyOwnerValue} options={ownerOptions} emptyText="No active Deal Leads. Add one on the Deal Leads page." onChange={(id) => setDraft((p) => ({ ...p, ownerId: id?.startsWith('legacy:') ? null : id }))} placeholder="Select an active Deal Lead" />
           </label>
           <label className="block">
             <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Notes</span>
@@ -282,6 +295,27 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           >
             {saveButtonLabel(saving)}
           </button>
+          {inHistory && task && !task.deletedAt && (
+            <button
+              type="button"
+              data-testid="task-editor-restore"
+              disabled={saving}
+              onClick={() => {
+                setError(null)
+                void restoreTask(task.id)
+                  .then((restored) => {
+                    const snap = snapshotTask(restored)
+                    setSaved(snap)
+                    setDraft(snap)
+                    setMessage('Restored to Open.')
+                  })
+                  .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Restore failed'))
+              }}
+              className="h-10 w-full rounded-lg border border-border bg-surface text-sm font-semibold text-navy-900 hover:bg-canvas"
+            >
+              Restore to Open
+            </button>
+          )}
           {mode !== 'draft' && (
             <button
               type="button"
@@ -295,6 +329,39 @@ export const TaskEditor = forwardRef<OpportunityEditorHandle, TaskEditorProps>(
           )}
           {footerExtra}
         </div>
+
+        <ConfirmDialog
+          open={doneAsk}
+          title="Mark this task as completed and move it to Task History?"
+          message={draft.action}
+          confirmLabel="Complete Task"
+          tone="default"
+          onCancel={() => setDoneAsk(false)}
+          onConfirm={() => {
+            setDoneAsk(false)
+            if (!task) return
+            setSaving(true)
+            setError(null)
+            void saveTask(task.id, {
+              action: draft.action.trim() || task.action,
+              priority: draft.priority,
+              opportunityId: draft.opportunityId,
+              ownerId: draft.ownerId,
+              dueDate: draft.dueDate || null,
+              notes: draft.notes,
+              status: 'Done',
+            })
+              .then((result) => {
+                const snap = snapshotTask(result)
+                setSaved(snap)
+                setDraft(snap)
+                onSaved?.(result)
+                onClose()
+              })
+              .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Save failed'))
+              .finally(() => setSaving(false))
+          }}
+        />
 
         <UnsavedChangesDialog
           open={pendingLeave != null}

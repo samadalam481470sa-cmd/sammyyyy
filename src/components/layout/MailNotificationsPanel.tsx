@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
-import { AlertTriangle, Inbox, Mail, X } from 'lucide-react'
+import {useMemo,  useEffect, useState } from 'react'
+import { AlertTriangle, Inbox, Mail, X, CalendarDays } from 'lucide-react'
 import type { TaskRecord } from '@/data/mockModules'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/auth/AuthContext'
+import { useOutlookCalendar } from '@/hooks/useOutlookCalendar'
+import { allocateBellSlots, todaysMeetings } from '@/lib/bellSlots'
+import { loadCrmMeetings } from '@/lib/crmMeetings'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import { formatMailTime, loadMailbox, mailProvider, saveMailbox, senderDisplayName, type MailMessage } from '@/lib/outlookMailbox'
 import { graphTokenError, outlookToken } from '@/lib/outlookGraph'
 import { OUTLOOK_SYNCED_EVENT, mailSyncHealth, pushMailRead, syncOutlookNow } from '@/lib/outlookSync'
@@ -64,11 +69,30 @@ interface MailNotificationsPanelProps {
 }
 
 /**
- * Bell drawer: the five most recent UNREAD incoming emails. Opening the bell does not mark
+ * Bell drawer: today's meetings first, then overdue tasks, then the most recent UNREAD emails, in
+ * about ten rows shared between the groups. Opening the bell does not mark
  * anything read; opening a message in Email does, through the mail provider.
  */
-export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: MailNotificationsPanelProps) {
+export function MailNotificationsPanel(props: MailNotificationsPanelProps) {
+  // The calendar is only asked once the drawer opens.
+  if (!props.open) return null
+  return <NotificationsDrawer {...props} />
+}
+
+const dayLinkFormat = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+
+function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificationsPanelProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const [[dayStart, dayEnd]] = useState(() => {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    return [start, new Date(start.getTime() + 24 * 3600_000)] as const
+  })
+  const calendar = useOutlookCalendar(dayStart, dayEnd)
+  // Only this person's Outlook events and their own saved meetings; both are private to them.
+  const meetings = useMemo(() => todaysMeetings(calendar.events, loadCrmMeetings(calendarOwnerKey(user)), dayStart, dayEnd), [calendar.events, user, dayStart, dayEnd])
   const { unread, available, error: mailError } = useUnreadMail(email)
   const [connecting, setConnecting] = useState(false)
   const [note, setNote] = useState<string | null>(null)
@@ -106,8 +130,8 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
-  const shown = unread.slice(0, 5)
+  const slots = allocateBellSlots(meetings.length, tasks.length, unread.length)
+  const shown = unread.slice(0, slots.mail)
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-navy-950/30 backdrop-blur-[1px]" data-testid="mail-notifications">
@@ -117,8 +141,9 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
           <div>
             <h2 className="font-brand text-lg font-bold text-navy-900">Notifications</h2>
             <p className="text-xs text-ink-muted">
-              {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'}` : 'Incoming email'}
-              {tasks.length > 0 && ` · ${tasks.length} overdue task${tasks.length === 1 ? '' : 's'}`}
+              <span data-testid="bell-counts">
+                {meetings.length} meeting{meetings.length === 1 ? '' : 's'} today · {tasks.length} overdue task{tasks.length === 1 ? '' : 's'} · {available ? `${unread.length} unread email${unread.length === 1 ? '' : 's'}` : 'email not connected'}
+              </span>
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close notifications" className="rounded-lg border border-border p-2 text-ink-muted hover:bg-canvas">
@@ -127,11 +152,55 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
         </div>
 
         <div className="custom-scroll flex-1 overflow-y-auto">
+          {meetings.length > 0 && (
+            <div className="border-b border-border" data-testid="meeting-notifications">
+              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Today's meetings ({meetings.length})</p>
+              <ul className="divide-y divide-border">
+                {meetings.slice(0, slots.meetings).map((meeting) => (
+                  <li key={meeting.id}>
+                    <button
+                      type="button"
+                      data-testid={`bell-meeting-${meeting.id}`}
+                      onClick={() => {
+                        onClose()
+                        navigate(`/meetings?day=${dayLinkFormat(dayStart)}&event=${encodeURIComponent(meeting.id)}`)
+                      }}
+                      className="flex w-full items-start gap-2 px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                    >
+                      <CalendarDays className={`mt-0.5 h-4 w-4 shrink-0 ${meeting.past ? 'text-ink-subtle' : 'text-accent'}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className={`block truncate text-sm font-semibold ${meeting.past ? 'text-ink-muted' : 'text-navy-900'}`}>{meeting.title}</span>
+                        <span className="block truncate text-xs text-ink-muted">
+                          {timeOf(meeting.start)} – {timeOf(meeting.end)}
+                          {meeting.platform ? ` · ${meeting.platform}` : ''}
+                          {meeting.past ? ' · earlier today' : ''}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                data-testid="bell-view-all-meetings"
+                onClick={() => {
+                  onClose()
+                  navigate(`/meetings?day=${dayLinkFormat(dayStart)}`)
+                }}
+                className="w-full px-5 py-2 text-left text-xs font-semibold text-navy-900 hover:underline"
+              >
+                View all today's meetings
+              </button>
+            </div>
+          )}
+          {calendar.status === 'error' && !meetings.length && (
+            <p className="border-b border-border px-5 py-2.5 text-xs text-ink-muted" data-testid="bell-calendar-error">Today's meetings could not be checked. {calendar.error}</p>
+          )}
           {tasks.length > 0 && (
             <div className="border-b border-border" data-testid="task-notifications">
-              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Overdue tasks</p>
+              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Overdue tasks ({tasks.length})</p>
               <ul className="divide-y divide-border">
-                {tasks.slice(0, 5).map((task) => {
+                {tasks.slice(0, slots.tasks).map((task) => {
                   return (
                     <li key={task.id}>
                       <button
@@ -203,6 +272,8 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
               <p className="text-sm font-semibold text-navy-900">Mail could not be checked</p>
               <p className="mt-1 text-xs text-ink-muted">{mailError}</p>
             </div>
+          ) : unread.length > 0 && shown.length === 0 ? (
+            <p className="px-5 py-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase" data-testid="mail-notifications-overflow">Unread emails ({unread.length})</p>
           ) : shown.length === 0 ? (
             <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-empty">
               <Mail className="mb-3 h-8 w-8 text-ink-subtle" />
@@ -210,6 +281,8 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
               <p className="mt-1 text-xs text-ink-muted">You are all caught up.</p>
             </div>
           ) : (
+            <>
+            <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Unread emails ({unread.length})</p>
             <ul className="divide-y divide-border">
               {shown.map((message) => (
                 <li key={message.id}>
@@ -234,6 +307,7 @@ export function MailNotificationsPanel({ open, onClose, email, tasks = [] }: Mai
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
 

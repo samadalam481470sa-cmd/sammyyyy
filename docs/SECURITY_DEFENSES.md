@@ -16,7 +16,7 @@ Tests: `server/middleware/defense.test.ts` sends the attacks below to a running 
 | Prototype pollution, deep JSON | Keys such as `__proto__` and bodies nested past 40 levels are refused. |
 | Malicious uploads | Programs and page files are refused by name and first bytes. Downloads are always sent as attachments, not opened as pages. Total storage has a 5 GB limit. |
 | Excel formula injection | Text cells that start with `= + - @` are made safe in CSV exports. |
-| Stolen or impersonated access | Sign-in tokens are verified against Microsoft's keys. Only approved accounts get in. Each person keeps at most 10 sessions. Deal Lead records are checked on the server: you may keep only your own unless you are an administrator. |
+| Stolen or impersonated access | Sign-in tokens are verified against Microsoft's keys. Only approved accounts get in. Each person keeps at most 10 sessions. The Microsoft account link on a Deal Lead cannot be moved by an edit. |
 | Information leaks | Errors return plain messages, health returns no internals, and the framework name is hidden. |
 | Vulnerable libraries | `npm audit fix` applied. `xlsx` remains, as noted below. |
 
@@ -33,8 +33,12 @@ A person with a valid session is never blocked, so an attacker on a shared offic
 - **Malware on a signed-in person's computer.** It can act as that person. Every change is still logged.
 - **GitHub Pages headers.** Pages cannot send response headers, so the page has its CSP in a meta tag, where `frame-ancestors` has no effect.
 - **`xlsx`.** No npm fix exists for this library. It only reads files a signed-in person chooses, in their own browser, and imports now stop at 10 MB. The full fix is to replace the library.
-- **Older records.** The roster check covers Deal Leads only. Any approved user can still change other shared records. Finer roles need a separate decision on who may edit what.
+- **Shared editing.** Any approved user can change any shared record, including Deal Leads, by the sponsor's decision. Finer roles need a separate decision on who may edit what.
 - **Public repository.** Anyone can read this code, including these limits. Security must not depend on it staying secret. Secrets belong only in Azure settings.
 - **Files and records at rest.** They rely on Azure's disk protection. Backups are not automated by this work.
 
 No system stops every attack. An outside security test before real client data goes in is still worth doing.
+
+## November 5, 2026 changes
+
+Private meetings moved to owner-keyed server tables, and any other person gets 404. The audit trail in `workspace_audit` cannot be changed, because database triggers refuse it. Deal Lead edits are open to every approved user by decision of the sponsor; the Microsoft account link on a lead cannot be moved by an edit, and deleting a lead in use is refused on the server. See `docs/SHARED_BACKEND.md`.

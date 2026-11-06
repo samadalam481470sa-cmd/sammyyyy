@@ -4,10 +4,12 @@ import dns from 'node:dns'
 dns.setDefaultResultOrder('ipv4first')
 import { createApp } from './app.ts'
 import { connectMongo, getMongoHealth } from './db/mongo.ts'
+import { startBackupSchedule } from './services/backup.ts'
 
 const app = createApp()
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3001)
 const mongoStartup = connectMongo().catch(() => getMongoHealth())
+startBackupSchedule()
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Newport CRM API listening on http://localhost:${PORT}`)

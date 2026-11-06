@@ -12,7 +12,6 @@ import {
   leadAssignment,
   leadLinkChanges,
   leadLinks,
-  leadPermissions,
   migrateOpportunityLeads,
   primaryLeadOptions,
   primaryLeadValue,
@@ -22,7 +21,7 @@ import {
 import { opportunityDraftPatch, snapshotOpportunityDraft } from './opportunityDraft'
 import { buildPortableDatabase, parsePortableDatabase, serializePortableDatabase } from './portableDatabase'
 import { buildTrends, completionSteps, countByLead, leadFinancials, monthlyStepSeries, resolvePeriod, scopeDeals } from './reports'
-import { isDoneAwaitingArchive, isListedTask, isWorkingTask, taskHistoryKind } from './taskLifecycle'
+import { isListedTask, isWorkingTask, taskHistoryKind } from './taskLifecycle'
 import { rankWeekPriorityTasks, sortVisibleTasks } from './taskSort'
 
 const NOW = new Date(2026, 10, 4, 12, 0, 0)
@@ -59,35 +58,25 @@ describe('one task order', () => {
     expect(rankWeekPriorityTasks(tasks, NOW, opportunities).map((r) => r.id)).toEqual(['over-c', 'soon-a', 'today-c'])
   })
 
-  it('tasks follow their deal: paused on Inactive, Closed, Declined, Withdrew; back on Active, Pending, Completed', () => {
+  it('tasks follow their deal: live only on Active and Pending', () => {
     const t = task('a', 'A', '2026-11-05')
-    for (const status of ['Inactive', 'Closed', 'Declined', 'Withdrew']) expect(isWorkingTask(t, [{ id: 'o1', status }], NOW)).toBe(false)
-    for (const status of ['Active', 'Pending', 'Completed']) expect(isWorkingTask(t, [{ id: 'o1', status }], NOW)).toBe(true)
+    for (const status of ['Inactive', 'Closed', 'Declined', 'Withdrew', 'Completed']) expect(isWorkingTask(t, [{ id: 'o1', status }])).toBe(false)
+    for (const status of ['Active', 'Pending']) expect(isWorkingTask(t, [{ id: 'o1', status }])).toBe(true)
   })
 })
 
-describe('Done stays on the list until archived', () => {
+describe('Done moves to history at once', () => {
   const parents = [{ id: 'o1', status: 'Active' }]
   const done = task('d', 'A', '2026-10-01', { status: 'Done', completedAt: '2026-11-03T12:00:00.000Z' })
 
-  it('selecting Done does not move a task to history', () => {
-    expect(isListedTask(done, parents, NOW)).toBe(true)
-    expect(isDoneAwaitingArchive(done, NOW)).toBe(true)
-    expect(taskHistoryKind(done, NOW)).toBeNull()
+  it('a Done task is not on the list, and is in history', () => {
+    expect(isListedTask(done, parents)).toBe(false)
+    expect(taskHistoryKind(done)).toBe('Completed')
   })
 
   it('a Done task is never overdue, so it is not a working task and not on the priorities list', () => {
-    expect(isWorkingTask(done, parents, NOW)).toBe(false)
+    expect(isWorkingTask(done, parents)).toBe(false)
     expect(rankWeekPriorityTasks([done], NOW, parents)).toEqual([])
-    expect(sortVisibleTasks([done, task('open', 'C', null)], NOW).map((r) => r.id)).toEqual(['open', 'd'])
-  })
-
-  it('confirmed archive, or seven days, moves it to history', () => {
-    expect(taskHistoryKind({ ...done, archivedAt: '2026-11-04T00:00:00.000Z' }, NOW)).toBe('Completed')
-    expect(isListedTask({ ...done, archivedAt: '2026-11-04T00:00:00.000Z' }, parents, NOW)).toBe(false)
-    const week = new Date(2026, 10, 11, 12, 0, 0)
-    expect(taskHistoryKind(done, week)).toBe('Completed')
-    expect(isListedTask(done, parents, week)).toBe(false)
   })
 })
 
@@ -205,13 +194,6 @@ describe('self-registration rules', () => {
     expect(emailConflict(roster, 'x@firm.com', 'lead-x')).toBeNull()
     expect(isValidLeadEmail('a@b.co')).toBe(true)
     expect(isValidLeadEmail('not-an-email')).toBe(false)
-  })
-
-  it('edit rights: self or admin for a profile, admin only for status', () => {
-    const x = roster.find((l) => l.id === 'lead-x')!
-    expect(leadPermissions(x, { id: 'acct-x' }, false)).toMatchObject({ isOwn: true, canEditProfile: true, canChangeStatus: false })
-    expect(leadPermissions(x, { id: 'someone' }, false)).toMatchObject({ isOwn: false, canEditProfile: false, canChangeStatus: false })
-    expect(leadPermissions(x, { id: 'someone' }, true)).toMatchObject({ canEditProfile: true, canChangeStatus: true })
   })
 
   it('the roster travels in a database backup, and older backups still import', () => {

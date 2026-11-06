@@ -259,12 +259,10 @@ export function Dashboard() {
             </div>
             <div className="flex flex-col gap-4 lg:col-span-2">
               <QuickActions
-                leadLabel={roster.isAdmin ? 'New Deal Lead' : roster.own ? 'Edit My Deal Lead Profile' : 'Add Myself as Deal Lead'}
+                leadLabel="New Deal Lead"
                 onAction={(action) => {
                   if (action === 'deal-lead') {
-                    if (roster.isAdmin) setLeadModal('create')
-                    else if (roster.own || roster.claimable) void navigate('/deal-leads?new=self')
-                    else setLeadModal('self')
+                    setLeadModal('create')
                     return
                   }
                   if (action === 'new-opportunity') {

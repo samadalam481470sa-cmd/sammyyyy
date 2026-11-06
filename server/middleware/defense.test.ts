@@ -241,41 +241,6 @@ describe('access control', () => {
     expect(body.events.length).toBeGreaterThan(0)
     expect(body.posture.administrators).toBe(1)
   })
-
-  const lead = (id: string, fields: Record<string, unknown>) => ({ changes: [{ collection: 'dealLeads', id, data: fields }] })
-  const stored = (id: string) => db.prepare(`SELECT data FROM workspace_records WHERE collection = 'dealLeads' AND id = ?`).get(id) as { data: string } | undefined
-
-  it('a regular user can add and keep only their own deal lead record', async () => {
-    const sam = makeSession('partner', 'acct-sam')
-    const ip = nextIp()
-    const own = await (await call('/api/workspace/changes', ip, json(lead('lead-sam', { name: 'Sam', status: 'Active', authAccountId: 'acct-sam' }), sam))).json()
-    expect(own.rejected).toEqual([])
-    const other = await (await call('/api/workspace/changes', ip, json(lead('lead-sam', { name: 'Hacked', status: 'Active', authAccountId: 'acct-other' }), makeSession('partner', 'acct-other')))).json()
-    expect(other.rejected).toEqual(['lead-sam'])
-    expect(JSON.parse(stored('lead-sam')!.data).name).toBe('Sam')
-  })
-
-  it('a regular user cannot deactivate or delete, or claim a stranger; an administrator can', async () => {
-    const sam = makeSession('partner', 'acct-sam')
-    const ip = nextIp()
-    const status = await (await call('/api/workspace/changes', ip, json(lead('lead-sam', { name: 'Sam', status: 'Inactive', authAccountId: 'acct-sam' }), sam))).json()
-    expect(status.rejected).toEqual(['lead-sam'])
-    const del = await (await call('/api/workspace/changes', ip, json({ changes: [{ collection: 'dealLeads', id: 'lead-sam', data: null }] }, sam))).json()
-    expect(del.rejected).toEqual(['lead-sam'])
-    const admin = await (await call('/api/workspace/changes', ip, json(lead('lead-mary', { name: 'Mary Sbaschnig', status: 'Active', authAccountId: null }), makeSession('admin', 'acct-admin')))).json()
-    expect(admin.rejected).toEqual([])
-    const claimWrong = await (await call('/api/workspace/changes', ip, json(lead('lead-mary', { name: 'Mary Sbaschnig', status: 'Active', authAccountId: 'acct-sam' }), sam))).json()
-    expect(claimWrong.rejected).toEqual(['lead-mary'])
-    const claimRight = await (await call('/api/workspace/changes', ip, json(lead('lead-mary', { name: 'Mary Sbaschnig', status: 'Active', authAccountId: 'acct-mary' }), makeSession('partner', 'acct-mary', 'Mary Sbaschnig')))).json()
-    expect(claimRight.rejected).toEqual([])
-  })
-
-  it('a refused deal lead change does not stop the rest of the save', async () => {
-    const sam = makeSession('partner', 'acct-sam')
-    const res = await (await call('/api/workspace/changes', nextIp(), json({ changes: [{ collection: 'dealLeads', id: 'lead-dennis', data: { name: 'x', status: 'Active', authAccountId: 'nobody' } }, { collection: 'contacts', id: 'kept', data: { name: 'Kept' } }] }, sam))).json()
-    expect(res.rejected).toEqual(['lead-dennis'])
-    expect(db.prepare(`SELECT id FROM workspace_records WHERE collection = 'contacts' AND id = 'kept'`).get()).toBeTruthy()
-  })
 })
 
 describe('CSV exports', () => {

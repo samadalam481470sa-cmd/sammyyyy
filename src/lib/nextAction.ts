@@ -28,9 +28,8 @@ export function preserveManualNextAction(opportunity: Opportunity): Opportunity 
 export function unfinishedTasksForOpportunity(
   tasks: TaskRecord[],
   opportunityId: string,
-  now = new Date(),
 ): TaskRecord[] {
-  return tasks.filter((task) => task.opportunityId === opportunityId && isUnfinishedTask(task, now))
+  return tasks.filter((task) => task.opportunityId === opportunityId && isUnfinishedTask(task))
 }
 
 const PRIORITY_RANK = { A: 0, B: 1, C: 2 } as const
@@ -67,7 +66,7 @@ export function resolveNextAction(
   now = new Date(),
 ): NextActionSummary {
   const preserved = preserveManualNextAction(opportunity)
-  const linked = unfinishedTasksForOpportunity(tasks, preserved.id, now)
+  const linked = unfinishedTasksForOpportunity(tasks, preserved.id)
   const urgent = pickMostUrgentTask(linked, now)
   if (urgent) {
     return {
@@ -134,7 +133,7 @@ export function syncDrivingTaskFromOpportunityPatch(
   now = new Date(),
 ): { tasks: TaskRecord[]; drivingId: string | null } {
   if (!nextActionFieldsTouched(patch)) return { tasks, drivingId: opportunity.nextActionTaskId ?? null }
-  const unfinished = unfinishedTasksForOpportunity(tasks, opportunity.id, now)
+  const unfinished = unfinishedTasksForOpportunity(tasks, opportunity.id)
   const driving =
     (opportunity.nextActionTaskId
       ? unfinished.find((row) => row.id === opportunity.nextActionTaskId)

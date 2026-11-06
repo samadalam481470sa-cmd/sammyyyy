@@ -1,5 +1,6 @@
 import { defenseStatus, liftBlock } from '../middleware/defense.ts'
 import { accessPolicy } from '../services/microsoftToken.ts'
+import { listBackups, runBackup } from '../services/backup.ts'
 import { Router } from 'express'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
@@ -35,6 +36,21 @@ securityRouter.delete('/defense/blocks/:ip', requireRole('admin'), (req, res) =>
   if (!lifted) return res.status(404).json({ error: 'That address is not blocked.' })
   writeAudit(req.auth!.userId, req.auth!.userName, 'security.block_lifted', 'ip_address', req.params.ip, 'Block lifted by an administrator', req)
   res.json({ ok: true })
+})
+
+/** Dates and sizes of the server copies. The copies themselves are never downloadable, because they hold private meetings. */
+securityRouter.get('/backups', requireRole('admin'), (_req, res) => {
+  res.json({ backups: listBackups() })
+})
+
+securityRouter.post('/backups', requireRole('admin'), async (req, res) => {
+  try {
+    const backup = await runBackup()
+    writeAudit(req.auth!.userId, req.auth!.userName, 'database.backup', 'database', backup.name, `Server copy made (${backup.size} bytes)`, req)
+    res.json({ backup })
+  } catch {
+    res.status(500).json({ error: 'The server copy could not be made.' })
+  }
 })
 
 /** Returns the five API key slots — never returns key hashes or secrets. */

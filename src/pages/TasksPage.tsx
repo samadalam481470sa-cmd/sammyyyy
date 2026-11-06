@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Expand, History, Plus, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
 import { TASK_STATUSES } from '@/data/mockModules'
-import { isDoneAwaitingArchive, isListedTask, isWorkingTask } from '@/lib/taskLifecycle'
+import { isListedTask, isWorkingTask } from '@/lib/taskLifecycle'
 import { isOnTrackTask, isOverdueUnfinishedTask, sortVisibleTasks } from '@/lib/taskSort'
 import { taskWarning } from '@/lib/taskWarning'
 import { priorityChipClass, PRIORITY_LEGEND } from '@/lib/priorityStyles'
@@ -37,14 +37,15 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function TasksPage() {
   const navigate = useNavigate()
-  const { tasks, opportunities, users, saveTask, archiveTask, loading } = useData()
+  const { tasks, opportunities, users, saveTask, loading } = useData()
   const [params, setParams] = useSearchParams()
   const [selectedId, setSelectedId] = useRestorableSelection(KEY)
   const [draftOpen, setDraftOpen] = useState(false)
   const [search, setSearch] = useSessionState(`${KEY}:search`, '')
   const [historyOpen, setHistoryOpen] = useSessionState(`${KEY}:historyOpen`, params.get('history') === '1')
   const [historyPeriod, setHistoryPeriod] = useSessionState<PeriodFilter>(`${KEY}:historyPeriod`, LAST_30_DAYS)
-  const [archiveAsk, setArchiveAsk] = useState<{ id: string; action: string } | null>(null)
+  const [doneAsk, setDoneAsk] = useState<{ id: string; action: string } | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const historyScroll = useRef<HTMLDivElement>(null)
   useRestorableScroll(`${KEY}:history`, historyScroll, historyOpen)
   const [listFilter, setListFilter] = useSessionState<TaskListFilter>(`${KEY}:pill`, 'all')
@@ -207,6 +208,11 @@ export function TasksPage() {
         </p>
       )}
 
+      {saveError && (
+        <p role="alert" className="mx-6 mb-2 rounded-lg bg-attention-bg px-3 py-1.5 text-sm text-attention lg:mx-8" data-testid="task-save-error">
+          {saveError}
+        </p>
+      )}
       <ContentCard>
         <div ref={tableRef} className="custom-scroll min-h-0 w-full flex-1 overflow-auto">
           {loading && <p className="px-6 py-8 text-sm text-ink-muted">Loading records…</p>}
@@ -258,7 +264,6 @@ export function TasksPage() {
               {view.rows.map((task) => {
                 const entity = opportunities.find((o) => o.id === task.opportunityId)?.entityName ?? '—'
                 const warning = taskWarning(task)
-                const doneRow = isDoneAwaitingArchive(task)
                 return (
                   <tr
                     key={task.id}
@@ -292,7 +297,12 @@ export function TasksPage() {
                         value={task.status}
                         data-testid={`task-status-${task.id}`}
                         onChange={(e) => {
-                          void saveTask(task.id, { status: e.target.value })
+                          if (e.target.value === 'Done') {
+                            setDoneAsk({ id: task.id, action: task.action })
+                            return
+                          }
+                          setSaveError(null)
+                          void saveTask(task.id, { status: e.target.value }).catch((err: unknown) => setSaveError(err instanceof Error ? err.message : 'Save failed'))
                         }}
                         className={`h-7 min-w-0 flex-1 rounded-md border px-1.5 text-[11px] font-semibold outline-none focus:ring-2 focus:ring-accent/30 ${STATUS_STYLE[task.status] ?? STATUS_STYLE.Open}`}
                       >
@@ -300,11 +310,6 @@ export function TasksPage() {
                           <option key={s}>{s}</option>
                         ))}
                       </select>
-                      {doneRow && (
-                        <button type="button" aria-label={`Move ${task.action} to Task History`} title="Move to Task History" onClick={() => setArchiveAsk({ id: task.id, action: task.action })} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#bfe0cf] text-success hover:bg-success-bg" data-testid={`task-archive-${task.id}`}>
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                       </div>
                     </td>
                   </tr>
@@ -354,20 +359,24 @@ export function TasksPage() {
           <span className="text-xs font-semibold text-ink-muted">{history.length} task{history.length === 1 ? '' : 's'}</span>
         </div>
         <div ref={historyScroll} className="custom-scroll min-h-0 flex-1 overflow-y-auto">
-          <TaskHistoryList rows={history} />
+          <TaskHistoryList rows={history} onRestored={(task) => setNotice(`“${task.action}” is open again.`)} />
         </div>
       </SideDrawer>
       <ConfirmDialog
-        open={archiveAsk != null}
-        title="Move this completed task to Task History?"
-        message={archiveAsk?.action ?? ''}
-        confirmLabel="Confirm"
+        open={doneAsk != null}
+        title="Mark this task as completed and move it to Task History?"
+        message={doneAsk?.action ?? ''}
+        confirmLabel="Complete Task"
         tone="default"
-        onCancel={() => setArchiveAsk(null)}
+        onCancel={() => setDoneAsk(null)}
         onConfirm={() => {
-          const ask = archiveAsk
-          setArchiveAsk(null)
-          if (ask) void archiveTask(ask.id).then(() => setNotice(`“${ask.action}” moved to Task History.`))
+          const ask = doneAsk
+          setDoneAsk(null)
+          if (!ask) return
+          setSaveError(null)
+          void saveTask(ask.id, { status: 'Done' })
+            .then(() => setNotice(`“${ask.action}” moved to Task History.`))
+            .catch((err: unknown) => setSaveError(err instanceof Error ? err.message : 'Save failed'))
         }}
       />
     </PageShell>

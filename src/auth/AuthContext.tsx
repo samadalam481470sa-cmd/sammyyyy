@@ -10,6 +10,10 @@ import {
 } from 'react'
 import type { AuthUser } from '@/types'
 import { clearSession, getStoredSession, signOut as apiSignOut, storeSession } from '@/lib/api'
+import { clearLocalMeetingCache } from '@/lib/crmMeetings'
+import { calendarOwnerKey } from '@/lib/meetingCalendar'
+import { clearCalendarCache } from '@/lib/calendarStore'
+import { clearMeetingSyncMap, meetingsFullySynced, syncPrivateMeetings } from '@/lib/privateMeetingSync'
 import {
   LAST_EMAIL_KEY,
   LAST_PROVIDER_KEY,
@@ -34,7 +38,7 @@ import {
   userFromMicrosoftAccount,
 } from '@/auth/msal'
 import { attachVaultUnloadFlush, commitAllPendingEdits, flushAllUserVaults } from '@/lib/userVault'
-import { clearWorkspaceSession, connectWorkspace, workspaceApiBase } from '@/lib/workspaceSync'
+import { clearWorkspaceSession, connectWorkspace, isWorkspaceShared, workspaceApiBase } from '@/lib/workspaceSync'
 import { purgePersonalData } from '@/lib/userPrivacy'
 
 /**
@@ -78,6 +82,29 @@ async function sessionFromMicrosoftAccount(account: ReturnType<typeof getMicroso
   await storeSession(await newSessionToken(), user, await sha256Hex(user.email || user.id))
   await rememberLastEmail(user.email)
   return user
+}
+
+/**
+ * Asked before the session ends, while the server can still answer. A change the server does not
+ * have yet keeps the cache, so it can still be sent after the next sign-in.
+ */
+async function privateCachesAreSafeToClear(user: AuthUser | null): Promise<boolean> {
+  if (!user || !isWorkspaceShared()) return false
+  const owner = calendarOwnerKey(user)
+  try {
+    await syncPrivateMeetings(owner)
+    return meetingsFullySynced(owner)
+  } catch {
+    return false
+  }
+}
+
+/** Nothing private needs to stay in this browser after sign-out: it is all on the server. */
+async function clearPrivateCaches(user: AuthUser): Promise<void> {
+  const owner = calendarOwnerKey(user)
+  await clearLocalMeetingCache(owner).catch(() => undefined)
+  clearMeetingSyncMap(owner)
+  clearCalendarCache(owner)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -250,6 +277,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [establishSession])
 
+  const userRef = useRef(user)
+  userRef.current = user
   const signOut = useCallback(async () => {
     if (signingOutRef.current) return
     signingOutRef.current = true
@@ -259,6 +288,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await commitAllPendingEdits()
       flushAllUserVaults()
       epochRef.current += 1
+      const leaving = userRef.current
+      const clearPrivate = await privateCachesAreSafeToClear(leaving)
       try {
         await apiSignOut()
       } catch {
@@ -266,6 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       clearSession()
       clearWorkspaceSession()
+      if (clearPrivate && leaving) await clearPrivateCaches(leaving)
       setUser(null)
       try {
         sessionStorage.removeItem('newport_post_login_path')

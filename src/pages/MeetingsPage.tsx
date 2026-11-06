@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { createContext, useContext, useMemo, useState, type ReactNode, useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarDays, FileText, Link2, Loader2, Plus, Video, X } from 'lucide-react'
 import { useOutlookCalendar } from '@/hooks/useOutlookCalendar'
 import { useSessionState } from '@/hooks/useSessionState'
@@ -99,6 +99,36 @@ export function MeetingsPage() {
     [month.events, selectedDay],
   )
   const listed = selectedDay ? dayEvents : upcoming
+
+  // Links from the bell: ?day=YYYY-MM-DD lists that day, and &event=id opens one meeting when it has loaded.
+  const [params, setParams] = useSearchParams()
+  const linkedDay = params.get('day')
+  const linkedEvent = params.get('event')
+  useEffect(() => {
+    if (!linkedDay || !/^\d{4}-\d{2}-\d{2}$/.test(linkedDay)) return
+    setSelectedDay(linkedDay)
+    const [year, monthNumber] = linkedDay.split('-').map(Number)
+    setAnchorIso(new Date(year, monthNumber - 1, 1).toISOString())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedDay])
+  // Each link is acted on once. Clearing the address is a low-priority update, so without this the
+  // effect would run again on every render and the page could never navigate away.
+  const handledLink = useRef<string | null>(null)
+  const linkKey = linkedDay || linkedEvent ? `${linkedDay}|${linkedEvent}` : null
+  const linkedMeeting = linkedEvent ? (month.events.find((row) => row.id === linkedEvent) ?? api.meetings.find((row) => row.id === linkedEvent) ?? null) : null
+  const calendarSettled = month.status === 'ready' || month.status === 'not_connected' || month.status === 'error'
+  useEffect(() => {
+    if (!linkKey) {
+      handledLink.current = null
+      return
+    }
+    if (handledLink.current === linkKey) return
+    if (linkedEvent && !linkedMeeting && !calendarSettled) return
+    handledLink.current = linkKey
+    if (linkedMeeting) setSelected('subject' in linkedMeeting ? (savedByEvent.get(linkedMeeting.id) ?? meetingFromEvent(linkedMeeting)) : linkedMeeting)
+    setParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkKey, Boolean(linkedMeeting), calendarSettled])
 
   const openEvent = (event: OutlookEvent) => setSelected(savedByEvent.get(event.id) ?? meetingFromEvent(event))
   const projectName = (id: string | null) => opportunities.find((o) => o.id === id)?.projectName ?? '—'

@@ -13,7 +13,7 @@ function priorityIndex(value: string | null | undefined): number {
  * 3 not unfinished (a Done task waiting to be archived).
  */
 export function taskSortTier(task: TaskRecord, now = new Date()): number {
-  if (!isUnfinishedTask(task, now)) return 3
+  if (!isUnfinishedTask(task)) return 3
   if (isOverdueDate(task.dueDate, now)) return 0
   if (isWithinNextDays(task.dueDate, 7, now)) return 1
   return 2
@@ -55,17 +55,17 @@ type Parents = ReadonlyArray<{ id: string; status: string }> | undefined
 
 export function rankWeekPriorityTasks(tasks: TaskRecord[], now = new Date(), opportunities?: Parents): TaskRecord[] {
   return sortVisibleTasks(
-    tasks.filter((task) => isActiveListTask(task, now) && (opportunities ? isWorkingTask(task, opportunities, now) : isUnfinishedTask(task, now))),
+    tasks.filter((task) => isActiveListTask(task) && (opportunities ? isWorkingTask(task, opportunities) : isUnfinishedTask(task))),
     now,
   )
 }
 
 export function isOverdueUnfinishedTask(task: TaskRecord, now = new Date()): boolean {
-  return isUnfinishedTask(task, now) && isOverdueDate(task.dueDate, now)
+  return isUnfinishedTask(task) && isOverdueDate(task.dueDate, now)
 }
 
 export function isOnTrackTask(task: TaskRecord, now = new Date()): boolean {
-  return isUnfinishedTask(task, now) && !isOverdueDate(task.dueDate, now)
+  return isUnfinishedTask(task) && !isOverdueDate(task.dueDate, now)
 }
 
 /**
@@ -74,7 +74,7 @@ export function isOnTrackTask(task: TaskRecord, now = new Date()): boolean {
  */
 export function overdueTaskList(tasks: TaskRecord[], now = new Date(), opportunities?: Parents): TaskRecord[] {
   return sortVisibleTasks(
-    tasks.filter((task) => isActiveListTask(task, now) && isOverdueUnfinishedTask(task, now) && (!opportunities || isWorkingTask(task, opportunities, now))),
+    tasks.filter((task) => isActiveListTask(task) && isOverdueUnfinishedTask(task, now) && (!opportunities || isWorkingTask(task, opportunities))),
     now,
   )
 }

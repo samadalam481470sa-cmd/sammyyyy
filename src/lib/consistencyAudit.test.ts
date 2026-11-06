@@ -14,7 +14,7 @@ const NOW = new Date(2026, 9, 30, 9, 0, 0) // Oct 30, 2026, local
 
 function dataset(now = NOW) {
   const seeds = bundledSeedSnapshot()
-  const tasks = applyTaskArchiveRules(seeds.tasks, now).tasks
+  const tasks = applyTaskArchiveRules(seeds.tasks).tasks
   const opportunities = withLiveAttention(
     seeds.opportunities.map((row) => applyNextActionSummary(row, tasks, now)),
     tasks,
@@ -28,7 +28,7 @@ describe('consistency audit', () => {
     const { opportunities, tasks } = dataset()
     const audit = runConsistencyAudit(opportunities, tasks, NOW)
     // Tasks page, Overdue pill.
-    const tasksPageOverdue = tasks.filter((t) => isActiveListTask(t, NOW) && isOverdueUnfinishedTask(t, NOW) && isWorkingTask(t, opportunities, NOW))
+    const tasksPageOverdue = tasks.filter((t) => isActiveListTask(t) && isOverdueUnfinishedTask(t, NOW) && isWorkingTask(t, opportunities))
     expect(audit.overdueUnfinishedTasks).toBe(tasksPageOverdue.length)
     expect(audit.overdueUnfinishedTasks).toBe(overdueTaskList(tasks, NOW, opportunities).length)
     // Opportunities page and Dashboard, Needs Attention.

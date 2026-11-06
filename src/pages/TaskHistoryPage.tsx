@@ -2,7 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, X } from 'lucide-react'
 import { useData } from '@/data/DataContext'
-import { HISTORY_KIND_STYLE, useTaskHistoryRows } from '@/components/tasks/TaskHistoryList'
+import { HISTORY_KIND_STYLE, RestoreTaskButton, useTaskHistoryRows } from '@/components/tasks/TaskHistoryList'
 import { ContentCard, PageShell, PageToolbar, RecordCount, SearchBox } from '@/components/shared/PageChrome'
 import { PeriodFilterControl } from '@/components/shared/PeriodFilterControl'
 import { SearchSelect } from '@/components/shared/SearchSelect'
@@ -106,7 +106,8 @@ export function TaskHistoryPage() {
               <col className="w-[13%]" />
               <col className="w-[150px]" />
               <col className="w-[150px]" />
-              <col className="w-[140px]" />
+              <col className="w-[120px]" />
+              <col className="w-[110px]" />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface text-[11px] tracking-[0.06em] text-ink-subtle uppercase shadow-[inset_0_-1px_0_var(--color-border)]">
               <tr>
@@ -116,7 +117,8 @@ export function TaskHistoryPage() {
                 <th className="px-3 py-3 font-semibold">Owner</th>
                 <th className="px-3 py-3 font-semibold">Original due</th>
                 <th className="px-3 py-3 font-semibold">Closed on</th>
-                <th className="py-3 pr-5 pl-3 font-semibold">Outcome</th>
+                <th className="px-3 py-3 font-semibold">Outcome</th>
+                <th className="py-3 pr-5 pl-3 font-semibold"><span className="sr-only">Restore</span></th>
               </tr>
             </thead>
             <tbody>
@@ -133,8 +135,11 @@ export function TaskHistoryPage() {
                     {task.initialDueDate && task.dueDate && task.initialDueDate !== task.dueDate && <span className="ml-1 text-[11px] text-ink-subtle">→ {formatDate(task.dueDate)}</span>}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-ink-muted">{formatDate(at)}</td>
-                  <td className="py-2.5 pr-5 pl-3">
+                  <td className="px-3 py-2.5">
                     <span className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${HISTORY_KIND_STYLE[kind]}`}>{kind}</span>
+                  </td>
+                  <td className="py-2 pr-5 pl-3">
+                    <RestoreTaskButton task={task} kind={kind} />
                   </td>
                 </tr>
               ))}

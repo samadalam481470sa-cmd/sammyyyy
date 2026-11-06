@@ -1,0 +1,165 @@
+NEWPORT SPECIALTY PARTNERS CRM
+NEXT SPRINT — SHARED DATABASE, CROSS-DEVICE SYNCHRONIZATION, AND TARGETED FIXES
+CURSOR IMPLEMENTATION PROMPT — NOVEMBER 5, 2026
+
+READ THIS ENTIRE PROMPT BEFORE EDITING. IMPLEMENT IN THE EXISTING REPOSITORY; DO NOT REBUILD THE CRM.
+
+OBJECTIVE / PRIORITIES
+The primary deliverable is to replace the current isolated, device/browser-local CRM data model with reliable, centrally persisted data that synchronizes between authorized Newport employees and devices. This must work across opportunities, tasks, documents, relationships, Deal Leads, reporting and shared activity, while maintaining STRICT PER-USER PRIVACY for Outlook calendars and CRM meetings/history/transcripts/AI summaries, including the Meetings tab inside a linked full Opportunity Profile. The secondary deliverable is the exact set of UX/workflow fixes below. The Microsoft sign-in, actual Outlook mail/calendar integration, Teams/Zoom/Meet external links, Gemini AI transcript summarization, six KPI Reports, document workflows, navigation and existing demo records already work: preserve them, do not replace them with mocks.
+
+IMPORTANT: A prompt by itself cannot provide credentials, create paid cloud resources, choose a company's tenant, or guarantee deployment. Inspect the real code and infrastructure before implementation. If hosting/database/permissions/credentials are missing, implement and test what is feasible, clearly document required account setup and environment variables, and DO NOT label shared synchronization 'working' unless two truly independent sessions/devices can prove it. Do not silently substitute localStorage, a shared JSON file in GitHub Pages, or an in-memory mock for production synchronization. Do not state security guarantees that are only client-side checks.
+
+CURRENT CONTEXT / NONNEGOTIABLES
+- Existing Newport CRM currently describes locally stored, account/device-scoped data in Settings. Users report that different devices cannot yet share edits. The application is hosted as a live frontend and already has functional Microsoft login/Outlook flows and Gemini meeting summarization. Confirm actual infrastructure from code rather than relying on assumptions.
+- Use the current Newport UI: navy sidebar/navy detail drawer headers; white cards/table on cool gray background; amber/yellow non-overdue alerts; red true overdue alerts; blue due soon. Reuse existing components, models, design tokens, and data access helpers where possible.
+- New-record creation uses centered modal; existing-record editing uses a full-height right-side drawer, blurred/dimmed backdrop, fixed save footer, and unsaved-change confirmation. Do not break Back navigation or contextual profile tab destination.
+- Keep all existing deals/records, IDs, createdAt/completedAt/legal close and original task due dates. Do not re-seed, wipe, invent, duplicate, silently reassign, or resurrect user-deleted data. Seeded fictional data may remain, but must be migrated safely. Existing acquisitions have expanded beyond original demo count; do NOT force a count of 42 or 43 or overwrite real changes.
+- Data writes must be explicit and observable. Do not claim save succeeded before a backend confirms it. Include errors, optimistic rollback or reconciliation, retries where appropriate, and audit events for persisted changes.
+- Clarified permissions: no 'Administrator' vs 'Standard User' role distinction for ordinary CRM record management. All authorized signed-in Newport CRM users may create/edit/deactivate Deal Leads and edit other employees' Deal Lead profiles, subject to the actual company access boundary. Do not auto-enroll every Outlook sign-in as a Deal Lead. Authenticated CRM access != Deal Lead roster eligibility. Preserve meeting privacy, and never expose private data just because other CRM records are shared.
+
+IMPLEMENTATION PLAN / DELIVERABLES
+A. Audit actual current storage, identity, hosting, document handling, security and sync paths; write a brief implementation decision and data inventory before migrations. Do not write a marketing summary in place of working code.
+B. Propose and implement an appropriate persistent backend and document storage integration with the real environment. Evaluate a secure relational database for structured CRM state and Microsoft SharePoint for files as applicable; SharePoint is preferred for consideration because the company uses Microsoft 365 but is NOT automatically the best database for relational CRM records. If alternatives such as Azure SQL/PostgreSQL/Supabase/managed DB/SharePoint Lists are considered, evaluate cost, tenant controls, hosting compatibility, API limits, relationships, audit, file sizes, permissions and deployment before committing. Use existing supported company infrastructure where possible.
+C. Deploy or provide reproducible secure deployment configuration, backend API access, migrations, data import, verification and rollback plan; obtain any required credentials/configuration through documented setup rather than hardcoding secrets. Never put database service keys, Graph secrets, Gemini keys, tenant-wide credentials or privileged DB connection strings in frontend bundles or source control.
+D. Integrate the existing frontend with the shared data layer and preserve all working features. Add meaningful data state/refresh indicators where necessary; implement deterministic conflict handling.
+E. Implement all targeted fixes below and verify both ordinary UX and cross-user implications.
+F. Final handoff must show tests run, changes made, schema/migration, deployment steps, unconfigured blockers, how to verify with two independent Microsoft accounts/browsers, data recovery and backup process, and a candid list of anything not implemented. Do not report complete unless tested end-to-end.
+
+PART I — SHARED STORAGE & SYNCHRONIZATION (HIGHEST PRIORITY)
+
+1. IDENTITY, AUTHORIZATION & PRIVACY BOUNDARIES
+- Maintain existing Microsoft authentication and Graph permissions. Validate identity on the trusted backend for every API call (verify tokens, issuer/audience/signature/expiry as appropriate), rather than trusting editable email/profile fields or frontend-controlled roles. Use stable Microsoft tenant/account identity, not a changeable contact email, as user ID.
+- Only users actually authorized for Newport's CRM workspace may access shared company records; don't assume any Microsoft/outlook.com account in the world may access. Document secure tenant/workspace onboarding and membership enforcement. No elaborate admin-vs-standard editing hierarchy is requested, but membership/auth boundaries must be real.
+- Scope shared company records to the correct Newport organization/workspace. Design for future organizations only if it doesn't complicate this sprint.
+- Meeting data is USER-PRIVATE: an Outlook event's full details, participant list where private, meeting history record, transcription text/VTT, Gemini summaries, proposed follow-ups before creation, recording URL, and private notes must only be read/written by their owning signed-in user. A meeting linked to a shared opportunity does NOT make it public. On a full Opportunity Profile > Meetings, query by BOTH opportunity ID AND current user identity. Don't expose another user's private meetings in global searches, exports, activity payloads, notifications, backend queries or shared audit logs. General shared task records CREATED from AI meeting suggestions can be shared once explicitly saved as Tasks, but must not leak raw private transcripts or private notes.
+- Outlook Email and Calendar should remain scoped to the signed-in account using the current integration. Do not pool or share inbox/calendar across staff. Keep Microsoft login screen unchanged.
+- Account/device isolation of Meetings survives logging in from another device as the SAME user: the user sees their own saved meeting history on both devices, not anyone else's.
+
+2. PERSISTENT DATA INVENTORY AND SCHEMA
+At minimum make durable structured records and relations for:
+- Organizations/workspace memberships/identities (as needed).
+- Opportunities and their status, acquisition stage, financials (NWP, net revenue, PF EBITDA), source, diligence/company fields, created/updated/legally-closed dates and historical transitions.
+- Deal Leads (stable IDs, full name, title, contact email, phone, Active/Inactive, identity link if available), primary/additional opportunity assignments and legacy preserved attribution.
+- Tasks & Follow-Ups with title/action, owner association, opportunity ID, priority A/B/C, status, due date, completion date, historical due-date changes, archived state and restoration history. Preserve tasks belonging to non-Active/Pending opportunities without showing them in active list.
+- Relationships/contacts with many-to-many linked opportunities.
+- Documents metadata, type (NDA, LOI, CIM, IOI, DA, FA, custom), confidentiality/status, link to opportunity, actual encrypted/private file storage reference, version/replace/delete state.
+- Shared immutable/auditable activity event history and user-visible archive/restore state; logical archive of feed entries must not delete underlying audit evidence.
+- User-owned CRM meeting records, link to opportunity, participant/contact links as applicable, private VTT and recording URLs, AI summaries/actions and note content. No cross-user access.
+- Report inputs and preserved event history for created/closed/weighted pipeline, completed provisional 24-hour rule, missed deadlines and current/history filters. Reports must calculate from actual shared records; don't hardcode totals.
+Use stable IDs and referential integrity. Schema version, timestamps UTC plus appropriate local-date display, reliable migrations, deduplication and deletion semantics are mandatory.
+
+3. SAFE MIGRATION FROM LOCAL STORAGE
+- Inventory localStorage/IndexedDB/cache/local backups as used in actual repository. Make a one-time, user-visible and ideally opt-in migration/import flow for legitimate local records. Do NOT simply replace storage and make existing data disappear.
+- Back up existing local data BEFORE migration; preserve ability to export/download database backup. Document whether other devices may contain divergent local datasets and how to import/reconcile them without data loss or duplicates.
+- Detect duplicates using stable IDs and content/version data; never overwrite newer shared data with stale local data silently. Keep immutable original timestamps where present. Preserve real uploaded file bytes; verify document downloads after migration, including any blobs currently stored in browser storage. An empty backend is not a reason to seed over users' existing records.
+- Plan rollback/recovery for failures: transaction or safe batch, progress/error, ability to retry, no partial-deletion of local data. Avoid global auto-migration of someone else's private meetings to public tables.
+- After successful migration, treat the backend as authoritative; local state can be a cache only, not a divergent independent system. Clearly label offline/failed-sync edits rather than pretending they're shared.
+
+4. CROSS-DEVICE LIVE/NEAR-REAL-TIME SYNCHRONIZATION
+- Shared changes in Opportunities, Tasks, Relationships, Deal Leads, Documents, and activity feed should propagate to other signed-in employees/devices. Aim for near-real-time subscription/WebSocket/SSE, or dependable polling with an explicit bound/documented latency and reconnect behavior if deployment constraints dictate. Cross-tab refresh also works.
+- Ensure one change updates Dashboard counts, Pipeline, Needs Attention, This Week's Priorities, task links, Deal Lead cards, Opportunity Profiles, Documents, Reports and Recent Activity consistently for all users. The same linked item must have ONE source of truth. Restore task and delete lead actions must also propagate.
+- On collisions/concurrent edits, implement version/revision/ETag/optimistic concurrency or transactional merge strategy and tell users when changes conflict. Do NOT silently last-write-wins and overwrite another person's work without visibility. Support field-aware merge when safe, conflict notification otherwise.
+- On login/new device, fetch all authorized shared data from server; on sign-out, clear private in-memory caches/tokens and display correct account data. A device must not show another employee's private meetings after account switch.
+- Backend-driven audit event includes actor, time, entity, action and relevant changed fields, subject to privacy/redaction. Non-editable audit trail remains even if activity UI entry is archived. Feed archiving must be recoverable and not corrupt reports. User name must match actual authenticated identity.
+- Treat the database as the source of truth for new report figures and export data. Prevent duplicate financial counting for one opportunity with primary + additional Deal Leads. Preserve completed-deal 24-hour reporting treatment and real legal completion date; handle reversals.
+
+5. DOCUMENT STORAGE / SHAREPOINT EVALUATION
+- Inspect document upload/storage implementation. Compare secure SharePoint document library + Microsoft Graph, dedicated private object storage, or existing company-approved storage. SharePoint is a preference for evaluation, not a command to force all CRM data into SharePoint.
+- If SharePoint is chosen, use private site/library, least-privilege Graph access and correct app/tenant consent; store versioned file metadata in backend; do not make confidential documents public via direct permanent links. Files must be available across devices/users subject to intended company access; handle file replacement and deletion without ghost re-seeding. Respect current document privacy/confidentiality semantics.
+- If company tenant/access/credentials are not yet available, build an abstraction and document exact deployment configuration, and mark final shared document behavior as unverified until tested. Don't claim a working SharePoint connection without one.
+
+6. SETTINGS / BACKUPS / RECOVERY AFTER SHARED MIGRATION
+- Update Settings wording describing 'this device keeps its own database' or 'other Microsoft accounts cannot see these edits' ONLY once shared persistence genuinely works; otherwise be transparent about remaining limits.
+- Decide whether the 'Download database backup' export is per-workspace, per-user, or admin-operated for privacy; never bundle other people's private meeting/calendar data into a shared backup export. Separate personal meeting export from organizational shared data if needed.
+- 'Restore database backup (JSON)' MUST NOT let a normal user accidentally overwrite the company's live shared database. Replace old one-click global restore with safe, previewed import/staging, duplicate detection, explicit warnings, permission-appropriate recovery workflow and rollback. Consider scheduled server backups and recovery procedures independent of the browser.
+- Excel Import moved into Settings must continue working but now import into the shared backend, with review, validation, deduplication and visible errors. Audit imports.
+- Ensure Settings page fits the ordinary desktop viewport without tiny outer scrollbar. Tighten white card spacing (This Session, Excel Import, Database Backup, Install app) without hiding content; allow responsive scroll when legitimately needed.
+
+7. TEST PLAN — REQUIRED BEFORE CALLING BACKEND DONE
+Use two distinct Microsoft identities and two truly independent browsers/devices where permitted. Validate:
+  (a) User A changes opportunity stage/status and saves; user B sees it in their Opportunities, Dashboard, Reports and Recent Activity.
+  (b) User B assigns Task Owner / creates, completes, restores a task; user A sees linked records and correct history.
+  (c) User A adds/deactivates a Deal Lead, links primary/additional leads; user B sees updates and no double-counted reporting.
+  (d) User A uploads/replaces/deletes document; user B can open the authorized file and old deleted file does not resurrect.
+  (e) User A saves private meeting with transcript; user A sees it on a second device AND within that opportunity's Meetings tab; user B CANNOT see it anywhere, even by guessing an API/record URL. Test privacy on endpoint, not merely hidden UI.
+  (f) Overlapping edits provoke conflict handling, not silent loss; failed network save reports error; reload and account change are handled.
+  (g) Existing local demo/real data survives import; counts/financials reconcile; migrations can be retried and backed out.
+  (h) Outlook email/calendar and Gemini continue working; no tokens or secrets leaked client-side.
+If an external service is unconfigured, document exact blocked tests and avoid reporting them passed.
+
+PART II — SPECIFIC USER-REQUESTED FIXES (DO NOT OMIT)
+
+8. DEAL LEADS — REMOVE ADMIN/SELF-ONLY RESTRICTIONS
+- Remove UI restrictions implying only 'my profile' or an administrator can edit someone else's Deal Lead. For authorized Newport CRM users, all Deal Lead profiles can be viewed/edited, and new leads can be created. No admin/standard labels or User Management page are needed for ordinary record editing.
+- All users can edit another Deal Lead's full name, title, editable contact email, phone, linked opportunities and Active/Inactive status. Microsoft sign-in identity is a stable association distinct from editable contact email. An employee's edit to a lead's contact email must not change whose Microsoft account that lead belongs to.
+- Add a clearly labeled ACTIVE / INACTIVE selector in the Deal Lead right-side editor (near linked opportunities or in a logical position before Save). Any CRM user may change it. Only Save commits; audit actor and before/after. Update card/status filters and available assignment dropdowns. Inactive leads are not offered as NEW primary/additional Deal Lead or new Task Owner; pre-existing references remain visible. Deactivation must NOT sign anyone out or remove their CRM access.
+- Eliminate hardcoded Dennis/Mary lists and automatic addition of every Microsoft login as a lead. The roster is explicit. Duplicate prevention should rely on lead ID / linked identity, not name string; if name edited, task/lead assignments still resolve.
+
+9. DEAL LEAD DELETION — FINAL RULE (OVERRIDES EARLIER PROPOSALS)
+- All authorized CRM users may request Delete Deal Lead, with a confirmation. The Delete control must exist in the existing Deal Lead right drawer, appropriate to its dark navy style and other destructive actions.
+- PERMANENT DELETE is allowed ONLY when Deal Lead is genuinely UNUSED: no linked opportunities as primary/additional, no Task Owner references, no required historical financial/reporting references and no other persisted dependencies. Check on trusted backend and block/reject deletion when dependencies exist, even if UI was stale. Warn with specific counts and path to deactivate/reassign.
+- For USED Deal Leads, require deactivation OR appropriate reassignment/cleanup of dependencies first; preservation of historical references is mandatory. Deactivation is an alternative to removing a used lead; it should remain in the database and historic views. Do NOT automatically unassign Active/Pending deals or permanently erase used leads on Delete. This final requirement supersedes an earlier suggestion to automatically unassign on deletion.
+- For UNUSED lead deletion, optionally provide a short Undo toast (e.g., 10 seconds) backed by a recoverable soft-delete/tombstone window, but never claim a truly irreversible hard-delete can be undone. Backend must handle race conditions. Log deletion/restoration in audit history. If user declines in confirmation, change nothing.
+- Active/Inactive and Delete are distinct. Never cascade-delete acquisitions, tasks, documents or reports to remove a lead. If the deleted lead is the currently signed-in user's linked roster entry, keep their Microsoft access working.
+
+10. TASK OWNER DROPDOWNS — SOURCE FROM ACTIVE DEAL LEAD ROSTER
+- This supersedes an earlier separation: the user now explicitly wants Task Owner selection (New Task AND Edit Task in every entry point) populated only from current ACTIVE Deal Lead records. Do not hardcode names or implicitly add a signed-in non-lead user to the dropdown.
+- On a user registering a new Deal Lead or changing its name (e.g., Mahad -> first name only), the Task Owner dropdown must show that saved/current lead once active, based on stable ID. Changes propagate throughout CRM. Allow selection by a searchable list if existing patterns permit.
+- Preserve existing historical task owners not on the current roster (e.g. legacy Alex Rivera) when reading old tasks; display their historical name, do not silently replace with another lead. If editing an old task and assigning a NEW owner, only active roster leads may be selected. If no active leads, show honest no-options state.
+- Keep primary/additional opportunity Deal Leads and task Owner conceptually separate fields even if Task Owner selection is sourced from the same roster. A task owner is not necessarily promoted to primary acquisition lead.
+
+11. TASK DONE CONFIRMATION, IMMEDIATE HISTORY, RESTORE
+- Replace former 'Done' + X manual archive + seven-day delay workflow. When user selects DONE in task row or edit drawer, BEFORE committing display centered confirmation: 'Mark this task as completed and move it to Task History?' with Cancel and 'Complete Task'. Cancel leaves status and location unchanged. Confirm sets Done/completedAt and immediately moves it out of live Tasks/This Week's Priorities into Task History, linked opportunity history and shared audit. No need for adjacent X after Done. Apply this from all task status controls consistently.
+- Add RESTORE action to Task History (both compact drawer and full History page and task detail if relevant), with confirmation as appropriate. Restoring a completed task sets status to OPEN (FINAL DECISION), clears/updates current completion/archive flag while preserving completion/restore audit and original due date for historical reports. Do not make it immediately re-archive. Show restored task in live Tasks only if linked opportunity currently Active or Pending; otherwise keep it on linked Opportunity Profile as unfinished/paused according to existing eligibility rules. Recalculate warnings and dashboard immediately; sync across clients.
+- History retains traces of completion and restoration for missed-deadline reporting; do not erase historical events or fabricate a fresh original creation date. Test tasks previously moved to history via old flow.
+- Keep task search, warning red/blue, A/B/C ordering and date alignment from prior sprint unless explicitly changed here.
+
+12. OPPORTUNITY STATUS AND STAGE — SAVE CHANGES IS THE COMMIT POINT
+- Both the Full Opportunity Profile top controls AND right-side Opportunities editor Status / Acquisition Stage dropdowns are DRAFT edits. Changing selection may update local unsaved form state and its preview badges, but MUST NOT write to database, shared caches, Reports, Dashboard, Recent Activity or other users until the user clicks Save Changes.
+- On Save, validate and commit a single coherent record transaction, update modifiedAt and audit once. On Cancel/Back/X with dirty state, use existing Save / Discard / Cancel warning; Discard restores persisted values. On network failure, display failure and keep draft instead of falsely displaying committed values.
+- Completed selection still requires legal closing confirmation/date as part of Save flow. Preserve Reports 24-hour provisional Completed rule, reversal history and event-date accounting. Do not accidentally trigger final-completion side effects when merely selecting dropdown.
+
+13. DASHBOARD 'DEALS REQUIRING ACTION' — ACQUISITION STAGE BADGE SIZING
+- Fix the varying widths, over-extended background, clipped strings and inconsistent wrapping for ALL acquisition-stage badges in Deals Requiring Action (e.g. Preliminary Discussion, Target Identified, Initial Outreach, IOI/LOI). Also inspect stage badges in Opportunities table, Opportunity/Profile and elsewhere using same component.
+- Badges should fit text naturally with controlled padding/max-width, restrained font, consistent line height and sensible wrap/truncation only at narrow widths; no unwarranted huge colored rectangle stretching across a table column. Avoid table width shifting on different filtered combinations. Test All, Active, Pending, Completed and stage-filter combinations, especially longer labels. Preserve correct underlying stage and color.
+
+14. DESKTOP SCROLLING CLEANUP — SETTINGS, TASKS, OPPORTUNITY OVERVIEW
+- Settings: no tiny outer-page scrollbar at standard desktop viewport; preserve Excel Import, backup/import options, sessions and install app. Don't clip bottom controls. Responsive fallback may scroll.
+- Tasks & Follow-Ups list: remove the extra small vertical page scroll. Use viewport-aware layout (flex/min-height:0/height budget) with heading + filters + table + footer/pagination fitting naturally. Long tables paginate or scroll WITHIN intended table if necessary; do not clip rows or create unusable tiny text.
+- Opportunities right-side editor's OVERVIEW tab: remove needless few pixels of internal scroll when fields already fit. Keep all fields, title, footer and metadata visible. The Company tab and other genuinely long drawer content may scroll independently. Different warnings/assignment counts and narrow viewport must still work.
+- Do not apply global overflow:hidden that prevents accessing content. Test actual desktop dimensions and responsive breakpoints.
+
+15. REPORTS — TRENDS OVER TIME STEPPED CHART Y AXIS
+- Keep the four approved charts over two report views: first Cumulative Completed NWP and Cumulative Completed PF EBITDA; second New Opportunities Created per Month and Acquisitions Completed per Month. Keep their previously approved STEP-LINE appearance. Do NOT revert to the old combined monthly graph or change cumulative charts to monthly.
+- FINAL CHOICE OPTION A: full-sized chart cards and responsive plotting area, with sensible dynamic Y-axis headroom so 0-to-1 or 0-to-3 monthly data does not visually fill the vertical plot unnaturally. Axis starts at 0; use nonnegative integer ticks and aesthetically comfortable max (for example max monthly 1 -> suggested 4, max 3 -> suggested 6; algorithm dynamically scales as data grows). Empty/zero data still renders meaningful labeled axes. Never show negative monthly deal count. Keep monthly lines non-cumulative: they can rise, flatten, fall to zero. Cumulative financial lines remain cumulative and may step upwards/flat based on legal closing events.
+- Preserve period filters, all event history, provisional Completed reporting logic, 2-chart pagination, exports, and current KPIs. Test monthly zero transitions, long date ranges, max 1, max 3 and larger data volumes.
+
+16. NOTIFICATION BELL — TODAY'S MEETINGS, OVERDUE TASKS, UNREAD EMAILS
+- Preserve current notification drawer styling and its approximately TEN visible-item capacity (with internal scroll and explicit View All actions). Add a new TOP group 'Today's Meetings', ordered before Overdue Tasks, which remain before Unread Outlook Emails.
+- Populate meetings from the CURRENT SIGNED-IN USER'S Outlook calendar for the current day in their configured local timezone; do not reveal other users' meetings. Show meeting title, local start/end time, platform/link indicator where available and only safe details. Upcoming today should order ahead of past today; within each subgroup sort sensibly by start time. Avoid duplicates between Outlook events and any matching saved CRM meeting record.
+- If >10 meetings today, use available slots for meetings and provide 'View all today's meetings'. If 1-2 meetings, use remaining slots for overdue tasks then unread emails. Always show accurate counts for all three groups even when only a subset is visible. Maintain flexible occupancy rather than rigid 5+5 split. If no meetings today, show normal task/email notifications without a big blank section.
+- Clicking a meeting can navigate to Meetings selected event if feasible. 'View all today's meetings' opens Meetings with TODAY'S DATE selected, meeting list filtered to that date, not default All Upcoming. Existing View all overdue tasks still opens Tasks filtered to Overdue; View all unread emails still opens Email filtered to Unread. Don't break real Outlook Graph fetch and permission errors; show useful empty/error states. Notifications are per-user for Outlook inbox/calendar, while overdue tasks follow shared data eligibility.
+
+17. PRESERVE PRIOR UI/WORKFLOW FEATURES AND SANITY CHECKS
+- Preserve Dashboard amber Needs Attention scheme (red only genuine overdue text), Task and Dashboard priority sorting by overdue tier > due-soon tier > normal and A/B/C within tiers, responsive row/pagination fit, Deal Lead primary/additional linkage, 3-card Deal Leads page, creation modals/editing drawers, selected document type navigation even for empty slots, Meeting History 'Meeting Details' / 'Transcript & AI' tabs, and contextual full-profile navigation.
+- Restore after Back from Meeting History selected date/meeting; fresh sidebar visits reset stale searches/pagination; preserve per-user Meetings privacy; retain AI-generated task conversion, Outlook links, report donut centering and status colors.
+- Do not replace existing legit data with a new set of fictitious sample records to make screenshots resemble earlier version.
+
+IMPLEMENTATION QUALITY GATES / ACCEPTANCE CRITERIA
+1. Repo inspection and architecture summary explains where data currently lives, what changed, why storage chosen, and explicit configuration needs.
+2. Real shared backend stores shared CRM records securely and is authoritative; two different authorized users in independent browsers can see edits/audit in a verified test. No fake sync.
+3. User-private Meetings and related Opportunity Profile Meetings remain unreadable by a different user at both API and UI levels. Same user sees their own meeting on another device. Outlook email/calendar remain private.
+4. Existing local records, docs, activity, reporting dates and linked relationships are migrated without wipe or accidental duplicate seeding. Restore/backup is safe for shared environment.
+5. All Deal Lead profiles editable by any authorized user; Active/Inactive works; new Task Owner selector reads active lead roster; used lead deletion blocked or redirected to deactivate/reassign; unused lead delete works after confirmation.
+6. Status/stage dropdown change is unsaved until Save; cancel/discard doesn't broadcast or audit; save commits across clients.
+7. Done task confirms then immediately archives; Restore returns it as Open with proper Active/Pending eligibility; audit and reporting history preserved.
+8. Dashboard stage badges fit; Settings, Tasks and Overview have no silly tiny scroll at standard desktop sizes without clipping content.
+9. Trend monthly stepped charts have sensible zero-based integer Y-axis headroom. Other report figures/filters unchanged except correct live sync.
+10. Notifications show TODAY's private meetings FIRST, then overdue shared tasks, then unread private emails; ten-item cap adapts, View All deep links function.
+11. Run lint/typecheck/build/unit and integration tests where available; test data integrity and multiple-account concurrency. Provide actual results and note blocked external tests separately.
+12. Handoff: migration scripts, schema/version, environment template (no secrets), deployment and rollback instructions, backup/recovery policy, two-account test procedure, any costs/permissions, and honest list of incomplete/blocked items.
+
+EXECUTION INSTRUCTIONS
+Inspect implementation and tests first. Work in logical verified increments (persistence/auth -> migration -> real-time sync -> privacy -> document storage -> UI fixes -> tests). Make careful changes rather than broad speculative rewrites. If Microsoft tenant permissions or database provisioning require operator intervention, identify the exact step and continue with securely testable parts; never falsely claim production complete. The finished product must be the EXISTING Newport CRM, more reliable and synchronized, not a different demo application.
+
+END OF PROMPT

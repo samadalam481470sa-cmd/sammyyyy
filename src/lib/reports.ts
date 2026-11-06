@@ -414,3 +414,17 @@ export function exportScope(opportunities: Opportunity[], period: Period): Oppor
   const ids = new Set([...s.allStatuses, ...s.completed, ...s.provisional].map((o) => o.id))
   return opportunities.filter((o) => ids.has(o.id))
 }
+
+/**
+ * Y axis for a monthly count: starts at 0, whole numbers only, with room above the tallest step so
+ * one or three deals do not fill the chart. Max 1 gives 4, max 3 gives 6, and it scales from there.
+ */
+export function monthlyCountAxis(values: readonly number[]): { max: number; ticks: number[] } {
+  const peak = Math.max(0, ...values.filter((value) => Number.isFinite(value)))
+  const wanted = peak <= 1 ? 4 : peak <= 3 ? 6 : Math.ceil(peak * 1.5)
+  const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((size) => wanted / size <= 6) ?? Math.ceil(wanted / 6)
+  const max = Math.ceil(wanted / step) * step
+  const ticks: number[] = []
+  for (let value = 0; value <= max; value += step) ticks.push(value)
+  return { max, ticks }
+}

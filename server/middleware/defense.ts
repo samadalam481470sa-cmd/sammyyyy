@@ -260,28 +260,6 @@ export function uploadProblem(name: string, data: Buffer): string | null {
   return windowsProgram || linuxProgram || script ? 'This file looks like a program and cannot be stored in the CRM.' : null
 }
 
-/**
- * Server check for Deal Lead records. Everyone may keep their own record. Only an administrator may
- * change someone else's, change a status, or remove a record.
- */
-export function dealLeadWriteAllowed(input: {
-  isAdmin: boolean
-  /** Microsoft account id from the verified sign-in. */
-  subject: string | null
-  userName: string
-  incoming: Record<string, unknown> | null
-  existing: Record<string, unknown> | null
-}): boolean {
-  const { isAdmin, subject, userName, incoming, existing } = input
-  if (isAdmin) return true
-  if (!incoming || !subject || incoming.authAccountId !== subject) return false
-  if (!existing) return incoming.status === 'Active'
-  if (incoming.status !== existing.status) return false
-  if (existing.authAccountId === subject) return true
-  const same = (v: unknown) => String(v ?? '').trim().toLowerCase()
-  return !existing.authAccountId && same(existing.name) === same(userName) && same(userName) !== ''
-}
-
 export function defenseStatus() {
   const now = Date.now()
   const active = [...blocks.entries()].filter(([, b]) => b.until > now).map(([ip, b]) => ({ ip, reason: b.reason, level: b.level, blockedUntil: new Date(b.until).toISOString() }))

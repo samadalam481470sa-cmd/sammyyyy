@@ -56,6 +56,8 @@ export interface UseResourceOptions {
   scope?: string
   /** Always mirror API results to localStorage so static hosting keeps data. */
   persistLocal?: boolean
+  /** The mock list is used only when nothing is stored, and never adds deleted rows back. */
+  seedOnce?: boolean
 }
 
 /**
@@ -105,10 +107,10 @@ export function useResource<T extends { id: string }>(
 
   const loadLocal = useCallback(() => {
     const stored = loadOwnedCollection(resource, owner, mock)
-    const loaded = mergeMissingById(stored, mock)
+    const loaded = options.seedOnce ? stored : mergeMissingById(stored, mock)
     if (loaded.length !== stored.length) saveOwnedCollection(resource, owner, loaded)
     return loaded
-  }, [resource, owner, mock])
+  }, [resource, owner, mock, options.seedOnce])
 
   const refresh = useCallback(async () => {
     setLoading(true)

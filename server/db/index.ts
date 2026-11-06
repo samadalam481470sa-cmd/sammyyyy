@@ -53,6 +53,31 @@ db.pragma('busy_timeout = 4000')
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8')
 db.exec(schema)
 
+;(function addRecordRevisions() {
+  const cols = db.prepare(`PRAGMA table_info(workspace_records)`).all() as { name: string }[]
+  if (cols.some((c) => c.name === 'rev')) return
+  db.exec(`ALTER TABLE workspace_records ADD COLUMN rev INTEGER NOT NULL DEFAULT 1`)
+})()
+
+;(function seedRosterOnce() {
+  // Runs one time. Later deletes stay deleted because the flag stops it, and the rows become tombstones.
+  const done = db.prepare(`SELECT 1 FROM workspace_meta WHERE key = 'roster_seeded'`).get()
+  if (done) return
+  const stamp = new Date().toISOString()
+  const hasLeads = db.prepare(`SELECT 1 FROM workspace_records WHERE collection = 'dealLeads' LIMIT 1`).get()
+  const hasRecords = db.prepare(`SELECT 1 FROM workspace_records LIMIT 1`).get()
+  // An empty server gets its roster from the first person's data, so nothing is invented here.
+  if (hasRecords && !hasLeads) {
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO workspace_records (collection, id, data, deleted, updated_at, updated_by, rev) VALUES ('dealLeads', ?, ?, 0, ?, 'Roster migration', 1)`,
+    )
+    for (const [id, name] of [['lead-mary', 'Mary Sbaschnig'], ['lead-dennis', 'Dennis DiCapua']]) {
+      insert.run(id, JSON.stringify({ id, name, jobTitle: '', email: '', phone: '', status: 'Active', authAccountId: null, createdAt: stamp, updatedAt: stamp }), stamp)
+    }
+  }
+  db.prepare(`INSERT INTO workspace_meta (key, value) VALUES ('roster_seeded', ?)`).run(stamp)
+})()
+
 ;(function addSessionSubject() {
   const cols = db.prepare(`PRAGMA table_info(sessions)`).all() as { name: string }[]
   if (cols.some((c) => c.name === 'auth_subject')) return

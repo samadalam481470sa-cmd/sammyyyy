@@ -14,7 +14,7 @@ export function taskWarning(task: TaskRecord, now = new Date()): DealWarning | n
   if (isOverdueUnfinishedTask(task, now)) {
     return { level: 'red', reason: 'Next action overdue', detail: `${task.action || 'Task'} was due ${formatDate(task.dueDate)}` }
   }
-  if (isUnfinishedTask(task, now) && isWithinNextDays(task.dueDate, 7, now)) {
+  if (isUnfinishedTask(task) && isWithinNextDays(task.dueDate, 7, now)) {
     return { level: 'navy', reason: 'Upcoming deadline within 7 days', detail: `${task.action || 'Task'} is due ${formatDate(task.dueDate)}` }
   }
   return null

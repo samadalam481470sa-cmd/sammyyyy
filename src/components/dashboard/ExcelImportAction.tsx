@@ -3,6 +3,7 @@ import { useAuth } from '@/auth/AuthContext'
 import { ExcelImportModal } from '@/components/dashboard/ExcelImportModal'
 import { useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { useData } from '@/data/DataContext'
+import { RESOURCE_CHANGED } from '@/hooks/useResource'
 import { mockContacts } from '@/data/mockModules'
 import { loadOwnedCollection, saveOwnedCollection } from '@/lib/demoStore'
 import type { ImportRow } from '@/lib/excelImport'
@@ -15,7 +16,7 @@ import { isLocalPersistence } from '@/lib/persistenceMode'
  * spreadsheet; it has nothing to do with the database backup file.
  */
 export function ExcelImportAction() {
-  const { opportunities, createOpportunity, saveOpportunity, createTask } = useData()
+  const { opportunities, createOpportunity, saveOpportunity, createTask, saveInBatch } = useData()
   const { user } = useAuth()
   const owner = sessionOwnerKey(user)
   const { addSheet } = useSpreadsheetColumns()
@@ -39,17 +40,23 @@ export function ExcelImportAction() {
         onClose={() => setOpen(false)}
         opportunities={opportunities}
         onCreateOpportunities={async (drafts) => {
-          for (const d of drafts) {
-            await createOpportunity(d)
-          }
-          setNote(`Imported ${drafts.length} opportunit${drafts.length === 1 ? 'y' : 'ies'}`)
+          const failures: string[] = []
+          await saveInBatch(async () => {
+            for (const d of drafts) {
+              await createOpportunity(d).catch((err: unknown) => failures.push(`${d.projectName ?? 'Row'}: ${err instanceof Error ? err.message : 'not saved'}`))
+            }
+          })
+          const saved = drafts.length - failures.length
+          setNote(`Imported ${saved} opportunit${saved === 1 ? 'y' : 'ies'}.${failures.length ? ` ${failures.length} not saved. ${failures[0]}` : ''}`)
         }}
         onUpdateOpportunity={async (id, patch) => {
           await saveOpportunity(id, patch)
           setNote('Opportunity autofilled from Excel')
         }}
         onImportTasks={async (rows: ImportRow[]) => {
-          for (const [i, r] of rows.entries()) {
+          let failed = 0
+          let firstError = ''
+          await saveInBatch(async () => { for (const [i, r] of rows.entries()) {
             await createTask({
               action: String(r.action ?? r.nextAction ?? r.name ?? `Imported task ${i + 1}`),
               priority: String(r.priority ?? 'B'),
@@ -58,8 +65,12 @@ export function ExcelImportAction() {
               dueDate: r.nextActionDate != null ? String(r.nextActionDate) : null,
               status: 'Open',
               notes: String(r.notes ?? 'Excel import'),
+            }).catch((err: unknown) => {
+              failed += 1
+              firstError ||= err instanceof Error ? err.message : 'not saved'
             })
-          }
+          } })
+          setNote(`Imported ${rows.length - failed} task${rows.length - failed === 1 ? '' : 's'}.${failed ? ` ${failed} not saved. ${firstError}` : ''}`)
         }}
         onKeepAsColumn={keepSpreadsheet}
         onImportContacts={async (rows: ImportRow[]) => {
@@ -79,7 +90,19 @@ export function ExcelImportAction() {
               lastContactDate: null,
               notes: String(r.notes ?? 'Excel import'),
             }))
-            saveOwnedCollection('contacts', owner, [...mapped, ...existing])
+            // A contact already saved under the same email, or the same name and company, is not added twice.
+            const identity = (row: { email?: string; name?: string; company?: string }) => (row.email?.trim() || `${row.name}|${row.company}`).toLowerCase()
+            const known = new Set(existing.map(identity))
+            const fresh = mapped.filter((row) => {
+              const key = identity(row)
+              if (known.has(key)) return false
+              known.add(key)
+              return true
+            })
+            const next = [...fresh, ...existing]
+            saveOwnedCollection('contacts', owner, next)
+            window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail: { resource: 'contacts', owner, source: 0, items: next } }))
+            setNote(`Imported ${fresh.length} contact${fresh.length === 1 ? '' : 's'}.${mapped.length - fresh.length ? ` ${mapped.length - fresh.length} already saved.` : ''}`)
           }
         }}
       />

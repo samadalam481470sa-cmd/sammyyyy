@@ -1,3 +1,5 @@
+> Superseded in part by `docs/SHARED_BACKEND.md` (Nov 5, 2026): Done now confirms and moves to Task History at once, Deal Leads are editable by every approved user, Task Owners come from the roster, and live tasks are Active and Pending deals only.
+
 # Newport CRM — Next Fixes and Deal Leads sprint: what changed
 
 This sprint follows `docs/Newport_CRM_Next_Fixes_Plus_Deal_Leads_Nov4_2026.txt`. It is an incremental change. Outlook, Microsoft sign-in and Gemini code were not rewritten.

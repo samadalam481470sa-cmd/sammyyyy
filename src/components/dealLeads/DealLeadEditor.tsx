@@ -9,11 +9,12 @@ import { SearchSelect } from '@/components/shared/SearchSelect'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import type { DealLeadsApi } from '@/hooks/useDealLeads'
 import { dealIdFromOpportunity } from '@/lib/dealId'
-import { emailConflict, isValidLeadEmail, leadLinkChanges, leadLinks, leadPermissions, UNASSIGNED_LEAD, type DealLead } from '@/lib/dealLeads'
+import { emailConflict, isValidLeadEmail, leadLinkChanges, leadLinks, leadUsage, UNASSIGNED_LEAD, type DealLead } from '@/lib/dealLeads'
+import { LeadInUseError, type LeadDependencies } from '@/lib/workspaceSync'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 
 export type DealLeadEditorMode =
-  /** Admin adding someone. */
+  /** Adding someone to the roster. */
   | 'create'
   /** The signed-in person adding themselves. The record links to their Microsoft account. */
   | 'self'
@@ -34,6 +35,8 @@ interface Props {
   lead: DealLead | null
   onClose: () => void
   onSaved?: (lead: DealLead) => void
+  /** A permanent delete went through. The page offers a short Undo. */
+  onDeleted?: (lead: DealLead) => void
   footerExtra?: ReactNode
 }
 
@@ -41,11 +44,11 @@ const label = 'block text-[11px] font-semibold tracking-[0.06em] text-ink-muted 
 const input = 'mt-1.5 h-10 w-full rounded-lg border border-border px-3 text-sm font-normal text-ink normal-case outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:bg-canvas disabled:text-ink-muted'
 const fieldError = 'mt-1 block text-xs font-medium tracking-normal text-attention normal-case'
 
-export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(function DealLeadEditor({ roster, mode, lead, onClose, onSaved, footerExtra }, ref) {
+export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(function DealLeadEditor({ roster, mode, lead, onClose, onSaved, onDeleted, footerExtra }, ref) {
   const { user } = useAuth()
-  const { opportunities, saveOpportunity, syncLeadName, logLeadActivity } = useData()
+  const { opportunities, tasks, saveOpportunity, syncLeadName, logLeadActivity, confirmSaved, deleteDealLead } = useData()
   const guard = useEditorGuard()
-  const { api, leads, isAdmin } = roster
+  const { api, leads } = roster
   const links = useMemo(() => (lead ? leadLinks(opportunities, lead.id) : []), [opportunities, lead])
 
   const start = useMemo<Draft>(() => {
@@ -63,7 +66,9 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
-  const [confirmDeactivate, setConfirmDeactivate] = useState(false)
+  const [deleteAsk, setDeleteAsk] = useState(false)
+  const [blocked, setBlocked] = useState<LeadDependencies | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const savingRef = useRef(false)
 
   useEffect(() => {
@@ -76,9 +81,7 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
   }, [start])
 
   const creating = mode !== 'edit'
-  const perms = leadPermissions(lead, user, isAdmin)
-  // A linked self record is the person's own even when it was claimed from the roster.
-  const canEditProfile = creating ? isAdmin || mode === 'self' : perms.canEditProfile
+  const isOwn = Boolean(lead && user?.id && lead.authAccountId === user.id)
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline) || Object.keys(replacements).length > 0
   const dirtyRef = useRef(dirty)
   dirtyRef.current = dirty
@@ -114,7 +117,7 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
     setMessage(null)
   }
 
-  const persist = async (statusOverride?: DealLead['status']): Promise<boolean> => {
+  const persist = async (): Promise<boolean> => {
     if (savingRef.current) return false
     if (!valid) {
       setShowErrors(true)
@@ -125,22 +128,24 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
     setError(null)
     try {
       const stamp = new Date().toISOString()
-      const status = statusOverride ?? draft.status
+      const status = draft.status
       const fields = { name: draft.name.trim(), jobTitle: draft.jobTitle.trim(), email: draft.email.trim(), phone: draft.phone.trim(), status, updatedAt: stamp }
       const linkAccount = mode === 'self' && user?.id ? { authAccountId: user.id } : {}
       let result: DealLead
       if (lead) {
-        result = canEditProfile ? await api.save(lead.id, { ...fields, ...linkAccount }) : lead
+        result = await api.save(lead.id, { ...fields, ...linkAccount })
       } else {
         result = await api.create({ ...fields, authAccountId: mode === 'self' ? (user?.id ?? null) : null, createdAt: stamp })
       }
-      if (lead && canEditProfile && result.name !== lead.name) syncLeadName(result.id, result.name)
+      if (lead && result.name !== lead.name) syncLeadName(result.id, result.name)
       const nextRoster = lead ? leads.map((row) => (row.id === result.id ? result : row)) : [result, ...leads]
       const { changes } = leadLinkChanges(opportunities, result, draft.projectIds, replacements, nextRoster)
       for (const change of changes) await saveOpportunity(change.opportunityId, change.patch)
       if (creating) logLeadActivity(`added ${result.name} to the Deal Leads roster`, result)
-      else if (statusOverride) logLeadActivity(`${statusOverride === 'Inactive' ? 'deactivated' : 'reactivated'} deal lead ${result.name}`, result)
-      else if (canEditProfile && JSON.stringify({ ...baseline, projectIds: [] }) !== JSON.stringify({ ...draft, projectIds: [] })) logLeadActivity(`updated deal lead ${result.name}`, result)
+      else if (lead && baseline.status !== status) logLeadActivity(`changed deal lead ${result.name} from ${baseline.status} to ${status}`, result)
+      else if (JSON.stringify({ ...baseline, projectIds: [] }) !== JSON.stringify({ ...draft, projectIds: [] })) logLeadActivity(`updated deal lead ${result.name}`, result)
+      // "Saved" appears only after the server has answered.
+      await confirmSaved()
       const snap: Draft = { name: result.name, jobTitle: result.jobTitle, email: result.email, phone: result.phone, status: result.status, projectIds: draft.projectIds }
       setBaseline(snap)
       setDraft(snap)
@@ -173,7 +178,7 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
           closeLabel="Close deal lead form"
         />
       ) : (
-        <DrawerHeader eyebrow={perms.isOwn ? 'My Deal Lead Profile' : 'Deal Lead'} title={draft.name.trim() || 'Deal Lead'} subtitle={draft.jobTitle || undefined} onClose={() => requestLeave(onClose)} closeLabel="Close deal lead editor">
+        <DrawerHeader eyebrow={isOwn ? 'My Deal Lead Profile' : 'Deal Lead'} title={draft.name.trim() || 'Deal Lead'} subtitle={draft.jobTitle || undefined} onClose={() => requestLeave(onClose)} closeLabel="Close deal lead editor">
           <div className="flex items-center gap-2">
             <InitialsAvatar name={draft.name} tone="light" size="md" />
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${draft.status === 'Active' ? 'bg-[#e6f4ec] text-[#1f6b4a]' : 'bg-[#eef0f3] text-[#5a6577]'}`} data-testid="deal-lead-status-chip">{draft.status}</span>
@@ -183,43 +188,37 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
       )}
 
       <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-        {!creating && !canEditProfile && (
-          <p className="rounded-lg border border-border bg-canvas px-3 py-2 text-xs text-ink-muted" data-testid="deal-lead-readonly-note">
-            You can view this profile but not change it. Only this person or an administrator can. Deal assignments below follow normal opportunity editing.
-          </p>
-        )}
         <label className={label}>
           Full Name *
-          <input data-testid="deal-lead-name" value={draft.name} disabled={!canEditProfile} onChange={(e) => set('name', e.target.value)} className={input} />
+          <input data-testid="deal-lead-name" value={draft.name} onChange={(e) => set('name', e.target.value)} className={input} />
           {showErrors && problems.name && <span className={fieldError} data-testid="deal-lead-name-error">{problems.name}</span>}
         </label>
         <label className={label}>
           Job Title
-          <input data-testid="deal-lead-title" value={draft.jobTitle} disabled={!canEditProfile} onChange={(e) => set('jobTitle', e.target.value)} className={input} />
+          <input data-testid="deal-lead-title" value={draft.jobTitle} onChange={(e) => set('jobTitle', e.target.value)} className={input} />
         </label>
         <label className={label}>
           Contact Email{creating || baseline.email ? ' *' : ''}
-          <input data-testid="deal-lead-email" type="email" value={draft.email} disabled={!canEditProfile} onChange={(e) => set('email', e.target.value)} className={input} />
+          <input data-testid="deal-lead-email" type="email" value={draft.email} onChange={(e) => set('email', e.target.value)} className={input} />
           {showErrors && problems.email && <span className={fieldError} data-testid="deal-lead-email-error">{problems.email}</span>}
-          {!creating && !draft.email.trim() && canEditProfile && <span className="mt-1 block text-[11px] font-normal tracking-normal text-ink-muted normal-case">No contact email is saved yet.</span>}
-          {(mode === 'self' || perms.isOwn) && <span className="mt-1 block text-[11px] font-normal tracking-normal text-ink-muted normal-case">This is only your contact email. Your Microsoft sign-in does not change.</span>}
+          {!creating && !draft.email.trim() && <span className="mt-1 block text-[11px] font-normal tracking-normal text-ink-muted normal-case">No contact email is saved yet.</span>}
+          {(mode === 'self' || isOwn) && <span className="mt-1 block text-[11px] font-normal tracking-normal text-ink-muted normal-case">This is only your contact email. Your Microsoft sign-in does not change.</span>}
         </label>
         <label className={label}>
           Phone
-          <input data-testid="deal-lead-phone" value={draft.phone} disabled={!canEditProfile} onChange={(e) => set('phone', e.target.value)} className={input} />
+          <input data-testid="deal-lead-phone" value={draft.phone} onChange={(e) => set('phone', e.target.value)} className={input} />
         </label>
-        {!creating && perms.canChangeStatus && (
-          <div>
-            <span className={label}>Status</span>
-            <div className="mt-1.5 flex items-center gap-2">
-              <span className="text-sm font-semibold text-ink">{draft.status}</span>
-              {draft.status === 'Active' ? (
-                <button type="button" onClick={() => setConfirmDeactivate(true)} className="h-8 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-ink hover:bg-canvas" data-testid="deal-lead-deactivate">Deactivate</button>
-              ) : (
-                <button type="button" disabled={saving} onClick={() => void persist('Active')} className="h-8 rounded-lg border border-border bg-surface px-2.5 text-xs font-semibold text-ink hover:bg-canvas" data-testid="deal-lead-reactivate">Reactivate</button>
-              )}
-            </div>
-          </div>
+        {!creating && (
+          <label className={label}>
+            Status
+            <select data-testid="deal-lead-status" value={draft.status} onChange={(e) => set('status', e.target.value as DealLead['status'])} className={`${input} bg-white`}>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+            <span className="mt-1 block text-[11px] font-normal tracking-normal text-ink-muted normal-case">
+              Inactive leads stay on past and current deals and in reports. They are not offered for new assignments or new tasks. This does not affect anyone's sign-in.
+            </span>
+          </label>
         )}
         <div>
           <span className={label}>Linked Opportunities</span>
@@ -256,6 +255,22 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
         <button type="button" data-testid="deal-lead-save" disabled={!canSave} onClick={() => void persist()} className={`h-10 w-full rounded-lg text-sm font-semibold disabled:cursor-not-allowed ${canSave ? 'bg-navy-900 text-white hover:bg-navy-800' : 'border border-border bg-white text-ink-muted'}`}>
           {saveButtonLabel(saving)}
         </button>
+        {!creating && lead && (
+          <button
+            type="button"
+            data-testid="deal-lead-delete"
+            disabled={saving || deleting}
+            onClick={() => {
+              setError(null)
+              const usage = leadUsage(lead, opportunities, tasks)
+              if (usage.total > 0) setBlocked(usage)
+              else setDeleteAsk(true)
+            }}
+            className="h-10 w-full rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger-bg)] text-sm font-semibold text-[var(--color-danger)] hover:opacity-90"
+          >
+            Delete Deal Lead
+          </button>
+        )}
         {footerExtra}
       </div>
 
@@ -284,14 +299,47 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
         onCancel={() => setPendingLeave(null)}
       />
       <ConfirmDialog
-        open={confirmDeactivate}
-        title="Deactivate this deal lead?"
-        message={`${draft.name} stays on past and current deals and in reports, and can be reactivated later. They will not be offered for new assignments.`}
-        confirmLabel="Deactivate"
-        onCancel={() => setConfirmDeactivate(false)}
+        open={deleteAsk}
+        title="Permanently delete this deal lead?"
+        message={`${lead?.name ?? 'This lead'} has no linked opportunities and no tasks. The record is removed from the roster for everyone. Sign-in access is not affected.`}
+        confirmLabel="Delete Deal Lead"
+        confirming={deleting}
+        onCancel={() => setDeleteAsk(false)}
         onConfirm={() => {
-          setConfirmDeactivate(false)
-          void persist('Inactive')
+          if (!lead) return
+          setDeleting(true)
+          void deleteDealLead(lead.id)
+            .then(() => {
+              setDeleteAsk(false)
+              dirtyRef.current = false
+              onDeleted?.(lead)
+              onClose()
+            })
+            .catch((err: unknown) => {
+              setDeleteAsk(false)
+              // The roster on screen can be out of date. The server's count is the one that decides.
+              if (err instanceof LeadInUseError) setBlocked(err.dependencies)
+              else setError(err instanceof Error ? err.message : 'The deal lead could not be deleted.')
+            })
+            .finally(() => setDeleting(false))
+        }}
+      />
+      <ConfirmDialog
+        open={blocked != null}
+        title="This deal lead cannot be deleted"
+        message={blocked ? `${lead?.name ?? 'This lead'} is in use: ${[
+          blocked.primary ? `${blocked.primary} deal${blocked.primary === 1 ? '' : 's'} as primary lead` : '',
+          blocked.additional ? `${blocked.additional} deal${blocked.additional === 1 ? '' : 's'} as additional lead` : '',
+          blocked.taskOwner ? `${blocked.taskOwner} task${blocked.taskOwner === 1 ? '' : 's'} as owner` : '',
+          blocked.legacyName ? `${blocked.legacyName} deal${blocked.legacyName === 1 ? '' : 's'} by name` : '',
+        ].filter(Boolean).join(', ')}. Set the status to Inactive to keep the history, or reassign these first. Nothing was changed.` : ''}
+        confirmLabel="Set to Inactive"
+        tone="default"
+        onCancel={() => setBlocked(null)}
+        onConfirm={() => {
+          setBlocked(null)
+          set('status', 'Inactive')
+          setMessage(null)
         }}
       />
     </div>

@@ -2,7 +2,8 @@ import express, { Router } from 'express'
 import { z } from 'zod'
 import { db, createSessionToken, hashToken } from '../db/index.ts'
 import { aiRateLimit, authRateLimit, fileWriteLimit, lockoutGuard, recordAuthFailure, clearAuthFailures, requireAuth, workspaceWriteLimit, writeAudit } from '../middleware/security.ts'
-import { STRIKES, addStrikes, dealLeadWriteAllowed, logDefenseEvent, uploadProblem } from '../middleware/defense.ts'
+import { STRIKES, addStrikes, logDefenseEvent, uploadProblem } from '../middleware/defense.ts'
+import { changedFields, deadLeadReferences, leadDependencies, protectLeadIdentity } from '../services/workspaceRules.ts'
 import { accessPolicy, isAllowed, verifyMicrosoftIdToken } from '../services/microsoftToken.ts'
 import { SummaryUnavailable, meetingSummaryProvider, summarizeTranscript } from '../services/meetingSummary.ts'
 import { geminiModel, geminiReachability, geminiSelfTest } from '../services/gemini.ts'
@@ -15,7 +16,7 @@ import { geminiModel, geminiReachability, geminiSelfTest } from '../services/gem
 export const workspaceRouter = Router()
 export const microsoftAuthRouter = Router()
 
-export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'dealLeads', 'activity', 'documentTypes', 'meetings'] as const
+export const WORKSPACE_COLLECTIONS = ['opportunities', 'tasks', 'documents', 'contacts', 'dealLeads', 'activity', 'documentTypes'] as const
 const SESSION_HOURS = 12
 const MAX_SESSIONS_PER_USER = 10
 /** Keeps a stolen account or a runaway client from filling the server's disk. */
@@ -77,37 +78,56 @@ const changeSchema = z.object({
         id: z.string().min(1).max(200),
         /** null deletes the record. */
         data: z.record(z.string(), z.unknown()).nullable(),
+        /** Revision this edit was based on; 0 means a new record. Sent by every current client. */
+        baseRev: z.number().int().min(0).optional(),
       }),
     )
     .max(500),
+  /** Set on a reviewed import, so its records can be traced in the audit trail. */
+  batchId: z.string().max(80).optional(),
 })
 
+interface RecordRow {
+  collection: string
+  id: string
+  data: string
+  deleted: number
+  updated_at: string
+  updated_by: string
+  rev: number
+}
+
+const parseRecord = (json: string) => JSON.parse(json) as Record<string, unknown>
+const present = (row: RecordRow) => ({
+  collection: row.collection,
+  id: row.id,
+  deleted: row.deleted === 1,
+  updatedAt: row.updated_at,
+  updatedBy: row.updated_by,
+  rev: row.rev,
+  data: row.deleted === 1 ? null : parseRecord(row.data),
+})
+
+function liveRows(collection: string): Record<string, unknown>[] {
+  const rows = db.prepare(`SELECT data FROM workspace_records WHERE collection = ? AND deleted = 0`).all(collection) as { data: string }[]
+  return rows.map((row) => parseRecord(row.data))
+}
+
+function appendRecordAudit(input: { actorId: string | null; actor: string; collection: string; id: string; action: string; fields?: string[]; rev: number | null; batchId?: string; at?: string }) {
+  db.prepare(
+    `INSERT INTO workspace_audit (at, actor_user_id, actor_name, collection, record_id, action, changed_fields, rev, batch_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(input.at ?? new Date().toISOString(), input.actorId, input.actor, input.collection, input.id, input.action, JSON.stringify(input.fields ?? []), input.rev, input.batchId ?? null)
+}
+
+// Private meeting rows left by older builds are in the 'meetings' collection. No one reads them through this route.
 workspaceRouter.get('/', requireAuth, (req, res) => {
   const since = typeof req.query.since === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(req.query.since) ? req.query.since : null
   const serverTime = new Date().toISOString()
   const rows = (since
-    ? db.prepare(`SELECT collection, id, data, deleted, updated_at, updated_by FROM workspace_records WHERE updated_at >= ? ORDER BY updated_at`).all(since)
-    : db.prepare(`SELECT collection, id, data, deleted, updated_at, updated_by FROM workspace_records WHERE deleted = 0`).all()) as {
-    collection: string
-    id: string
-    data: string
-    deleted: number
-    updated_at: string
-    updated_by: string
-  }[]
-  const total = (db.prepare(`SELECT COUNT(*) AS c FROM workspace_records`).get() as { c: number }).c
-  res.json({
-    serverTime,
-    empty: total === 0,
-    records: rows.map((row) => ({
-      collection: row.collection,
-      id: row.id,
-      deleted: row.deleted === 1,
-      updatedAt: row.updated_at,
-      updatedBy: row.updated_by,
-      data: row.deleted === 1 ? null : JSON.parse(row.data),
-    })),
-  })
+    ? db.prepare(`SELECT collection, id, data, deleted, updated_at, updated_by, rev FROM workspace_records WHERE updated_at >= ? AND collection != 'meetings' ORDER BY updated_at`).all(since)
+    : db.prepare(`SELECT collection, id, data, deleted, updated_at, updated_by, rev FROM workspace_records WHERE deleted = 0 AND collection != 'meetings'`).all()) as RecordRow[]
+  const total = (db.prepare(`SELECT COUNT(*) AS c FROM workspace_records WHERE collection != 'meetings'`).get() as { c: number }).c
+  res.json({ serverTime, empty: total === 0, records: rows.map(present) })
 })
 
 workspaceRouter.post('/changes', requireAuth, workspaceWriteLimit, (req, res) => {
@@ -116,31 +136,59 @@ workspaceRouter.post('/changes', requireAuth, workspaceWriteLimit, (req, res) =>
   if (!parsed.success) return res.status(400).json({ error: 'Invalid changes.' })
   const now = new Date().toISOString()
   const actor = req.auth?.userName ?? 'Newport user'
+  const actorId = req.auth?.userId ?? null
+  const subject = req.auth?.subject ?? null
+  const readExisting = db.prepare(`SELECT collection, id, data, deleted, updated_at, updated_by, rev FROM workspace_records WHERE collection = ? AND id = ?`)
   const upsert = db.prepare(
-    `INSERT INTO workspace_records (collection, id, data, deleted, updated_at, updated_by) VALUES (@collection, @id, @data, @deleted, @updatedAt, @actor)
-     ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, deleted = excluded.deleted, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+    `INSERT INTO workspace_records (collection, id, data, deleted, updated_at, updated_by, rev) VALUES (@collection, @id, @data, @deleted, @updatedAt, @actor, @rev)
+     ON CONFLICT(collection, id) DO UPDATE SET data = excluded.data, deleted = excluded.deleted, updated_at = excluded.updated_at, updated_by = excluded.updated_by, rev = excluded.rev`,
   )
-  const readExisting = db.prepare(`SELECT data, deleted FROM workspace_records WHERE collection = ? AND id = ?`)
-  const rejected: string[] = []
+  const applied: { collection: string; id: string; rev: number; updatedAt: string }[] = []
+  const conflicts: ReturnType<typeof present>[] = []
+  const blocked: { collection: string; id: string; reason: string }[] = []
+  const conflictOn = (row: RecordRow | undefined, collection: string, id: string) =>
+    conflicts.push(row ? present(row) : { collection, id, deleted: true, updatedAt: now, updatedBy: '', rev: 0, data: null })
+  const isDeadLead = (leadId: string) => {
+    const row = readExisting.get('dealLeads', leadId) as RecordRow | undefined
+    return Boolean(row && row.deleted === 1)
+  }
+
   const apply = db.transaction(() => {
     for (const change of parsed.data.changes) {
-      if (change.collection === 'dealLeads') {
-        const row = readExisting.get(change.collection, change.id) as { data: string; deleted: number } | undefined
-        const allowed = dealLeadWriteAllowed({
-          isAdmin: req.auth?.role === 'admin',
-          subject: req.auth?.subject ?? null,
-          userName: req.auth?.userName ?? '',
-          incoming: change.data,
-          existing: row && !row.deleted ? (JSON.parse(row.data) as Record<string, unknown>) : null,
-        })
-        if (!allowed) {
-          rejected.push(change.id)
+      const row = readExisting.get(change.collection, change.id) as RecordRow | undefined
+      const currentRev = row?.rev ?? 0
+      const existingLive = row && row.deleted === 0 ? parseRecord(row.data) : null
+      // Someone saved this record after this person loaded it. Nothing is overwritten; the client merges.
+      if (change.baseRev !== undefined && change.baseRev !== currentRev) {
+        if (!(change.data === null && !existingLive)) conflictOn(row, change.collection, change.id)
+        continue
+      }
+      if (change.data === null && !row) continue
+      // A used lead can never be removed by a stale screen. Removal goes through its own checked route.
+      if (change.collection === 'dealLeads' && change.data === null) {
+        conflictOn(row, change.collection, change.id)
+        continue
+      }
+      let incoming = change.data
+      if (incoming && change.collection === 'dealLeads') incoming = protectLeadIdentity(incoming, existingLive, subject)
+      // A deal or task cannot pick up a lead that was deleted while this screen was open.
+      if (incoming && (change.collection === 'opportunities' || change.collection === 'tasks')) {
+        const dead = deadLeadReferences(change.collection, incoming, existingLive).filter(isDeadLead)
+        if (dead.length) {
+          blocked.push({ collection: change.collection, id: change.id, reason: 'That deal lead was deleted. Choose another lead.' })
+          conflictOn(row, change.collection, change.id)
           continue
         }
       }
-      const data = change.data == null ? '{}' : JSON.stringify({ ...change.data, id: change.id })
+      const data = incoming == null ? '{}' : JSON.stringify({ ...incoming, id: change.id })
       if (data.length > 400_000) throw new Error('Record too large')
-      upsert.run({ collection: change.collection, id: change.id, data, deleted: change.data == null ? 1 : 0, updatedAt: now, actor })
+      const rev = currentRev + 1
+      upsert.run({ collection: change.collection, id: change.id, data, deleted: incoming == null ? 1 : 0, updatedAt: now, actor, rev })
+      applied.push({ collection: change.collection, id: change.id, rev, updatedAt: now })
+      if (change.collection !== 'activity' || !row) {
+        const action = incoming == null ? 'delete' : !existingLive ? (row ? 'restore' : 'create') : 'update'
+        appendRecordAudit({ actorId, actor, collection: change.collection, id: change.id, action, fields: changedFields(existingLive, incoming), rev, batchId: parsed.data.batchId, at: now })
+      }
     }
   })
   try {
@@ -148,22 +196,193 @@ workspaceRouter.post('/changes', requireAuth, workspaceWriteLimit, (req, res) =>
   } catch {
     return res.status(400).json({ error: 'A record is too large to save.' })
   }
-  writeAudit(req.auth?.userId ?? null, actor, 'workspace.changes', 'workspace', null, `${parsed.data.changes.length} record change(s)`, req)
-  if (rejected.length) {
-    logDefenseEvent('denied_record_write', req, `Deal lead records: ${rejected.join(', ')}`)
-    writeAudit(req.auth?.userId ?? null, actor, 'workspace.denied', 'dealLeads', null, `Refused ${rejected.length} deal lead change(s) this account may not make`, req)
+  writeAudit(actorId, actor, 'workspace.changes', 'workspace', null, `${applied.length} applied, ${conflicts.length} conflict(s)`, req)
+  res.json({ ok: true, serverTime: now, applied, conflicts, blocked, rejected: [] })
+})
+
+/** The audit trail for one record. Shared records only; private meetings never appear here. */
+workspaceRouter.get('/audit/:collection/:id', requireAuth, (req, res) => {
+  const collection = z.enum(WORKSPACE_COLLECTIONS).safeParse(req.params.collection)
+  if (!collection.success) return res.status(404).json({ error: 'No such record.' })
+  const rows = db
+    .prepare(`SELECT at, actor_name AS actor, action, changed_fields AS fields, rev FROM workspace_audit WHERE collection = ? AND record_id = ? ORDER BY id DESC LIMIT 200`)
+    .all(collection.data, req.params.id) as { at: string; actor: string; action: string; fields: string; rev: number }[]
+  res.json({ events: rows.map((row) => ({ ...row, fields: JSON.parse(row.fields) as string[] })) })
+})
+
+// ── Deal Lead removal: checked on the server, in one transaction ────────────
+
+const DEAL_LEAD_UNDO_MS = 60_000
+
+workspaceRouter.get('/deal-leads/:id/dependencies', requireAuth, (req, res) => {
+  const row = db.prepare(`SELECT data, deleted FROM workspace_records WHERE collection = 'dealLeads' AND id = ?`).get(req.params.id) as { data: string; deleted: number } | undefined
+  if (!row || row.deleted) return res.status(404).json({ error: 'That deal lead is no longer on the roster.' })
+  res.json(leadDependencies(parseRecord(row.data), liveRows('opportunities'), liveRows('tasks')))
+})
+
+workspaceRouter.delete('/deal-leads/:id', requireAuth, workspaceWriteLimit, (req, res) => {
+  if (req.auth?.role === 'viewer') return res.status(403).json({ error: 'Your account can view records but not change them.' })
+  const actor = req.auth?.userName ?? 'Newport user'
+  const now = new Date().toISOString()
+  const remove = db.transaction(() => {
+    const row = db.prepare(`SELECT data, deleted, rev FROM workspace_records WHERE collection = 'dealLeads' AND id = ?`).get(req.params.id) as { data: string; deleted: number; rev: number } | undefined
+    if (!row || row.deleted) return { status: 404 as const, body: { error: 'That deal lead is no longer on the roster.' } }
+    const deps = leadDependencies(parseRecord(row.data), liveRows('opportunities'), liveRows('tasks'))
+    if (deps.total > 0) return { status: 409 as const, body: { error: 'This deal lead is still in use.', dependencies: deps } }
+    const rev = row.rev + 1
+    // The row stays as a tombstone with its data, so Undo can restore it and other devices learn it was removed.
+    db.prepare(`UPDATE workspace_records SET deleted = 1, rev = ?, updated_at = ?, updated_by = ? WHERE collection = 'dealLeads' AND id = ?`).run(rev, now, actor, req.params.id)
+    appendRecordAudit({ actorId: req.auth?.userId ?? null, actor, collection: 'dealLeads', id: req.params.id, action: 'delete', rev, at: now })
+    return { status: 200 as const, body: { ok: true, rev, serverTime: now, undoUntil: new Date(Date.now() + DEAL_LEAD_UNDO_MS).toISOString() } }
+  })
+  const result = remove()
+  res.status(result.status).json(result.body)
+})
+
+workspaceRouter.post('/deal-leads/:id/restore', requireAuth, workspaceWriteLimit, (req, res) => {
+  if (req.auth?.role === 'viewer') return res.status(403).json({ error: 'Your account can view records but not change them.' })
+  const actor = req.auth?.userName ?? 'Newport user'
+  const now = new Date().toISOString()
+  const restore = db.transaction(() => {
+    const row = db.prepare(`SELECT data, deleted, rev, updated_at FROM workspace_records WHERE collection = 'dealLeads' AND id = ?`).get(req.params.id) as { data: string; deleted: number; rev: number; updated_at: string } | undefined
+    if (!row || !row.deleted) return { status: 404 as const, body: { error: 'There is nothing to restore.' } }
+    if (Date.now() - Date.parse(row.updated_at) > DEAL_LEAD_UNDO_MS) return { status: 410 as const, body: { error: 'The time to undo this delete has passed.' } }
+    const rev = row.rev + 1
+    db.prepare(`UPDATE workspace_records SET deleted = 0, rev = ?, updated_at = ?, updated_by = ? WHERE collection = 'dealLeads' AND id = ?`).run(rev, now, actor, req.params.id)
+    appendRecordAudit({ actorId: req.auth?.userId ?? null, actor, collection: 'dealLeads', id: req.params.id, action: 'restore', rev, at: now })
+    return { status: 200 as const, body: { ok: true, rev, serverTime: now, lead: parseRecord(row.data) } }
+  })
+  const result = restore()
+  res.status(result.status).json(result.body)
+})
+
+// ── Private meetings: every query is filtered by the verified account ────────
+
+const MEETING_FILE_LIMIT = 25 * 1024 * 1024
+const MEETING_STORE_PER_USER = 1024 * 1024 * 1024
+const meetingId = z.string().regex(/^[A-Za-z0-9._:-]{1,200}$/)
+const meetingFileKind = z.enum(['text', 'source'])
+
+/** Private data needs a verified Microsoft account. A session without one gets nothing. */
+function ownerOf(req: express.Request): string | null {
+  return req.auth?.subject || null
+}
+const notFound = (res: express.Response) => res.status(404).json({ error: 'No such meeting.' })
+
+workspaceRouter.get('/meetings', requireAuth, (req, res) => {
+  const owner = ownerOf(req)
+  if (!owner) return res.status(403).json({ error: 'Private meetings need a Microsoft sign-in.' })
+  const since = typeof req.query.since === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(req.query.since) ? req.query.since : null
+  const opportunityId = typeof req.query.opportunityId === 'string' ? req.query.opportunityId : null
+  const rows = (since
+    ? db.prepare(`SELECT id, data, deleted, rev, updated_at FROM private_meetings WHERE owner_subject = ? AND updated_at >= ?`).all(owner, since)
+    : db.prepare(`SELECT id, data, deleted, rev, updated_at FROM private_meetings WHERE owner_subject = ? AND deleted = 0`).all(owner)) as { id: string; data: string; deleted: number; rev: number; updated_at: string }[]
+  const records = rows
+    .map((row) => ({ id: row.id, deleted: row.deleted === 1, rev: row.rev, updatedAt: row.updated_at, data: row.deleted === 1 ? null : parseRecord(row.data) }))
+    .filter((row) => !opportunityId || row.data?.opportunityId === opportunityId)
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ serverTime: new Date().toISOString(), records })
+})
+
+workspaceRouter.get('/meetings/:id', requireAuth, (req, res) => {
+  const owner = ownerOf(req)
+  const id = meetingId.safeParse(req.params.id)
+  if (!owner || !id.success) return notFound(res)
+  const row = db.prepare(`SELECT data, rev, updated_at FROM private_meetings WHERE owner_subject = ? AND id = ? AND deleted = 0`).get(owner, id.data) as { data: string; rev: number; updated_at: string } | undefined
+  if (!row) return notFound(res)
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ id: id.data, rev: row.rev, updatedAt: row.updated_at, data: parseRecord(row.data) })
+})
+
+workspaceRouter.put('/meetings/:id', requireAuth, workspaceWriteLimit, (req, res) => {
+  const owner = ownerOf(req)
+  const id = meetingId.safeParse(req.params.id)
+  if (!owner) return res.status(403).json({ error: 'Private meetings need a Microsoft sign-in.' })
+  if (!id.success) return res.status(400).json({ error: 'Invalid meeting id.' })
+  const parsed = z.object({ data: z.record(z.string(), z.unknown()), baseRev: z.number().int().min(0).optional() }).safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid meeting.' })
+  const json = JSON.stringify({ ...parsed.data.data, id: id.data })
+  if (json.length > 400_000) return res.status(413).json({ error: 'This meeting record is too large to save.' })
+  const now = new Date().toISOString()
+  const row = db.prepare(`SELECT data, deleted, rev, updated_at FROM private_meetings WHERE owner_subject = ? AND id = ?`).get(owner, id.data) as { data: string; deleted: number; rev: number; updated_at: string } | undefined
+  if (parsed.data.baseRev !== undefined && parsed.data.baseRev !== (row?.rev ?? 0)) {
+    return res.status(409).json({ conflict: true, rev: row?.rev ?? 0, deleted: row?.deleted === 1, updatedAt: row?.updated_at, data: row && !row.deleted ? parseRecord(row.data) : null })
   }
-  res.json({ ok: true, serverTime: now, rejected })
+  const rev = (row?.rev ?? 0) + 1
+  db.prepare(
+    `INSERT INTO private_meetings (owner_subject, id, data, deleted, rev, updated_at) VALUES (?, ?, ?, 0, ?, ?)
+     ON CONFLICT(owner_subject, id) DO UPDATE SET data = excluded.data, deleted = 0, rev = excluded.rev, updated_at = excluded.updated_at`,
+  ).run(owner, id.data, json, rev, now)
+  // The shared audit log records that a private record changed, with no title, link or content.
+  writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'meeting.private_save', 'meeting', null, 'Private meeting saved', req)
+  res.json({ ok: true, rev, updatedAt: now })
+})
+
+workspaceRouter.delete('/meetings/:id', requireAuth, workspaceWriteLimit, (req, res) => {
+  const owner = ownerOf(req)
+  const id = meetingId.safeParse(req.params.id)
+  if (!owner || !id.success) return notFound(res)
+  const now = new Date().toISOString()
+  const done = db.transaction(() => {
+    const row = db.prepare(`SELECT rev FROM private_meetings WHERE owner_subject = ? AND id = ? AND deleted = 0`).get(owner, id.data) as { rev: number } | undefined
+    if (!row) return false
+    // The tombstone carries no content; other devices of this person learn it was removed.
+    db.prepare(`UPDATE private_meetings SET data = '{}', deleted = 1, rev = ?, updated_at = ? WHERE owner_subject = ? AND id = ?`).run(row.rev + 1, now, owner, id.data)
+    db.prepare(`DELETE FROM private_meeting_files WHERE owner_subject = ? AND meeting_id = ?`).run(owner, id.data)
+    return true
+  })()
+  if (!done) return notFound(res)
+  writeAudit(req.auth?.userId ?? null, req.auth?.userName ?? 'Newport user', 'meeting.private_delete', 'meeting', null, 'Private meeting removed', req)
+  res.json({ ok: true })
+})
+
+workspaceRouter.put('/meetings/:id/files/:kind', requireAuth, fileWriteLimit, express.raw({ type: () => true, limit: MEETING_FILE_LIMIT }), (req, res) => {
+  const owner = ownerOf(req)
+  const id = meetingId.safeParse(req.params.id)
+  const kind = meetingFileKind.safeParse(req.params.kind)
+  if (!owner) return res.status(403).json({ error: 'Private meetings need a Microsoft sign-in.' })
+  if (!id.success || !kind.success || !Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Invalid file.' })
+  let name = 'transcript'
+  try {
+    name = decodeURIComponent(String(req.get('x-file-name') ?? 'transcript'))
+  } catch {
+    // A malformed name falls back to the plain one.
+  }
+  name = name.replace(/[\\/\r\n"\0]/g, '_').slice(0, 200) || 'transcript'
+  const used = (db.prepare(`SELECT COALESCE(SUM(size), 0) AS total FROM private_meeting_files WHERE owner_subject = ? AND NOT (meeting_id = ? AND kind = ?)`).get(owner, id.data, kind.data) as { total: number }).total
+  if (used + req.body.length > MEETING_STORE_PER_USER) return res.status(507).json({ error: 'Your private transcript storage is full. Remove older transcripts first.' })
+  const type = String(req.get('content-type') ?? 'application/octet-stream').slice(0, 120)
+  db.prepare(
+    `INSERT INTO private_meeting_files (owner_subject, meeting_id, kind, name, content_type, size, data, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(owner_subject, meeting_id, kind) DO UPDATE SET name = excluded.name, content_type = excluded.content_type, size = excluded.size, data = excluded.data, updated_at = excluded.updated_at`,
+  ).run(owner, id.data, kind.data, name, type, req.body.length, req.body, new Date().toISOString())
+  res.json({ ok: true, size: req.body.length })
+})
+
+workspaceRouter.get('/meetings/:id/files/:kind', requireAuth, (req, res) => {
+  const owner = ownerOf(req)
+  const id = meetingId.safeParse(req.params.id)
+  const kind = meetingFileKind.safeParse(req.params.kind)
+  if (!owner || !id.success || !kind.success) return notFound(res)
+  const row = db.prepare(`SELECT name, content_type, data FROM private_meeting_files WHERE owner_subject = ? AND meeting_id = ? AND kind = ?`).get(owner, id.data, kind.data) as { name: string; content_type: string; data: Buffer } | undefined
+  if (!row) return notFound(res)
+  res.setHeader('Content-Type', row.content_type || 'application/octet-stream')
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(row.name)}"`)
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(row.data)
 })
 
 const FILE_LIMIT = 25 * 1024 * 1024
 const fileId = z.string().regex(/^[A-Za-z0-9._:-]{1,200}$/)
+/** Older builds copied private transcripts into the shared file store. Those rows are closed to everyone. */
+const isLegacyTranscript = (id: string) => id.startsWith('meeting-transcript-')
 
 /** Uploaded document files, shared with every approved user (not just the uploader's browser). */
 workspaceRouter.put('/files/:docId', requireAuth, fileWriteLimit, express.raw({ type: () => true, limit: FILE_LIMIT }), (req, res) => {
   if (req.auth?.role === 'viewer') return res.status(403).json({ error: 'Your account can view records but not change them.' })
   const id = fileId.safeParse(req.params.docId)
   if (!id.success || !Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Invalid file.' })
+  if (isLegacyTranscript(id.data)) return res.status(403).json({ error: 'Transcripts are private and cannot be stored as shared files.' })
   const rawName = String(req.get('x-file-name') ?? 'file')
   let decodedName = rawName
   try {
@@ -193,6 +412,7 @@ workspaceRouter.put('/files/:docId', requireAuth, fileWriteLimit, express.raw({ 
 workspaceRouter.get('/files/:docId', requireAuth, (req, res) => {
   const id = fileId.safeParse(req.params.docId)
   if (!id.success) return res.status(400).json({ error: 'Invalid file id.' })
+  if (isLegacyTranscript(id.data)) return res.status(404).json({ error: 'No file is stored for this document.' })
   const row = db.prepare(`SELECT name, content_type, data FROM workspace_files WHERE doc_id = ?`).get(id.data) as { name: string; content_type: string; data: Buffer } | undefined
   if (!row) return res.status(404).json({ error: 'No file is stored for this document.' })
   res.setHeader('Content-Type', row.content_type || 'application/octet-stream')

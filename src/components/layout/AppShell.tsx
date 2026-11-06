@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { ConflictNotices } from './SyncStatus'
 import { EditorGuardProvider } from '@/components/shared/EditorGuardContext'
 import { SpreadsheetColumnProvider, useSpreadsheetColumns } from '@/components/dashboard/SpreadsheetColumnContext'
 import { useAuth } from '@/auth/AuthContext'
@@ -67,6 +68,7 @@ function AppFrame() {
   return (
     <div className="flex min-h-full bg-canvas">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      <ConflictNotices />
       <div
         className={`flex min-h-full min-w-0 flex-1 flex-col ${
           motionReady ? 'transition-[margin] duration-200' : ''

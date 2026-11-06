@@ -4,6 +4,7 @@ import { getGreeting } from '@/utils/dashboard'
 import { useAuth } from '@/auth/AuthContext'
 import { MailNotificationsPanel, dueTasks, useUnreadMail } from '@/components/layout/MailNotificationsPanel'
 import { useData } from '@/data/DataContext'
+import { SyncStatusChip } from '@/components/layout/SyncStatus'
 import { ProfileMenu } from '@/components/layout/ProfileMenu'
 
 interface TopHeaderProps {
@@ -43,6 +44,7 @@ export function TopHeader({ search, onSearchChange, onNewOpportunity }: TopHeade
           </div>
 
           <div className="relative flex flex-wrap items-center gap-2.5">
+            <SyncStatusChip />
             <div className="relative">
               <Search
                 className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-subtle"

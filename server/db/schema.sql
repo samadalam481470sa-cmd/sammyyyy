@@ -315,3 +315,53 @@ CREATE TABLE IF NOT EXISTS workspace_files (
   updated_at TEXT NOT NULL,
   updated_by TEXT NOT NULL
 );
+
+-- Private meeting history. Every read and write is keyed by the verified Microsoft account id,
+-- so a record of one person cannot be reached by another, even by guessing its id.
+CREATE TABLE IF NOT EXISTS private_meetings (
+  owner_subject TEXT NOT NULL,
+  id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  rev INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (owner_subject, id)
+);
+CREATE INDEX IF NOT EXISTS idx_private_meetings_owner ON private_meetings(owner_subject, updated_at);
+
+CREATE TABLE IF NOT EXISTS private_meeting_files (
+  owner_subject TEXT NOT NULL,
+  meeting_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data BLOB NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (owner_subject, meeting_id, kind)
+);
+
+-- Immutable record of shared changes. Archiving a feed entry never touches this table.
+-- Private meeting content is never written here.
+CREATE TABLE IF NOT EXISTS workspace_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  actor_user_id TEXT,
+  actor_name TEXT NOT NULL,
+  collection TEXT NOT NULL,
+  record_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  changed_fields TEXT NOT NULL DEFAULT '[]',
+  rev INTEGER,
+  batch_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_audit_record ON workspace_audit(collection, record_id, id);
+CREATE TRIGGER IF NOT EXISTS workspace_audit_no_update BEFORE UPDATE ON workspace_audit
+  BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be changed.'); END;
+CREATE TRIGGER IF NOT EXISTS workspace_audit_no_delete BEFORE DELETE ON workspace_audit
+  BEGIN SELECT RAISE(ABORT, 'The audit trail cannot be changed.'); END;
+
+CREATE TABLE IF NOT EXISTS workspace_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
