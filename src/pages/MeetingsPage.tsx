@@ -137,9 +137,9 @@ export function MeetingsPage() {
   const loadingCal = (upcomingCal.status === 'loading' || month.status === 'loading') && listed.length === 0
 
   const page = (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-6 pb-5 lg:grid-cols-[minmax(270px,0.82fr)_minmax(330px,1fr)_minmax(360px,1.18fr)] lg:overflow-hidden lg:px-8" data-testid="meetings-columns">
+    <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-4 overflow-y-auto px-6 pb-5 lg:content-stretch lg:grid-cols-[minmax(270px,0.82fr)_minmax(330px,1fr)_minmax(360px,1.18fr)] lg:overflow-hidden lg:px-8" data-testid="meetings-columns">
       {/* LEFT: calendar above upcoming meetings */}
-      <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex flex-col gap-4 lg:min-h-0">
         <section className="shrink-0 rounded-xl border border-border bg-surface p-3 shadow-(--shadow-card)" aria-label="My Outlook Calendar">
           <div className="mb-1 flex items-center justify-between px-1">
             <h2 className="font-brand text-base font-bold text-navy-900">My Outlook Calendar</h2>
@@ -194,7 +194,7 @@ export function MeetingsPage() {
       </div>
 
       {/* CENTER: selected meeting above history */}
-      <div className="flex min-h-0 flex-col gap-4">
+      <div className="flex flex-col gap-4 lg:min-h-0">
         <section className="flex min-h-[320px] flex-[3] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)" aria-label="Selected meeting" data-testid="selected-meeting">
           <SelectedDetails />
         </section>

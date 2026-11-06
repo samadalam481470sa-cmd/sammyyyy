@@ -99,7 +99,7 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
   { api, contact, seedProjectIds, onClose, onSaved, onDeleted, footerExtra },
   ref,
 ) {
-  const { opportunities } = useData()
+  const { opportunities, confirmSaved } = useData()
   const guard = useEditorGuard()
   const creating = contact == null
   // The record as loaded is the saved baseline, so opening a row is never "unsaved" (fix for first-click warning).
@@ -203,8 +203,12 @@ export const RelationshipEditor = forwardRef<OpportunityEditorHandle, Relationsh
     savingRef.current = true
     setSaving(true)
     setError(null)
+    // The list as it was, so a save the server never received is taken back on screen.
+    const before = api.items
     try {
       const result = creating ? await api.create({ ...blankContact(), ...payload }) : await api.save(contact!.id, payload)
+      // "Saved" appears only after the server has answered.
+      await confirmSaved({ resource: 'contacts', items: before })
       const snap = toDraft(result)
       setBaseline(snap)
       setDraft(snap)

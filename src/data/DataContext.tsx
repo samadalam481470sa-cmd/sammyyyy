@@ -132,8 +132,12 @@ interface DataContextValue {
   lastImport: () => LastImport | null
   /** The copy of this browser's data taken before it joined the shared workspace. */
   localBackup: () => Promise<Blob | null>
-  /** Waits for the server to confirm pending changes. Throws when it cannot be reached. */
-  confirmSaved: () => Promise<void>
+  /**
+   * Waits for the server to confirm pending changes. Throws when it cannot be reached.
+   * With `revert`, that collection is put back on screen as it was before the edit when the server
+   * cannot be reached, the same way deals and tasks are.
+   */
+  confirmSaved: (revert?: SavedSnapshot) => Promise<void>
   saveInBatch: <T>(run: () => Promise<T>) => Promise<T>
   sync: SyncStatus
   dismissConflict: (id: string) => void
@@ -192,6 +196,12 @@ const API_BASE = '/api/resources'
 
 /** Someone else saved the same field first: the save did not take, and rolling back would be wrong. */
 class SaveConflict extends Error {}
+
+/** A browser-first collection as it was before an edit, so a failed save can be taken back. */
+export interface SavedSnapshot {
+  resource: 'contacts' | typeof DEAL_LEADS_RESOURCE
+  items: readonly { id: string }[]
+}
 
 async function resourceRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getStoredSession()?.token
@@ -1495,10 +1505,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const localBackup = useCallback(() => getDocumentBlob(owner, LOCAL_BACKUP_DOC).catch(() => null), [owner])
 
-  const confirmSaved = useCallback(async () => {
+  const confirmSaved = useCallback(async (revert?: SavedSnapshot) => {
     if (!sharedRef.current) return
     if (sharedTimer.current) window.clearTimeout(sharedTimer.current)
-    const notices = await queuePush()
+    let notices: Awaited<ReturnType<typeof queuePush>>
+    try {
+      notices = await queuePush()
+    } catch (err) {
+      if (!revert) throw err
+      // The server never took this edit. Put the collection back so the screen matches the server.
+      const items = [...revert.items]
+      saveOwnedCollection(revert.resource, owner, items)
+      if (revert.resource === DEAL_LEADS_RESOURCE) setRoster(items as DealLead[])
+      const detail: ResourceChangedDetail = { resource: revert.resource, owner, source: -1, items }
+      window.dispatchEvent(new CustomEvent(RESOURCE_CHANGED, { detail }))
+      const reason = err instanceof Error ? err.message : 'The server did not answer.'
+      const message = `Not saved. ${reason} Your edit is still here. Try again when the connection is back.`
+      setSyncState((prev) => ({ ...prev, state: 'failed', message }))
+      throw new Error(message)
+    }
     const blocking = notices[0]
     if (blocking) throw new Error(blocking.notice)
     // eslint-disable-next-line react-hooks/exhaustive-deps

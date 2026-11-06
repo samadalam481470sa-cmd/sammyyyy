@@ -221,7 +221,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const closeButton = onClose ? () => requestLeave(onClose) : undefined
 
     return (
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 flex-col" data-opp-editor="">
         {!hideHeader && (
           <DrawerHeader
             eyebrow={dealIdFromOpportunity(opportunity)}
@@ -235,7 +235,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           </DrawerHeader>
         )}
 
-        <div className="flex min-w-0 shrink-0 gap-1 border-b border-border bg-surface px-3 pt-2">
+        <div className="flex min-w-0 shrink-0 gap-1 border-b border-border bg-surface px-3 pt-2" data-opp-editor-tabs="">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -250,7 +250,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           ))}
         </div>
 
-        <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3">
+        <div className="custom-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3" data-opp-editor-body="">
           {!hideHeader && <div className="grid grid-cols-2 gap-3 rounded-lg border border-accent-muted/60 bg-accent-soft/40 px-3 py-2">
             <label className="block min-w-0">
               <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Status</span>
@@ -420,7 +420,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           )}
         </div>
 
-        <div className="shrink-0 border-t border-border bg-surface px-5 py-3">
+        <div className="shrink-0 border-t border-border bg-surface px-5 py-3" data-opp-editor-footer="">
           {error && pendingLeave == null && <p className="mb-2 text-xs text-attention">{error}</p>}
           {message && <p className="mb-2 text-xs text-success">{message}</p>}
           <div className="grid grid-cols-2 gap-2">
@@ -519,6 +519,25 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         .field-input:focus {
           border-color: var(--color-accent);
           box-shadow: 0 0 0 2px rgb(61 126 184 / 0.2);
+        }
+        /* Short laptop screens (1366x768, 1280x720): tighten spacing so the
+           Overview tab fits without scrolling. Content is unchanged. */
+        @media (max-height: 860px) {
+          [data-opp-editor] [data-testid="drawer-header"] { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+          [data-opp-editor] [data-testid="drawer-header"] h2 { font-size: 1.125rem; }
+          [data-opp-editor] [data-testid="drawer-header"] > div + div { margin-top: 0.5rem; }
+          [data-opp-editor] [data-testid="drawer-header"] dl { row-gap: 0.25rem; }
+          [data-opp-editor] [data-opp-editor-tabs] > button { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+          [data-opp-editor] [data-opp-editor-body] { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+          [data-opp-editor] [data-opp-editor-body] .gap-3 { gap: 0.5rem; }
+          [data-opp-editor] [data-opp-editor-body] select.h-10 { height: 2.25rem; margin-top: 0.2rem; }
+          [data-opp-editor] .field-input { margin-top: 0.2rem; }
+          [data-opp-editor] input.field-input, [data-opp-editor] select.field-input { height: 2.25rem; }
+          [data-opp-editor] [data-opp-editor-footer] { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+          [data-opp-editor] [data-opp-editor-footer] .gap-2 { gap: 0.375rem; }
+          [data-opp-editor] [data-opp-editor-body] > .py-2 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+          [data-opp-editor] [data-opp-editor-body] > :not(:last-child) { margin-bottom: 0.4375rem; }
+          [data-opp-editor] [data-opp-editor-footer] button.h-10 { height: 2.25rem; }
         }
       `}</style>
       </div>

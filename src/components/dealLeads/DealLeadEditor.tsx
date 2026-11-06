@@ -9,7 +9,7 @@ import { SearchSelect } from '@/components/shared/SearchSelect'
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog'
 import type { DealLeadsApi } from '@/hooks/useDealLeads'
 import { dealIdFromOpportunity } from '@/lib/dealId'
-import { emailConflict, isValidLeadEmail, leadLinkChanges, leadLinks, leadUsage, UNASSIGNED_LEAD, type DealLead } from '@/lib/dealLeads'
+import { DEAL_LEADS_RESOURCE, emailConflict, isValidLeadEmail, leadLinkChanges, leadLinks, leadUsage, UNASSIGNED_LEAD, type DealLead } from '@/lib/dealLeads'
 import { LeadInUseError, type LeadDependencies } from '@/lib/workspaceSync'
 import { saveButtonLabel, savedMessageLabel } from '@/lib/persistenceMode'
 
@@ -126,6 +126,8 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
     savingRef.current = true
     setSaving(true)
     setError(null)
+    // The roster as it was, so a save the server never received is taken back on screen.
+    const rosterBefore = api.items
     try {
       const stamp = new Date().toISOString()
       const status = draft.status
@@ -145,7 +147,7 @@ export const DealLeadEditor = forwardRef<OpportunityEditorHandle, Props>(functio
       else if (lead && baseline.status !== status) logLeadActivity(`changed deal lead ${result.name} from ${baseline.status} to ${status}`, result)
       else if (JSON.stringify({ ...baseline, projectIds: [] }) !== JSON.stringify({ ...draft, projectIds: [] })) logLeadActivity(`updated deal lead ${result.name}`, result)
       // "Saved" appears only after the server has answered.
-      await confirmSaved()
+      await confirmSaved({ resource: DEAL_LEADS_RESOURCE, items: rosterBefore })
       const snap: Draft = { name: result.name, jobTitle: result.jobTitle, email: result.email, phone: result.phone, status: result.status, projectIds: draft.projectIds }
       setBaseline(snap)
       setDraft(snap)
