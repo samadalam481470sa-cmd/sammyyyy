@@ -4,6 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 export interface OpportunityEditorHandle {
   isDirty: () => boolean
   requestLeave: (next: () => void) => void
+  /** Saves every pending edit in one write. Resolves false when nothing was saved. */
+  save?: () => Promise<boolean>
+  /** Puts back every pending edit. */
+  discard?: () => void
+  saving?: boolean
+  error?: string | null
 }
 
 interface EditorGuardValue {

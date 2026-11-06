@@ -14,19 +14,22 @@ interface Props {
   /** Unsaved choice, or null when the controls show the saved record. */
   draft: StatusStageDraft | null
   onChange: (draft: StatusStageDraft | null) => void
-  /** Tabs with no Save Changes of their own get one here. */
-  showActions: boolean
+  /** True when other unsaved edits on this tab (Overview fields) should also show Save / Discard. */
+  otherDirty?: boolean
   saving: boolean
   error: string | null
   onSave: () => void
+  /** Puts back every pending edit on the tab; defaults to clearing the status / stage draft. */
+  onDiscard?: () => void
 }
 
 /**
  * Status and Acquisition Stage on every Full Profile tab. A choice here is a draft: nothing is
- * written, shared or logged until Save Changes. Choosing Completed asks for the legal closing date
+ * written, shared or logged until Save Changes. On Overview, Save Changes and Discard here act on the
+ * whole Overview edit, the same as the buttons at the bottom. Choosing Completed asks for the legal closing date
  * first, and that date is part of the same draft.
  */
-export function StatusStageControls({ opportunity, draft, onChange, showActions, saving, error, onSave }: Props) {
+export function StatusStageControls({ opportunity, draft, onChange, otherDirty = false, saving, error, onSave, onDiscard }: Props) {
   const [confirming, setConfirming] = useState(false)
   const shown: StatusStageDraft = draft ?? { status: opportunity.status, stage: opportunity.stage, closedAt: opportunity.closedAt ?? null }
   const update = (next: StatusStageDraft) => {
@@ -62,17 +65,16 @@ export function StatusStageControls({ opportunity, draft, onChange, showActions,
           ))}
         </select>
       </label>
-      {draft && showActions && (
+      {(draft || otherDirty) && (
         <div className="flex items-center gap-1.5">
           <button type="button" data-testid="profile-status-save" disabled={saving} onClick={onSave} className="h-9 rounded-lg bg-navy-900 px-3 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60">
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
-          <button type="button" data-testid="profile-status-discard" disabled={saving} onClick={() => onChange(null)} className="h-9 rounded-lg border border-border px-3 text-sm font-semibold text-ink hover:bg-canvas">
+          <button type="button" data-testid="profile-status-discard" disabled={saving} onClick={() => (onDiscard ? onDiscard() : onChange(null))} className="h-9 rounded-lg border border-border px-3 text-sm font-semibold text-ink hover:bg-canvas">
             Discard
           </button>
         </div>
       )}
-      {draft && !showActions && <p className="w-full text-[11px] font-medium text-[#946200]" data-testid="profile-status-unsaved">Unsaved. Save Changes below commits this.</p>}
       {error && <p role="alert" className="w-full text-xs text-danger" data-testid="profile-status-error">{error}</p>}
       <CompletionConfirmDialog
         open={confirming}

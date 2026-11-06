@@ -1,4 +1,5 @@
 import type { Opportunity, OpportunityUpdate } from '@/types'
+import { todayDateInput } from '@/lib/calendarDate'
 
 const EDIT_KEYS = [
   'projectName',
@@ -47,6 +48,35 @@ export interface OpportunityDraft {
   diligenceNotes: string
   /** Legal closing date; only meaningful while Completed. */
   closedAt: string | null
+  /** Business creation date as YYYY-MM-DD in the user's time zone; saved to createdAt. */
+  createdDate: string | null
+}
+
+/** The local calendar day of a stored createdAt, or null when none is recorded. */
+export function createdDateInput(createdAt: string | null | undefined): string | null {
+  if (!createdAt) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(createdAt)) return createdAt
+  const t = new Date(createdAt)
+  return Number.isNaN(t.getTime()) ? null : todayDateInput(t)
+}
+
+/** A picked YYYY-MM-DD stored at local noon, so reports and displays keep the same day everywhere nearby. */
+export function createdAtFromInput(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(y, m - 1, d, 12, 0, 0).toISOString()
+}
+
+/** Problems with the business dates in a draft, or null when they are fine. */
+export function draftDateProblem(draft: Pick<OpportunityDraft, 'createdDate' | 'closedAt' | 'status'>, today = todayDateInput()): string | null {
+  const ymd = /^\d{4}-\d{2}-\d{2}$/
+  if (draft.createdDate != null && !ymd.test(draft.createdDate)) return 'Enter a valid Created date.'
+  if (draft.createdDate && draft.createdDate > today) return 'The Created date cannot be in the future.'
+  if (draft.status === 'Completed' && draft.closedAt != null) {
+    if (!ymd.test(draft.closedAt)) return 'Enter a valid Legally Closed date.'
+    if (draft.closedAt > today) return 'The Legally Closed date cannot be in the future.'
+    if (draft.createdDate && draft.closedAt < draft.createdDate) return 'The Legally Closed date cannot be before the Created date.'
+  }
+  return null
 }
 
 export function snapshotOpportunityDraft(record: Opportunity): OpportunityDraft {
@@ -72,6 +102,7 @@ export function snapshotOpportunityDraft(record: Opportunity): OpportunityDraft 
     outstandingItems: [...(record.outstandingItems ?? [])],
     diligenceNotes: record.diligenceNotes ?? '',
     closedAt: record.closedAt ?? null,
+    createdDate: createdDateInput(record.createdAt),
   }
 }
 
@@ -85,6 +116,7 @@ function normalize(draft: OpportunityDraft): string {
     nextActionDate: draft.nextActionDate || null,
     diligenceNotes: draft.diligenceNotes ?? '',
     closedAt: draft.closedAt ?? null,
+    createdDate: draft.createdDate ?? null,
     outstandingItems: (draft.outstandingItems ?? []).map((l) => l.trim()).filter(Boolean),
   })
 }
@@ -113,5 +145,6 @@ export function opportunityDraftPatch(
       Object.assign(patch, { [key]: draft[key] })
     }
   }
+  if (draft.createdDate && draft.createdDate !== saved.createdDate) patch.createdAt = createdAtFromInput(draft.createdDate)
   return patch
 }

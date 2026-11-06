@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TaskRecord } from '@/data/mockModules'
-import { allocateBellSlots, todaysMeetings } from './bellSlots'
+import { allocateBellSpace, BELL_SIZES, todaysMeetings } from './bellSlots'
 import { DEFAULT_DEAL_LEADS, leadUsage, migrateTaskOwner, taskOwnerOptions, type DealLead } from './dealLeads'
 import { monthlyCountAxis } from './reports'
 import { applyTaskArchiveRules, applyTaskStatusTransition, isListedTask, isWorkingTask, restoreTaskFields, taskHistoryKind } from './taskLifecycle'
@@ -76,11 +76,46 @@ describe('Task Owner comes from the roster', () => {
 })
 
 describe('bell', () => {
-  it('shares ten rows: meetings, then tasks, then mail', () => {
-    expect(allocateBellSlots(0, 3, 20)).toEqual({ meetings: 0, tasks: 3, mail: 7 })
-    expect(allocateBellSlots(2, 3, 20)).toEqual({ meetings: 2, tasks: 3, mail: 5 })
-    expect(allocateBellSlots(14, 3, 2)).toEqual({ meetings: 10, tasks: 0, mail: 0 })
-    expect(allocateBellSlots(1, 40, 2)).toEqual({ meetings: 1, tasks: 9, mail: 0 })
+  // A typical desktop drawer list area (900px window minus the drawer's header and footer).
+  const H = 760
+  const rowsTotal = (a: { meetings: number; tasks: number; mail: number }) =>
+    (a.meetings ? BELL_SIZES.section : 0) + a.meetings * BELL_SIZES.row + (a.tasks ? BELL_SIZES.section : 0) + a.tasks * BELL_SIZES.row + (a.mail ? BELL_SIZES.section : 0) + a.mail * BELL_SIZES.mailRow
+
+  it('one meeting, four overdue tasks, seven emails all fit without scrolling', () => {
+    const a = allocateBellSpace({ meetings: 1, tasks: 4, mail: 7 }, H)
+    expect(a.meetings).toBe(1)
+    expect(a.tasks).toBeGreaterThanOrEqual(1)
+    expect(a.mail).toBeGreaterThanOrEqual(1)
+    expect(rowsTotal(a)).toBeLessThanOrEqual(H)
+  })
+
+  it('keeps at least one task and one email when there are many of both and no meetings', () => {
+    const a = allocateBellSpace({ meetings: 0, tasks: 40, mail: 40 }, H)
+    expect(a.meetings).toBe(0)
+    expect(a.tasks).toBeGreaterThanOrEqual(1)
+    expect(a.mail).toBeGreaterThanOrEqual(1)
+    expect(Math.abs(a.tasks - a.mail)).toBeLessThanOrEqual(1)
+    expect(rowsTotal(a)).toBeLessThanOrEqual(H)
+  })
+
+  it('many meetings take the space but leave one task and one email visible', () => {
+    const a = allocateBellSpace({ meetings: 30, tasks: 7, mail: 9 }, H)
+    expect(a.meetings).toBeLessThan(30)
+    expect(a.meetings).toBeGreaterThan(5)
+    expect(a.tasks).toBe(1)
+    expect(a.mail).toBe(1)
+    expect(rowsTotal(a)).toBeLessThanOrEqual(H)
+  })
+
+  it('a single populated group uses the space, and a mailbox notice is reserved', () => {
+    expect(allocateBellSpace({ meetings: 0, tasks: 3, mail: 0, mailRows: false }, H)).toEqual({ meetings: 0, tasks: 3, mail: 0 })
+    const onlyMail = allocateBellSpace({ meetings: 0, tasks: 0, mail: 30 }, H)
+    expect(onlyMail.mail).toBeGreaterThan(8)
+    expect(rowsTotal(onlyMail)).toBeLessThanOrEqual(H)
+  })
+
+  it('a very short drawer still shows one row of each group (and scrolls)', () => {
+    expect(allocateBellSpace({ meetings: 5, tasks: 5, mail: 5 }, 200)).toEqual({ meetings: 1, tasks: 1, mail: 1 })
   })
 
   const start = new Date('2026-11-05T00:00:00')

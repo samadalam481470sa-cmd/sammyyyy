@@ -1,10 +1,10 @@
-import {useMemo,  useEffect, useState } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Inbox, Mail, X, CalendarDays } from 'lucide-react'
 import type { TaskRecord } from '@/data/mockModules'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { useOutlookCalendar } from '@/hooks/useOutlookCalendar'
-import { allocateBellSlots, todaysMeetings } from '@/lib/bellSlots'
+import { allocateBellSpace, todaysMeetings } from '@/lib/bellSlots'
 import { loadCrmMeetings } from '@/lib/crmMeetings'
 import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import { formatMailTime, loadMailbox, mailProvider, saveMailbox, senderDisplayName, type MailMessage } from '@/lib/outlookMailbox'
@@ -69,8 +69,9 @@ interface MailNotificationsPanelProps {
 }
 
 /**
- * Bell drawer: today's meetings first, then overdue tasks, then the most recent UNREAD emails, in
- * about ten rows shared between the groups. Opening the bell does not mark
+ * Bell drawer: today's meetings first, then overdue tasks, then the most recent UNREAD emails. The
+ * number of preview rows comes from the drawer's measured height (see allocateBellSpace), so a normal
+ * desktop window shows one screen with no scrollbar; headings always show the true totals. Opening the bell does not mark
  * anything read; opening a message in Email does, through the mail provider.
  */
 export function MailNotificationsPanel(props: MailNotificationsPanelProps) {
@@ -130,8 +131,30 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  const slots = allocateBellSlots(meetings.length, tasks.length, unread.length)
+  // Measure the list area so the preview counts fit it exactly. Short windows fall back to scrolling.
+  const listRef = useRef<HTMLDivElement>(null)
+  const [listHeight, setListHeight] = useState(640)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const measure = () => setListHeight(el.clientHeight)
+    measure()
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    observer?.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
+  const mailRows = available && !(mailError && unread.length === 0) && unread.length > 0
+  // A few pixels of slack absorb rounding at browser zoom levels.
+  const slots = allocateBellSpace({ meetings: meetings.length, tasks: tasks.length, mail: unread.length, mailRows }, listHeight - 6)
   const shown = unread.slice(0, slots.mail)
+  const hiddenMeetings = meetings.length - slots.meetings
+  const sectionHeading = 'px-5 pt-2 pb-0.5 text-[11px] leading-4 font-semibold tracking-wide text-ink-subtle uppercase'
+  const viewAll = 'flex w-full items-center justify-between gap-2 px-5 py-1 text-left text-xs leading-4 font-semibold text-navy-900 hover:underline'
+  const rowButton = 'flex w-full items-start gap-2 px-5 py-1.5 text-left transition-colors hover:bg-accent-soft/40 focus-visible:bg-accent-soft/50 focus-visible:outline-none'
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-navy-950/30 backdrop-blur-[1px]" data-testid="mail-notifications">
@@ -151,10 +174,10 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
           </button>
         </div>
 
-        <div className="custom-scroll flex-1 overflow-y-auto">
+        <div ref={listRef} className="custom-scroll min-h-0 flex-1 overflow-y-auto" data-testid="bell-list">
           {meetings.length > 0 && (
             <div className="border-b border-border" data-testid="meeting-notifications">
-              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Today's meetings ({meetings.length})</p>
+              <p className={sectionHeading}>Today's meetings ({meetings.length})</p>
               <ul className="divide-y divide-border">
                 {meetings.slice(0, slots.meetings).map((meeting) => (
                   <li key={meeting.id}>
@@ -165,7 +188,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                         onClose()
                         navigate(`/meetings?day=${dayLinkFormat(dayStart)}&event=${encodeURIComponent(meeting.id)}`)
                       }}
-                      className="flex w-full items-start gap-2 px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                      className={rowButton}
                     >
                       <CalendarDays className={`mt-0.5 h-4 w-4 shrink-0 ${meeting.past ? 'text-ink-subtle' : 'text-accent'}`} />
                       <span className="min-w-0 flex-1">
@@ -187,9 +210,10 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                   onClose()
                   navigate(`/meetings?day=${dayLinkFormat(dayStart)}`)
                 }}
-                className="w-full px-5 py-2 text-left text-xs font-semibold text-navy-900 hover:underline"
+                className={viewAll}
               >
-                View all today's meetings
+                <span>View all today's meetings</span>
+                {hiddenMeetings > 0 && <span className="font-medium text-ink-muted" data-testid="bell-more-meetings">+{hiddenMeetings} more meeting{hiddenMeetings === 1 ? '' : 's'}</span>}
               </button>
             </div>
           )}
@@ -198,7 +222,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
           )}
           {tasks.length > 0 && (
             <div className="border-b border-border" data-testid="task-notifications">
-              <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Overdue tasks ({tasks.length})</p>
+              <p className={sectionHeading}>Overdue tasks ({tasks.length})</p>
               <ul className="divide-y divide-border">
                 {tasks.slice(0, slots.tasks).map((task) => {
                   return (
@@ -209,7 +233,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                           onClose()
                           navigate(`/tasks?filter=overdue&select=${encodeURIComponent(task.id)}`)
                         }}
-                        className="flex w-full items-start gap-2 px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                        className={rowButton}
                       >
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-attention" />
                         <span className="min-w-0 flex-1">
@@ -231,7 +255,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                     onClose()
                     navigate('/tasks?filter=overdue')
                   }}
-                  className="w-full px-5 py-2 text-left text-xs font-semibold text-navy-900 hover:underline"
+                  className={viewAll}
                 >
                   View all {tasks.length} in Tasks
                 </button>
@@ -239,11 +263,11 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
             </div>
           )}
           {!available ? (
-            <div className="flex flex-col items-center px-6 py-12 text-center">
-              <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />
+            <div className="flex flex-col items-center px-6 py-4 text-center">
+              <Inbox className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">Mailbox not connected</p>
               <p className="mt-1 text-xs text-ink-muted">Connect your mailbox to see new email here. Reading an email marks it read in Outlook too.</p>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   data-testid="bell-connect-outlook"
@@ -267,22 +291,22 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
               {note && <p className="mt-2 text-xs text-attention">{note}</p>}
             </div>
           ) : mailError && shown.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-error">
-              <Inbox className="mb-3 h-8 w-8 text-ink-subtle" />
+            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-error">
+              <Inbox className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">Mail could not be checked</p>
               <p className="mt-1 text-xs text-ink-muted">{mailError}</p>
             </div>
           ) : unread.length > 0 && shown.length === 0 ? (
-            <p className="px-5 py-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase" data-testid="mail-notifications-overflow">Unread emails ({unread.length})</p>
+            <p className={sectionHeading} data-testid="mail-notifications-overflow">Unread emails ({unread.length})</p>
           ) : shown.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-12 text-center" data-testid="mail-notifications-empty">
-              <Mail className="mb-3 h-8 w-8 text-ink-subtle" />
+            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-empty">
+              <Mail className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">No unread emails</p>
               <p className="mt-1 text-xs text-ink-muted">You are all caught up.</p>
             </div>
           ) : (
             <>
-            <p className="px-5 pt-3 text-[11px] font-semibold tracking-wide text-ink-subtle uppercase">Unread emails ({unread.length})</p>
+            <p className={sectionHeading}>Unread emails ({unread.length})</p>
             <ul className="divide-y divide-border">
               {shown.map((message) => (
                 <li key={message.id}>
@@ -290,19 +314,17 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                     type="button"
                     data-testid={`mail-notification-${message.id}`}
                     onClick={() => openMessage(message)}
-                    className="w-full px-5 py-3 text-left transition-colors hover:bg-accent-soft/40"
+                    title={message.preview || undefined}
+                    className="w-full px-5 py-1.5 text-left transition-colors hover:bg-accent-soft/40 focus-visible:bg-accent-soft/50 focus-visible:outline-none"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 text-xs leading-4">
                       <span className="h-2 w-2 shrink-0 rounded-full bg-[#f5b301]" aria-hidden />
                       <span className="sr-only">Unread. </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{senderDisplayName(message) || 'Unknown sender'}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold text-ink">{senderDisplayName(message) || 'Unknown sender'}</span>
+                      <span className="shrink-0 text-[10px] font-semibold text-ink-subtle uppercase">{mailProvider(message) === 'gmail' ? 'Gmail' : 'Outlook'}</span>
                       <span className="shrink-0 text-[11px] text-ink-subtle">{formatMailTime(message.at)}</span>
                     </div>
-                    <p className="mt-1 truncate text-sm font-semibold text-navy-900">{message.subject || '(no subject)'}</p>
-                    <p className="mt-0.5 truncate text-xs text-ink-muted">
-                      <span className="mr-1 text-[10px] font-semibold text-ink-subtle uppercase">{mailProvider(message) === 'gmail' ? 'Gmail' : 'Outlook'}</span>
-                      {message.preview}
-                    </p>
+                    <p className="mt-0.5 truncate text-sm leading-5 font-semibold text-navy-900">{message.subject || '(no subject)'}</p>
                   </button>
                 </li>
               ))}

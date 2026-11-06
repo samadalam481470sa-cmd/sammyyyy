@@ -74,8 +74,13 @@ export interface Opportunity {
   attentionReasons: AttentionReason[]
   outstandingItems?: string[]
   diligenceNotes?: string
-  /** When the record was first created. Missing on older records with no trustworthy timestamp. */
+  /**
+   * Business creation date used by reports. Starts as the insert time; a user can correct it to the
+   * real date the opportunity began (stored at local noon so it never shifts a day by time zone).
+   */
   createdAt?: string
+  /** The original machine insert time, kept the first time a user corrects createdAt. Never edited. */
+  recordCreatedAt?: string
   /** First transition into Completed. Stays set if the deal is later reversed (see statusHistory). */
   completedAt?: string | null
   /** Recorded status changes, oldest first. Only real saved transitions are written here. */
@@ -195,6 +200,8 @@ export type OpportunityUpdate = Partial<
     | 'nextAction'
     | 'nextActionDate'
     | 'priority'
+    | 'createdAt'
+    | 'recordCreatedAt'
     | 'needsAttention'
     | 'attentionReasons'
     | 'outstandingItems'

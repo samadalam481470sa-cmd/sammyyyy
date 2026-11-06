@@ -20,6 +20,7 @@ import {
   SOURCE_TYPES,
 } from '@/data/constants'
 import {
+  draftDateProblem,
   opportunityDraftPatch,
   opportunityDraftsEqual,
   snapshotOpportunityDraft,
@@ -49,6 +50,8 @@ interface OpportunityEditorProps {
   footerExtra?: ReactNode
   /** Status and stage drafted in the profile header. Save Changes here commits them with the rest. */
   headerDraft?: { patch: OpportunityUpdate; onCommitted: () => void; onDiscard: () => void } | null
+  /** Told whenever the editor's own fields gain or lose unsaved edits (header draft not included). */
+  onDirtyChange?: (dirty: boolean) => void
   /** Hide the title block when the surrounding page already shows the deal (the full profile). */
   hideHeader?: boolean
 }
@@ -61,7 +64,7 @@ const DEFAULT_TABS = [
 ]
 
 export const OpportunityEditor = forwardRef<OpportunityEditorHandle, OpportunityEditorProps>(
-  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra, hideHeader = false, headerDraft = null }, ref) {
+  function OpportunityEditor({ opportunity, onSave, onClose, onDeleted, tabs = DEFAULT_TABS, footerExtra, hideHeader = false, headerDraft = null, onDirtyChange }, ref) {
     const [tab, setTab] = useState(tabs[0]?.id ?? 'overview')
     const [saved, setSaved] = useState(() => snapshotOpportunityDraft(opportunity))
     const [draft, setDraft] = useState<OpportunityDraft>(() => snapshotOpportunityDraft(opportunity))
@@ -76,7 +79,16 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     const { tasks, documents, deleteOpportunity } = useData()
     const deletingRef = useRef(false)
 
-    const dirty = !opportunityDraftsEqual(saved, draft) || headerDraft != null
+    const fieldsDirty = !opportunityDraftsEqual(saved, draft)
+    const dirty = fieldsDirty || headerDraft != null
+    useEffect(() => {
+      onDirtyChange?.(fieldsDirty)
+    }, [fieldsDirty, onDirtyChange])
+    // Status and closing date as they will be saved: the profile header's draft wins for status.
+    const headerPatch = headerDraft?.patch as { status?: Opportunity['status']; closedAt?: string | null } | undefined
+    const effectiveStatus = headerPatch?.status ?? draft.status
+    const closedDateEdited = (draft.closedAt ?? null) !== (saved.closedAt ?? null)
+    const effectiveClosedAt = closedDateEdited ? draft.closedAt : headerPatch?.closedAt !== undefined ? headerPatch.closedAt : draft.closedAt
     const linkedTaskCount = tasks.filter(
       (task) => task.opportunityId === opportunity.id && !task.deletedAt,
     ).length
@@ -101,6 +113,11 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         return true
       }
       if (savingRef.current) return false
+      const dateProblem = draftDateProblem({ createdDate: draft.createdDate, status: effectiveStatus, closedAt: effectiveClosedAt ?? null })
+      if (dateProblem) {
+        setError(dateProblem)
+        return false
+      }
       const patchPreview = { ...opportunityDraftPatch(saved, draft), ...headerDraft?.patch } as { status?: string; stage?: string }
       const nextStatus = patchPreview.status ?? opportunity.status
       const nextStage = patchPreview.stage ?? opportunity.stage
@@ -112,9 +129,13 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
       setSaving(true)
       setError(null)
       try {
-        const patch = { ...opportunityDraftPatch(saved, draft), ...headerDraft?.patch }
+        // One save carries every pending edit: the header's status and stage plus every field here.
+        const patch: OpportunityUpdate = { ...opportunityDraftPatch(saved, draft), ...headerDraft?.patch }
+        // A closing date picked in the dates strip beats the one captured when Completed was chosen.
+        if (closedDateEdited && effectiveStatus === 'Completed') patch.closedAt = draft.closedAt
+        if (effectiveStatus !== 'Completed' && closedDateEdited && !headerDraft?.patch) delete patch.closedAt
         await onSave(patch)
-        const committed = headerDraft?.patch ? { ...draft, ...headerDraft.patch } as OpportunityDraft : draft
+        const committed = { ...draft, ...(headerDraft?.patch ?? {}), closedAt: effectiveStatus === 'Completed' ? (effectiveClosedAt ?? null) : null } as OpportunityDraft
         setSaved(committed)
         setDraft(committed)
         headerDraft?.onCommitted()
@@ -127,7 +148,7 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
         savingRef.current = false
         setSaving(false)
       }
-    }, [saved, draft, onSave, opportunity.status, opportunity.stage, headerDraft])
+    }, [saved, draft, onSave, opportunity.status, opportunity.stage, headerDraft, effectiveStatus, effectiveClosedAt, closedDateEdited])
 
     const persistRef = useRef(persist)
     persistRef.current = persist
@@ -140,11 +161,13 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
       })
     }, [])
 
+    // Discard puts back every pending edit, the profile header's status and stage included.
     const discard = useCallback(() => {
       setDraft(saved)
       setError(null)
       setMessage(null)
-    }, [saved])
+      headerDraft?.onDiscard()
+    }, [saved, headerDraft])
 
     const requestLeave = useCallback(
       (next: () => void) => {
@@ -162,8 +185,12 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
       () => ({
         isDirty: () => dirty,
         requestLeave,
+        save: persist,
+        discard,
+        saving,
+        error,
       }),
-      [dirty, requestLeave],
+      [dirty, requestLeave, persist, discard, saving, error],
     )
 
     useEffect(() => {
@@ -195,7 +222,6 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
     }
 
     const handleDialogDiscard = () => {
-      headerDraft?.onDiscard()
       discard()
       const next = pendingLeave
       setPendingLeave(null)
@@ -282,18 +308,6 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                 ))}
               </select>
             </label>
-            {draft.status === 'Completed' && (
-              <label className="col-span-2 block">
-                <span className="text-[11px] font-semibold tracking-[0.06em] text-ink-muted uppercase">Legal closing date</span>
-                <input
-                  type="date"
-                  className="field-input"
-                  max={todayDateInput()}
-                  value={draft.closedAt ?? ''}
-                  onChange={(e) => setField('closedAt', e.target.value || null)}
-                />
-              </label>
-            )}
           </div>}
 
           {tab === 'overview' && (
@@ -325,17 +339,42 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
                 </Field>
               </div>
               <dl className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-canvas px-3 py-1.5 text-xs" data-testid="record-dates">
-                <div>
+                <div className="min-w-0">
                   <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Created</dt>
-                  <dd className="text-ink">{opportunity.createdAt ? formatDate(opportunity.createdAt) : 'Not recorded'}</dd>
+                  <dd className="text-ink">
+                    <input
+                      type="date"
+                      className="record-date-input"
+                      aria-label="Created date"
+                      data-testid="editor-created-date"
+                      max={todayDateInput()}
+                      value={draft.createdDate ?? ''}
+                      onChange={(e) => setField('createdDate', e.target.value || saved.createdDate)}
+                    />
+                  </dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Updated</dt>
-                  <dd className="text-ink">{formatDate(opportunity.updatedAt ?? opportunity.lastActivityDate ?? null)}</dd>
+                  <dd className="py-0.5 text-ink" data-testid="editor-updated-date">{formatDate(opportunity.updatedAt ?? opportunity.lastActivityDate ?? null)}</dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <dt className="text-[10px] font-semibold tracking-[0.06em] text-ink-subtle uppercase">Legally closed</dt>
-                  <dd className="text-ink">{opportunity.status === 'Completed' && opportunity.closedAt ? formatDate(opportunity.closedAt) : '—'}</dd>
+                  <dd className="text-ink">
+                    {effectiveStatus === 'Completed' ? (
+                      <input
+                        type="date"
+                        className="record-date-input"
+                        aria-label="Legally closed date"
+                        data-testid="editor-closed-date"
+                        min={draft.createdDate ?? undefined}
+                        max={todayDateInput()}
+                        value={effectiveClosedAt ?? ''}
+                        onChange={(e) => setField('closedAt', e.target.value || (effectiveClosedAt ?? null))}
+                      />
+                    ) : (
+                      <span className="block py-0.5" data-testid="editor-closed-date-none" title="Only Completed deals have a legal closing date">—</span>
+                    )}
+                  </dd>
                 </div>
                 {opportunity.seedDates && <p className="col-span-3 text-[10px] text-ink-subtle">Dates on this fictional sample deal were filled in for the demo.</p>}
               </dl>
@@ -520,6 +559,21 @@ export const OpportunityEditor = forwardRef<OpportunityEditorHandle, Opportunity
           border-color: var(--color-accent);
           box-shadow: 0 0 0 2px rgb(61 126 184 / 0.2);
         }
+        .record-date-input {
+          display: block;
+          width: 100%;
+          max-width: 9.5rem;
+          margin-left: -0.25rem;
+          padding: 0.0625rem 0.25rem;
+          border: 1px solid transparent;
+          border-radius: 0.375rem;
+          background: transparent;
+          font-size: 0.75rem;
+          color: var(--color-ink);
+          cursor: pointer;
+        }
+        .record-date-input:hover { border-color: var(--color-border); background: var(--color-surface); }
+        .record-date-input:focus { outline: none; border-color: var(--color-accent); background: var(--color-surface); box-shadow: 0 0 0 2px rgb(61 126 184 / 0.2); }
         /* Short laptop screens (1366x768, 1280x720): tighten spacing so the
            Overview tab fits without scrolling. Content is unchanged. */
         @media (max-height: 860px) {

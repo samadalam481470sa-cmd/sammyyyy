@@ -967,8 +967,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ? { ...statusPatch0, primaryLeadId: resolveLeadIdByName(statusPatch0.dealLead, loadRoster(owner)) }
         : statusPatch0
       const { closedAt: requestedClosedAt, ...restPatch } = statusPatch
+      // A corrected Created date keeps the original insert time beside it, once.
+      const createdFix: OpportunityUpdate =
+        patch.createdAt !== undefined && patch.createdAt !== existing.createdAt && !existing.recordCreatedAt && existing.createdAt
+          ? { recordCreatedAt: existing.createdAt }
+          : {}
       const nextPatch: OpportunityUpdate = {
         ...withManualNextActionOverride(restPatch),
+        ...createdFix,
         ...applyStatusChange(existing, patch.status, stamp, requestedClosedAt ?? null, {
           nwp: patch.nwp ?? existing.nwp,
           pfEbitda: patch.pfEbitda ?? existing.pfEbitda,

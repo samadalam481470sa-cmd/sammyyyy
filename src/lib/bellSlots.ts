@@ -1,10 +1,78 @@
-/** The bell shows about ten rows, shared between its three groups in order. */
-export const BELL_CAPACITY = 10
+/** Heights the bell drawer is laid out with (px). Rows are compact; numbers match the rendered markup. */
+export const BELL_SIZES = {
+  /** A section's heading line plus its "View all" line and the divider under it. */
+  section: 56,
+  /** One meeting or overdue-task row (two lines). */
+  row: 50,
+  /** One unread email row (two lines). */
+  mailRow: 52,
+  /** The mail section when it shows a message instead of rows (not connected, all caught up, error). */
+  mailNotice: 160,
+}
 
-export function allocateBellSlots(meetings: number, tasks: number, mail: number, capacity = BELL_CAPACITY) {
-  const shownMeetings = Math.min(meetings, capacity)
-  const shownTasks = Math.min(tasks, capacity - shownMeetings)
-  return { meetings: shownMeetings, tasks: shownTasks, mail: Math.min(mail, capacity - shownMeetings - shownTasks) }
+export interface BellCounts {
+  meetings: number
+  tasks: number
+  mail: number
+  /** False when the mailbox shows a notice block instead of rows. */
+  mailRows?: boolean
+}
+
+export interface BellAllocation {
+  meetings: number
+  tasks: number
+  mail: number
+}
+
+/**
+ * How many preview rows of each group fit in `height` pixels, so the drawer needs no scrollbar.
+ * - Today's meetings come first and take whatever is left after the reserves below.
+ * - At least one overdue task and one unread email are reserved whenever they exist, so neither group
+ *   can push the other out of view.
+ * - Remaining rows are shared between tasks and emails in turn.
+ * When even the minimum does not fit (short window or heavy zoom), each group still shows one row and
+ * the drawer scrolls instead of hiding controls. Totals are shown separately and never come from this.
+ */
+export function allocateBellSpace(counts: BellCounts, height: number, sizes = BELL_SIZES): BellAllocation {
+  const { meetings, tasks, mail } = counts
+  const mailRows = counts.mailRows !== false
+  let left = height
+  if (meetings > 0) left -= sizes.section
+  if (tasks > 0) left -= sizes.section
+  if (mailRows && mail > 0) left -= sizes.section
+  else left -= sizes.mailNotice
+  // Reserves for the lower groups.
+  const taskReserve = tasks > 0 ? 1 : 0
+  const mailReserve = mailRows && mail > 0 ? 1 : 0
+  left -= taskReserve * sizes.row + mailReserve * sizes.mailRow
+  const meetingRows = meetings > 0 ? Math.min(meetings, Math.max(1, Math.floor(left / sizes.row))) : 0
+  left -= Math.max(0, meetingRows) * sizes.row
+  let taskRows = taskReserve
+  let mailShown = mailReserve
+  // Share what is left, a task then an email, until both are shown or the space runs out.
+  for (let turn = 0; ; turn += 1) {
+    const wantTask = taskRows < tasks
+    const wantMail = mailRows && mailShown < mail
+    if (!wantTask && !wantMail) break
+    const takeTask = wantTask && (!wantMail || turn % 2 === 0)
+    const cost = takeTask ? sizes.row : sizes.mailRow
+    if (left < cost) {
+      // The other group may still fit a cheaper row.
+      const otherCost = takeTask ? sizes.mailRow : sizes.row
+      const otherWants = takeTask ? wantMail : wantTask
+      if (otherWants && left >= otherCost) {
+        if (takeTask) mailShown += 1
+        else taskRows += 1
+        left -= otherCost
+        continue
+      }
+      break
+    }
+    if (takeTask) taskRows += 1
+    else mailShown += 1
+    left -= cost
+  }
+  return { meetings: meetingRows, tasks: taskRows, mail: mailRows ? mailShown : 0 }
 }
 
 export interface BellMeeting {

@@ -110,6 +110,18 @@ export function OpportunityProfilePage() {
   const [headerSaving, setHeaderSaving] = useState(false)
   const [headerError, setHeaderError] = useState<string | null>(null)
   const [headerLeave, setHeaderLeave] = useState<(() => void) | null>(null)
+  // Overview fields with unsaved edits, reported by the editor so the top buttons show for them too.
+  const [overviewDirty, setOverviewDirty] = useState(false)
+  const [overviewSaving, setOverviewSaving] = useState(false)
+  const saveOverview = async () => {
+    if (!panel.current?.save) return
+    setOverviewSaving(true)
+    try {
+      await panel.current.save()
+    } finally {
+      setOverviewSaving(false)
+    }
+  }
   useEffect(() => {
     setHeaderDraft(null)
     setHeaderError(null)
@@ -272,10 +284,11 @@ export function OpportunityProfilePage() {
                 setHeaderDraft(next)
                 setHeaderError(null)
               }}
-              showActions={tab !== 'overview'}
-              saving={headerSaving}
-              error={headerError}
-              onSave={() => void saveHeader()}
+              otherDirty={tab === 'overview' && overviewDirty}
+              saving={tab === 'overview' ? overviewSaving : headerSaving}
+              error={tab === 'overview' ? null : headerError}
+              onSave={() => void (tab === 'overview' ? saveOverview() : saveHeader())}
+              onDiscard={tab === 'overview' ? () => panel.current?.discard?.() : undefined}
             />
           </div>
         </div>
@@ -335,6 +348,7 @@ export function OpportunityProfilePage() {
               onDeleted={() => navigate('/opportunities', { replace: true })}
               hideHeader
               headerDraft={headerDraft ? { patch: headerDraft, onCommitted: () => setHeaderDraft(null), onDiscard: () => setHeaderDraft(null) } : null}
+              onDirtyChange={setOverviewDirty}
             />
           </div>
         )}

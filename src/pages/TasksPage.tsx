@@ -55,7 +55,9 @@ export function TasksPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const editorRef = useRef<OpportunityEditorHandle>(null)
   const tableRef = useRef<HTMLDivElement>(null)
-  const pageSize = useFitRows(tableRef, { rowHeight: 44, min: 4, stretchedRows: true })
+  // A row is 44px of content plus its 1px border, and zoom can add a fraction of a pixel per row.
+  // Counting rows at 46px keeps the page from overshooting by a few pixels; rows then stretch to fill.
+  const pageSize = useFitRows(tableRef, { rowHeight: 46, min: 4, stretchedRows: true })
 
   // Links such as the bell's "View all in Tasks" arrive with ?filter=overdue; ?new=1 and ?select=id too.
   useEffect(() => {

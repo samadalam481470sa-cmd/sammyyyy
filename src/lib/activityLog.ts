@@ -3,6 +3,8 @@ import type { TaskRecord } from '@/data/mockModules'
 import type { DocumentRecord } from '@/data/mockModules'
 import { dealIdFromOpportunity } from '@/lib/dealId'
 import { nowIso } from '@/lib/calendarDate'
+import { formatDate } from '@/utils/dashboard'
+import { createdDateInput } from '@/lib/opportunityDraft'
 
 function activityId(): string {
   return `act_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -64,6 +66,15 @@ export function opportunityUpdateActivity(
     (patch.priority !== undefined && patch.priority !== before.priority)
   ) {
     parts.push(`updated next action on ${before.projectName}`)
+  }
+  // Business date corrections name the old and new date; the activity row carries who and when.
+  const day = (v: string | null | undefined) => (v ? formatDate(v) : 'not recorded')
+  if (patch.createdAt !== undefined && createdDateInput(patch.createdAt) !== createdDateInput(before.createdAt)) {
+    parts.push(`changed the Created date of ${before.projectName} from ${day(before.createdAt)} to ${day(patch.createdAt)}`)
+  }
+  const staysCompleted = before.status === 'Completed' && (patch.status === undefined || patch.status === 'Completed')
+  if (staysCompleted && patch.closedAt !== undefined && (patch.closedAt ?? null) !== (before.closedAt ?? null)) {
+    parts.push(`changed the Legally Closed date of ${before.projectName} from ${day(before.closedAt)} to ${day(patch.closedAt)}`)
   }
   const tracked = [
     'projectName',
