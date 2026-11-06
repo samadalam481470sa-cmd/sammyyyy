@@ -23,12 +23,12 @@ export function PriorityDealsTable({ opportunities, onSelect }: PriorityDealsTab
           horizontal scroll as the fallback instead of squeezing columns unreadably. Net Revenue is
           left out of this summary only; it stays on records, profiles, Reports and exports. */}
       <div className="custom-scroll overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm" data-testid="priority-deals-table">
+        <table className="w-full min-w-[990px] table-fixed border-collapse text-left text-sm" data-testid="priority-deals-table">
           <colgroup>
             <col className="w-[14%]" />
             <col className="w-[12%]" />
-            <col className="w-[98px]" />
-            <col className="w-[148px]" />
+            <col className="w-[112px]" />
+            <col className="w-[144px]" />
             <col className="w-[12%]" />
             <col className="w-[78px]" />
             <col className="w-[86px]" />
