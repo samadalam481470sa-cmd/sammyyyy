@@ -1,10 +1,10 @@
-import { useMemo, useEffect, useRef, useState } from 'react'
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { AlertTriangle, Inbox, Mail, X, CalendarDays } from 'lucide-react'
 import type { TaskRecord } from '@/data/mockModules'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
 import { useOutlookCalendar } from '@/hooks/useOutlookCalendar'
-import { allocateBellSpace, todaysMeetings } from '@/lib/bellSlots'
+import { allocateBellSpace, BELL_SIZES, todaysMeetings, type BellSizes } from '@/lib/bellSlots'
 import { loadCrmMeetings } from '@/lib/crmMeetings'
 import { calendarOwnerKey } from '@/lib/meetingCalendar'
 import { formatMailTime, loadMailbox, mailProvider, saveMailbox, senderDisplayName, type MailMessage } from '@/lib/outlookMailbox'
@@ -147,9 +147,32 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
       window.removeEventListener('resize', measure)
     }
   }, [])
+  // Row and heading heights as they really render (fonts, zoom), so the list fills its space exactly.
+  const [sizes, setSizes] = useState<BellSizes>(BELL_SIZES)
+  useLayoutEffect(() => {
+    const list = listRef.current
+    if (!list) return
+    const h = (el: Element | null | undefined) => (el ? el.getBoundingClientRect().height : 0)
+    const rowsOf = (section: Element | null) => (section ? [...section.querySelectorAll('li')].map(h) : [])
+    const meetingSection = list.querySelector('[data-testid=meeting-notifications]')
+    const taskSection = list.querySelector('[data-testid=task-notifications]')
+    const mailSection = list.querySelector('[data-testid=mail-section]')
+    const notice = list.querySelector('[data-testid=mail-notice], [data-mail-notice]')
+    const next = { ...sizes }
+    const rows = [...rowsOf(meetingSection), ...rowsOf(taskSection)]
+    if (rows.length) next.row = Math.ceil(Math.max(...rows))
+    const mailRowHeights = rowsOf(mailSection)
+    if (mailRowHeights.length) next.mailRow = Math.ceil(Math.max(...mailRowHeights))
+    const overheads = [meetingSection, taskSection].filter(Boolean).map((s) => h(s) - rowsOf(s).reduce((a, b) => a + b, 0))
+    if (overheads.length) next.section = Math.ceil(Math.max(...overheads))
+    if (mailSection) next.mailSection = Math.ceil(h(mailSection) - mailRowHeights.reduce((a, b) => a + b, 0))
+    if (notice) next.mailNotice = Math.ceil(h(notice))
+    const changed = (Object.keys(next) as (keyof BellSizes)[]).some((key) => next[key] !== sizes[key])
+    if (changed) setSizes(next)
+  })
   const mailRows = available && !(mailError && unread.length === 0) && unread.length > 0
-  // A few pixels of slack absorb rounding at browser zoom levels.
-  const slots = allocateBellSpace({ meetings: meetings.length, tasks: tasks.length, mail: unread.length, mailRows }, listHeight - 6)
+  // One pixel of slack absorbs sub-pixel rounding at browser zoom levels.
+  const slots = allocateBellSpace({ meetings: meetings.length, tasks: tasks.length, mail: unread.length, mailRows }, listHeight - 1, sizes)
   const shown = unread.slice(0, slots.mail)
   const hiddenMeetings = meetings.length - slots.meetings
   const sectionHeading = 'px-5 pt-2 pb-0.5 text-[11px] leading-4 font-semibold tracking-wide text-ink-subtle uppercase'
@@ -263,7 +286,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
             </div>
           )}
           {!available ? (
-            <div className="flex flex-col items-center px-6 py-4 text-center">
+            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notice">
               <Inbox className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">Mailbox not connected</p>
               <p className="mt-1 text-xs text-ink-muted">Connect your mailbox to see new email here. Reading an email marks it read in Outlook too.</p>
@@ -291,7 +314,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
               {note && <p className="mt-2 text-xs text-attention">{note}</p>}
             </div>
           ) : mailError && shown.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-error">
+            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-error" data-mail-notice="">
               <Inbox className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">Mail could not be checked</p>
               <p className="mt-1 text-xs text-ink-muted">{mailError}</p>
@@ -299,13 +322,13 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
           ) : unread.length > 0 && shown.length === 0 ? (
             <p className={sectionHeading} data-testid="mail-notifications-overflow">Unread emails ({unread.length})</p>
           ) : shown.length === 0 ? (
-            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-empty">
+            <div className="flex flex-col items-center px-6 py-4 text-center" data-testid="mail-notifications-empty" data-mail-notice="">
               <Mail className="mb-1.5 h-6 w-6 text-ink-subtle" />
               <p className="text-sm font-semibold text-navy-900">No unread emails</p>
               <p className="mt-1 text-xs text-ink-muted">You are all caught up.</p>
             </div>
           ) : (
-            <>
+            <div data-testid="mail-section">
             <p className={sectionHeading}>Unread emails ({unread.length})</p>
             <ul className="divide-y divide-border">
               {shown.map((message) => (
@@ -329,7 +352,7 @@ function NotificationsDrawer({ open, onClose, email, tasks = [] }: MailNotificat
                 </li>
               ))}
             </ul>
-            </>
+            </div>
           )}
         </div>
 

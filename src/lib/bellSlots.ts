@@ -1,13 +1,26 @@
-/** Heights the bell drawer is laid out with (px). Rows are compact; numbers match the rendered markup. */
-export const BELL_SIZES = {
+/**
+ * Starting heights for the bell drawer (px), used until the drawer measures its real rows on screen
+ * (see MailNotificationsPanel). They are slightly generous so the first paint never overflows.
+ */
+export const BELL_SIZES: BellSizes = {
   /** A section's heading line plus its "View all" line and the divider under it. */
   section: 56,
+  /** The unread-email heading (its View all link sits in the drawer footer). */
+  mailSection: 30,
   /** One meeting or overdue-task row (two lines). */
   row: 50,
   /** One unread email row (two lines). */
   mailRow: 52,
   /** The mail section when it shows a message instead of rows (not connected, all caught up, error). */
   mailNotice: 160,
+}
+
+export interface BellSizes {
+  section: number
+  mailSection: number
+  row: number
+  mailRow: number
+  mailNotice: number
 }
 
 export interface BellCounts {
@@ -39,7 +52,7 @@ export function allocateBellSpace(counts: BellCounts, height: number, sizes = BE
   let left = height
   if (meetings > 0) left -= sizes.section
   if (tasks > 0) left -= sizes.section
-  if (mailRows && mail > 0) left -= sizes.section
+  if (mailRows && mail > 0) left -= sizes.mailSection
   else left -= sizes.mailNotice
   // Reserves for the lower groups.
   const taskReserve = tasks > 0 ? 1 : 0

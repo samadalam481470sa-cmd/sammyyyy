@@ -79,7 +79,7 @@ describe('bell', () => {
   // A typical desktop drawer list area (900px window minus the drawer's header and footer).
   const H = 760
   const rowsTotal = (a: { meetings: number; tasks: number; mail: number }) =>
-    (a.meetings ? BELL_SIZES.section : 0) + a.meetings * BELL_SIZES.row + (a.tasks ? BELL_SIZES.section : 0) + a.tasks * BELL_SIZES.row + (a.mail ? BELL_SIZES.section : 0) + a.mail * BELL_SIZES.mailRow
+    (a.meetings ? BELL_SIZES.section : 0) + a.meetings * BELL_SIZES.row + (a.tasks ? BELL_SIZES.section : 0) + a.tasks * BELL_SIZES.row + (a.mail ? BELL_SIZES.mailSection : 0) + a.mail * BELL_SIZES.mailRow
 
   it('one meeting, four overdue tasks, seven emails all fit without scrolling', () => {
     const a = allocateBellSpace({ meetings: 1, tasks: 4, mail: 7 }, H)
