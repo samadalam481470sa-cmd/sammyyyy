@@ -33,7 +33,7 @@ import {
   slotDocument,
 } from '@/lib/documentSlots'
 import { deleteDocumentBlob, getDocumentBlob, putDocumentBlob } from '@/lib/documentFileStore'
-import { uploadDealDocumentToOneDrive } from '@/lib/graphDocuments'
+import { createViewLinkForEveryone, uploadDealDocumentToOneDrive } from '@/lib/graphDocuments'
 import { sessionOwnerKey } from '@/lib/ownerKey'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { CreatableSelect, matchExistingOption } from '@/components/shared/CreatableSelect'
@@ -79,6 +79,17 @@ type DocDraft = {
   storage: DocumentRecord['storage']
   webUrl: string
   driveItemId: string
+  shareUrl: string
+}
+
+/** Browser type for a file name, so PDFs and images open in the tab instead of downloading. */
+function mimeForName(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  const types: Record<string, string> = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+    txt: 'text/plain', csv: 'text/csv',
+  }
+  return types[ext] ?? 'application/octet-stream'
 }
 
 function fromRecord(doc: DocumentRecord): DocDraft {
@@ -95,6 +106,7 @@ function fromRecord(doc: DocumentRecord): DocDraft {
     storage: doc.storage,
     webUrl: doc.webUrl ?? '',
     driveItemId: doc.driveItemId ?? '',
+    shareUrl: doc.shareUrl ?? '',
   }
 }
 
@@ -112,6 +124,7 @@ function emptyDraft(docType: string): DocDraft {
     storage: 'none',
     webUrl: '',
     driveItemId: '',
+    shareUrl: '',
   }
 }
 
@@ -307,10 +320,14 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
             slot: result.docType,
           })
           if (cloud) {
+            // Open to everyone in the CRM: a view-only link anyone can use, so nobody needs the
+            // uploader to share the file by hand.
+            const shareUrl = await createViewLinkForEveryone(cloud.id)
             result = await saveDocument(result.id, {
               storage: 'onedrive',
               webUrl: cloud.webUrl,
               driveItemId: cloud.id,
+              shareUrl: shareUrl ?? '',
               fileName: cloud.name,
               fileSize: pendingFile.size,
             })
@@ -363,21 +380,55 @@ export const DocumentWorkspace = forwardRef<OpportunityEditorHandle, DocumentWor
       requestLeave(go)
     }
 
+    /**
+     * Every CRM user can open every document, in this order:
+     * 1. the view-only link anyone can use (made at upload),
+     * 2. a pasted document link,
+     * 3. the CRM's own copy of the file (this browser, then the shared server),
+     * 4. the uploader's private OneDrive link, last, because it only opens for the uploader and
+     *    people they shared it with.
+     * The new tab is opened right away, before any download, so the browser does not block it.
+     */
     const openAttached = async () => {
-      const href = draft.webUrl.trim() || draft.link.trim()
-      if (isOpenableDocumentUrl(href)) {
-        window.open(href, '_blank', 'noopener,noreferrer')
+      const share = draft.shareUrl.trim()
+      const pasted = draft.link.trim()
+      const direct = isOpenableDocumentUrl(share) ? share : isOpenableDocumentUrl(pasted) ? pasted : ''
+      if (direct) {
+        window.open(direct, '_blank', 'noopener,noreferrer')
         return
+      }
+      const tab = window.open('', '_blank')
+      // An older file with no shared link: if this person uploaded it, make the link now and keep it,
+      // so it opens the same way for everyone from here on. Anyone else's OneDrive item just fails here.
+      if (editingId && draft.driveItemId && !share) {
+        const made = await createViewLinkForEveryone(draft.driveItemId)
+        if (made) {
+          void saveDocument(editingId, { shareUrl: made }).catch(() => undefined)
+          setDraft((prev) => ({ ...prev, shareUrl: made }))
+          setSaved((prev) => ({ ...prev, shareUrl: made }))
+          if (tab) tab.location.href = made
+          else window.open(made, '_blank', 'noopener,noreferrer')
+          return
+        }
       }
       let blob: Blob | null = pendingFile ?? (editingId ? await getDocumentBlob(owner, editingId) : null)
-      if (!blob && editingId && isWorkspaceShared()) blob = await downloadWorkspaceFile(editingId)
-      if (!blob) {
-        setError('No file is available to open yet.')
+      if (!blob && editingId && isWorkspaceShared()) blob = await downloadWorkspaceFile(editingId).catch(() => null)
+      if (blob) {
+        const typed = blob.type ? blob : new Blob([blob], { type: mimeForName(draft.fileName) })
+        const url = URL.createObjectURL(typed)
+        if (tab) tab.location.href = url
+        else window.open(url, '_blank', 'noopener,noreferrer')
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
         return
       }
-      const url = URL.createObjectURL(blob)
-      window.open(url, '_blank', 'noopener,noreferrer')
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      const privateLink = draft.webUrl.trim()
+      if (isOpenableDocumentUrl(privateLink)) {
+        if (tab) tab.location.href = privateLink
+        else window.open(privateLink, '_blank', 'noopener,noreferrer')
+        return
+      }
+      tab?.close()
+      setError('No file is available to open yet.')
     }
 
     const available = hasAttachedFile({

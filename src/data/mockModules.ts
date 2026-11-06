@@ -103,6 +103,11 @@ export interface DocumentRecord {
   storage?: 'none' | 'url' | 'local' | 'onedrive'
   webUrl?: string
   driveItemId?: string
+  /**
+   * View-only "anyone with the link" OneDrive link, made when the file is uploaded so every CRM user
+   * can open it without the uploader sharing it by hand.
+   */
+  shareUrl?: string
 }
 
 export const CONTACT_CATEGORIES = [

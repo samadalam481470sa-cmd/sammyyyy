@@ -83,3 +83,26 @@ export async function uploadDealDocumentToOneDrive(input: {
     return null
   }
 }
+
+/**
+ * Makes a view-only "anyone with the link" sharing link for a file in the signed-in user's OneDrive,
+ * so every CRM user can open it. Returns null when Microsoft refuses (for example a work account whose
+ * organization turned off anyone links); the CRM then opens its own server copy instead.
+ */
+export async function createViewLinkForEveryone(driveItemId: string): Promise<string | null> {
+  if (!driveItemId) return null
+  const token = await getGraphAccessToken()
+  if (!token) return null
+  try {
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(driveItemId)}/createLink`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'view', scope: 'anonymous' }),
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as { link?: { webUrl?: string } }
+    return json.link?.webUrl || null
+  } catch {
+    return null
+  }
+}
