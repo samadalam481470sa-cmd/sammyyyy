@@ -185,7 +185,7 @@ export class GmailSetupError extends Error {}
  * Open Google's window so this CRM user signs in to their own Gmail and allows mail access.
  * Call from a click. Resolves with the Gmail address.
  */
-export async function connectGmail(owner: string, hint?: string): Promise<string> {
+export async function connectGmail(owner: string, hint?: string, pickAccount = false): Promise<string> {
   const clientId = await gmailClientId()
   if (!clientId) {
     throw new GmailSetupError(
@@ -211,7 +211,10 @@ export async function connectGmail(owner: string, hint?: string): Promise<string
           ),
         ),
     })
-    client.requestAccessToken({ prompt: '', ...(hint?.includes('@') ? { hint } : {}) })
+    // pickAccount shows Google's account chooser so the user can switch to another Gmail.
+    client.requestAccessToken(
+      pickAccount ? { prompt: 'select_account' } : { prompt: '', ...(hint?.includes('@') ? { hint } : {}) },
+    )
   })
   if (!response.access_token) {
     throw new Error(
@@ -224,7 +227,7 @@ export async function connectGmail(owner: string, hint?: string): Promise<string
   const profile = await gmailFetch(response.access_token, '/profile')
   const address = profile.ok ? String(((await profile.json()) as { emailAddress?: string }).emailAddress ?? '') : ''
   writeToken(owner, { accessToken: response.access_token, expiresAt: Date.now() + expiresIn * 1000, address })
-  rememberGmail(owner, address || hint || 'connected')
+  rememberGmail(owner, address || (pickAccount ? '' : hint) || 'connected')
   return address
 }
 

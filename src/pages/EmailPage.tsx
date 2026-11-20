@@ -658,12 +658,13 @@ export function EmailPage() {
     })
   }
 
-  const connectGmailNow = () => {
+  const connectGmailNow = (pickAccount = false) => {
     setSyncing(true)
-    const renewing = gmailNeedsRenewal(account)
-    setStatus(renewing ? 'Reconnecting Gmail…' : 'Connecting Gmail…')
+    const renewing = !pickAccount && gmailNeedsRenewal(account)
+    setStatus(pickAccount ? 'Opening Google to pick a Gmail account…' : renewing ? 'Reconnecting Gmail…' : 'Connecting Gmail…')
     const known = rememberedGmail(account)
-    connectGmail(account, known.includes('@') ? known : email)
+    // First connect and Switch both show the Google account chooser; only renewals stay silent.
+    connectGmail(account, known.includes('@') ? known : email, pickAccount || !renewing)
       .then((address) => {
         setGmailOn(true)
         // Show the whole inbox right away: Inbox folder, every account, no filters.
@@ -682,6 +683,16 @@ export function EmailPage() {
         setSyncing(false)
         setStatus(err instanceof GmailSetupError || err instanceof Error ? err.message : 'Google did not connect Gmail.')
       })
+  }
+
+  const switchGmailAccount = () => {
+    disconnectGmail(account)
+    setGmailOn(false)
+    const kept = loadMailbox(email).filter((message) => !isGmailId(message.id))
+    saveMailbox(email, kept)
+    setMessages(kept)
+    setSelectedId(null)
+    connectGmailNow(true)
   }
 
   const disconnectGmailNow = () => {
@@ -1173,12 +1184,15 @@ export function EmailPage() {
           {gmailOn ? (
             <span className="inline-flex items-center gap-1.5">
               <ProviderBadge provider="gmail" /> {gmailAddr || 'connected'}
+              <button type="button" data-testid="email-gmail-switch" onClick={switchGmailAccount} className="h-7 rounded-md border border-[#e0e0e0] px-2 font-semibold text-[#242424] hover:bg-[#f5f5f5]">
+                Switch
+              </button>
               <button type="button" data-testid="email-gmail-disconnect" onClick={disconnectGmailNow} className="h-7 rounded-md border border-[#e0e0e0] px-2 font-semibold text-[#242424] hover:bg-[#f5f5f5]">
                 Disconnect
               </button>
             </span>
           ) : GMAIL_UI_ENABLED ? (
-            <button type="button" data-testid="email-connect-gmail" onClick={connectGmailNow} className="inline-flex h-8 items-center rounded-md border border-[#c5221f] px-3 text-sm font-semibold text-[#c5221f] hover:bg-[#fce8e6]">
+            <button type="button" data-testid="email-connect-gmail" onClick={() => connectGmailNow()} className="inline-flex h-8 items-center rounded-md border border-[#c5221f] px-3 text-sm font-semibold text-[#c5221f] hover:bg-[#fce8e6]">
               {gmailNeedsRenewal(account) ? 'Reconnect Gmail' : 'Connect Gmail'}
             </button>
           ) : null}
@@ -1301,7 +1315,7 @@ export function EmailPage() {
                   Connect Outlook
                 </button>
                 {GMAIL_UI_ENABLED && (
-                  <button type="button" onClick={connectGmailNow} className="mt-2 ml-2 inline-flex h-7 items-center rounded-md bg-[#c5221f] px-3 font-semibold text-white hover:bg-[#a50e0e]">
+                  <button type="button" onClick={() => connectGmailNow()} className="mt-2 ml-2 inline-flex h-7 items-center rounded-md bg-[#c5221f] px-3 font-semibold text-white hover:bg-[#a50e0e]">
                     Connect Gmail
                   </button>
                 )}
